@@ -43,6 +43,8 @@ public sealed class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
+        using var theme = PluginTheme.Push();
+
         if (_lastError != null)
             ImGui.TextColored(ImGuiColors.DalamudRed, _lastError);
 
@@ -62,8 +64,11 @@ public sealed class MainWindow : Window, IDisposable
         if (!tab)
             return;
 
-        if (ImGui.Button("Refresh mod list"))
-            RunScan();
+        using (PluginTheme.PrimaryButton())
+        {
+            if (ImGui.Button("Refresh mod list"))
+                RunScan();
+        }
 
         ImGui.SameLine();
         ImGui.Text($"{_plugin.OrganizerState.Mods.Count} mods loaded");
