@@ -85,11 +85,12 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeRow("a", "Apple", heliosphere: true), MakeRow("b", "Banana")],
             new HashSet<string>());
+        state.SetProtected("b", true);
 
         state.SetHeliosphereProtection(false);
 
         Assert.False(state.Mods.Single(m => m.Identifier == "a").Protected);
-        Assert.False(state.Mods.Single(m => m.Identifier == "b").Protected);
+        Assert.True(state.Mods.Single(m => m.Identifier == "b").Protected);
     }
 
     [Fact]

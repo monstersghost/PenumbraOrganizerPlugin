@@ -12,6 +12,9 @@ public sealed class OrganizerState
         _mods.Clear();
         foreach (var row in scanned)
         {
+            // Heliosphere-managed mods are always re-protected on scan, even if a user
+            // previously unprotected them — Heliosphere owns their location, so manual
+            // unprotect only "sticks" for non-Heliosphere mods.
             row.Protected = row.HeliosphereManaged || previouslyProtected.Contains(row.Identifier);
             row.ProposedPath = row.CurrentPath;
             _mods[row.Identifier] = row;
@@ -55,7 +58,7 @@ public sealed class OrganizerState
     public ReviewResult Validate()
     {
         var protectedViolations = _mods.Values
-            .Where(m => m.Protected && m.ProposedPath != m.CurrentPath)
+            .Where(m => m.Protected && !string.Equals(m.ProposedPath, m.CurrentPath, StringComparison.OrdinalIgnoreCase))
             .Select(m => m.Identifier)
             .ToList();
 

@@ -126,8 +126,9 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.SameLine();
         if (ImGui.Button("Assign") && _selectedManualModIdentifier is not null && _manualFolderInput.Length > 0)
         {
-            var mod = _plugin.OrganizerState.Mods.First(m => m.Identifier == _selectedManualModIdentifier);
-            _plugin.OrganizerState.AssignManual(_selectedManualModIdentifier, $"{_manualFolderInput}/{mod.Name}");
+            var mod = _plugin.OrganizerState.Mods.FirstOrDefault(m => m.Identifier == _selectedManualModIdentifier);
+            if (mod is not null)
+                _plugin.OrganizerState.AssignManual(_selectedManualModIdentifier, $"{_manualFolderInput}/{mod.Name}");
         }
 
         ImGui.Spacing();
