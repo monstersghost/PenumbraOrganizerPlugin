@@ -10,10 +10,17 @@
     <RepositoryUrl>https://github.com/monstersghost/PenumbraOrganizer.Plugin</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Penumbra.Api" Version="5.15.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\ModCategory.cs" Link="Linked\ModCategory.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Interfaces\ICreatorCanonicalizer.cs" Link="Linked\ICreatorCanonicalizer.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Services\CreatorCanonicalizer.cs" Link="Linked\CreatorCanonicalizer.cs" />
   </ItemGroup>
 
 </Project>
