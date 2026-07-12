@@ -17,3 +17,6 @@ packages/
 # OS
 .DS_Store
 Thumbs.db
+
+# Git worktrees (isolated dev workspaces, not project content)
+.claude/worktrees/
