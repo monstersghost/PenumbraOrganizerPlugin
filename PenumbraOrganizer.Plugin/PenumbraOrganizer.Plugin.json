@@ -1,0 +1,12 @@
+{
+  "Author": "Penumbra Organizer Contributors",
+  "Name": "Penumbra Organizer (MVP)",
+  "Punchline": "Read-only technical spike: view Penumbra's live mod list and folder paths in-game.",
+  "Description": "Local dev-only spike validating Penumbra's in-process IPC (GetModList, GetModPath, ModAdded/ModDeleted/ModMoved). Read-only, no writes, not intended for public distribution.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "penumbra",
+    "organizer",
+    "spike"
+  ]
+}

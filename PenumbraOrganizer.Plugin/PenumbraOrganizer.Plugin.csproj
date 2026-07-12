@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Product>Penumbra Organizer Plugin (MVP)</Product>
+    <Authors>Penumbra Organizer Contributors</Authors>
+    <Copyright>Copyright (c) 2026 Penumbra Organizer Contributors</Copyright>
+    <PackageProjectUrl>https://github.com/monstersghost/PenumbraOrganizer.Plugin</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/monstersghost/PenumbraOrganizer.Plugin</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Penumbra.Api" Version="5.15.1" />
+  </ItemGroup>
+
+</Project>
