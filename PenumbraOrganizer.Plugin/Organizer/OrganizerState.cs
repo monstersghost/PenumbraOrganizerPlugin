@@ -38,4 +38,17 @@ public sealed class OrganizerState
         row.ProposedPath = proposedPath;
         return true;
     }
+
+    public int SortByCreator(Func<string, string> canonicalizeCreator)
+    {
+        var count = 0;
+        foreach (var row in _mods.Values.Where(m => !m.Protected))
+        {
+            var folder = canonicalizeCreator(row.Author);
+            row.ProposedPath = string.IsNullOrEmpty(folder) ? row.Name : $"{folder}/{row.Name}";
+            count++;
+        }
+
+        return count;
+    }
 }

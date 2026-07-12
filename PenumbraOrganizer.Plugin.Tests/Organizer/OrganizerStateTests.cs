@@ -115,4 +115,28 @@ public class OrganizerStateTests
         Assert.False(result);
         Assert.Equal("Unsorted/Apple", state.Mods.Single().ProposedPath);
     }
+
+    [Fact]
+    public void SortByCreator_BuildsFolderPlusLeafPath()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
+
+        var count = state.SortByCreator(name => name.ToUpperInvariant());
+
+        Assert.Equal(1, count);
+        Assert.Equal("SOMEAUTHOR/Apple", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByCreator_SkipsProtectedMods()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string> { "a" });
+
+        var count = state.SortByCreator(name => name.ToUpperInvariant());
+
+        Assert.Equal(0, count);
+        Assert.Equal("Unsorted/Apple", state.Mods.Single().ProposedPath);
+    }
 }
