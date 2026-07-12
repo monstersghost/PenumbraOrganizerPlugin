@@ -139,4 +139,55 @@ public class OrganizerStateTests
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Apple", state.Mods.Single().ProposedPath);
     }
+
+    [Fact]
+    public void Validate_NoChanges_HasNoIssues()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
+
+        var result = state.Validate();
+
+        Assert.False(result.HasIssues);
+    }
+
+    [Fact]
+    public void Validate_ProtectedModWithChangedPath_IsFlagged()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string> { "a" });
+        // Bypass AssignManual's own protection check to exercise Validate in isolation.
+        state.Mods.Single().ProposedPath = "SomewhereElse";
+
+        var result = state.Validate();
+
+        Assert.Contains("a", result.ProtectedViolations);
+    }
+
+    [Fact]
+    public void Validate_TwoModsWithSameProposedPath_IsFlaggedAsCollision()
+    {
+        var state = new OrganizerState();
+        var apple = MakeRow("a", "Apple");
+        var banana = MakeRow("b", "Banana");
+        state.LoadScan([apple, banana], new HashSet<string>());
+        state.AssignManual("a", "Shared/Same");
+        state.AssignManual("b", "Shared/Same");
+
+        var result = state.Validate();
+
+        Assert.True(result.PathCollisions.ContainsKey("Shared/Same"));
+        Assert.Equal(2, result.PathCollisions["Shared/Same"].Count);
+    }
+
+    [Fact]
+    public void Validate_ModsInSameFolderDifferentLeaf_IsNotACollision()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple"), MakeRow("b", "Banana")], new HashSet<string>());
+
+        state.SortByCreator(name => name);
+
+        Assert.False(state.Validate().HasIssues);
+    }
 }

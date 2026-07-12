@@ -51,4 +51,26 @@ public sealed class OrganizerState
 
         return count;
     }
+
+    public ReviewResult Validate()
+    {
+        var protectedViolations = _mods.Values
+            .Where(m => m.Protected && m.ProposedPath != m.CurrentPath)
+            .Select(m => m.Identifier)
+            .ToList();
+
+        var collisions = _mods.Values
+            .GroupBy(m => m.ProposedPath, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .ToDictionary(g => g.Key, g => g.Select(m => m.Identifier).ToList());
+
+        return new ReviewResult(protectedViolations, collisions);
+    }
+}
+
+public sealed record ReviewResult(
+    IReadOnlyList<string> ProtectedViolations,
+    IReadOnlyDictionary<string, List<string>> PathCollisions)
+{
+    public bool HasIssues => ProtectedViolations.Count > 0 || PathCollisions.Count > 0;
 }
