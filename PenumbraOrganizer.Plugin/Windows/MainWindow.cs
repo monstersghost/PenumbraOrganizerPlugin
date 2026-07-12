@@ -123,16 +123,22 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.InputText("Destination folder", ref _manualFolderInput, 256);
 
-        foreach (var mod in _plugin.OrganizerState.Mods.Where(m => !m.Protected))
-        {
-            if (ImGui.RadioButton(mod.Name, _selectedManualModIdentifier == mod.Identifier))
-                _selectedManualModIdentifier = mod.Identifier;
-        }
-
+        ImGui.SameLine();
         if (ImGui.Button("Assign") && _selectedManualModIdentifier is not null && _manualFolderInput.Length > 0)
         {
             var mod = _plugin.OrganizerState.Mods.First(m => m.Identifier == _selectedManualModIdentifier);
             _plugin.OrganizerState.AssignManual(_selectedManualModIdentifier, $"{_manualFolderInput}/{mod.Name}");
+        }
+
+        ImGui.Spacing();
+        using (var child = ImRaii.Child("ManualModList", new Vector2(0, 300), border: true))
+        {
+            if (child)
+                foreach (var mod in _plugin.OrganizerState.Mods.Where(m => !m.Protected))
+                {
+                    if (ImGui.RadioButton(mod.Name, _selectedManualModIdentifier == mod.Identifier))
+                        _selectedManualModIdentifier = mod.Identifier;
+                }
         }
     }
 
