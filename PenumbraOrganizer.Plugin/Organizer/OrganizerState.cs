@@ -29,4 +29,13 @@ public sealed class OrganizerState
         foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
             row.Protected = value;
     }
+
+    public bool AssignManual(string identifier, string proposedPath)
+    {
+        if (!_mods.TryGetValue(identifier, out var row) || row.Protected)
+            return false;
+
+        row.ProposedPath = proposedPath;
+        return true;
+    }
 }

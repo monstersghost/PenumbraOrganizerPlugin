@@ -91,4 +91,28 @@ public class OrganizerStateTests
         Assert.False(state.Mods.Single(m => m.Identifier == "a").Protected);
         Assert.False(state.Mods.Single(m => m.Identifier == "b").Protected);
     }
+
+    [Fact]
+    public void AssignManual_SetsProposedPath()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
+
+        var result = state.AssignManual("a", "MyFolder/Apple");
+
+        Assert.True(result);
+        Assert.Equal("MyFolder/Apple", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void AssignManual_ProtectedMod_IsRejected()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string> { "a" });
+
+        var result = state.AssignManual("a", "MyFolder/Apple");
+
+        Assert.False(result);
+        Assert.Equal("Unsorted/Apple", state.Mods.Single().ProposedPath);
+    }
 }
