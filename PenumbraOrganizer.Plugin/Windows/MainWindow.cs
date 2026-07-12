@@ -1,9 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Colors;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
-using Penumbra.Api.Enums;
+using PenumbraOrganizer.Core.Services;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -12,18 +12,18 @@ public sealed class MainWindow : Window, IDisposable
     private const int MaxEventLogLines = 200;
 
     private readonly Plugin _plugin;
+    private readonly CreatorCanonicalizer _creatorCanonicalizer = new();
     private readonly List<string> _eventLog = [];
-
-    private Dictionary<string, string> _mods = [];
-    private readonly Dictionary<string, string> _resolvedPaths = [];
     private string? _lastError;
+    private string _manualFolderInput = string.Empty;
+    private string? _selectedManualModIdentifier;
 
     public MainWindow(Plugin plugin)
-        : base("Penumbra Organizer (MVP)###PenumbraOrganizerPluginMain")
+        : base("Penumbra Organizer###PenumbraOrganizerPluginMain")
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(520, 420),
+            MinimumSize = new Vector2(640, 480),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
 
@@ -43,57 +43,135 @@ public sealed class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
-        ImGui.TextWrapped(
-            "Read-only spike: lists mods and current Penumbra virtual paths via IPC. No write calls are made.");
-        ImGui.Spacing();
+        if (_lastError != null)
+            ImGui.TextColored(ImGuiColors.DalamudRed, _lastError);
+
+        using var tabBar = ImRaii.TabBar("MainTabs");
+        if (!tabBar)
+            return;
+
+        DrawScanTab();
+        DrawProtectTab();
+        DrawSortTab();
+        DrawReviewTab();
+    }
+
+    private void DrawScanTab()
+    {
+        using var tab = ImRaii.TabItem("Scan");
+        if (!tab)
+            return;
 
         if (ImGui.Button("Refresh mod list"))
-            RefreshMods();
+            RunScan();
 
         ImGui.SameLine();
-        ImGui.Text($"{_mods.Count} mods loaded");
-
-        if (_lastError != null)
-            ImGui.TextColored(new Vector4(1f, 0.4f, 0.4f, 1f), _lastError);
-
+        ImGui.Text($"{_plugin.OrganizerState.Mods.Count} mods loaded");
         ImGui.Spacing();
 
-        if (ImGui.BeginTable("ModTable", 3,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
-                new Vector2(0, 220)))
-        {
-            ImGui.TableSetupColumn("Directory");
-            ImGui.TableSetupColumn("Name");
-            ImGui.TableSetupColumn("Current Penumbra Path");
-            ImGui.TableHeadersRow();
-
-            foreach (var (dir, name) in _mods)
-            {
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(dir);
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(name);
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(_resolvedPaths.GetValueOrDefault(dir, "(unresolved)"));
-            }
-
-            ImGui.EndTable();
-        }
+        PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: false);
 
         ImGui.Spacing();
         ImGui.Text("Live events (ModAdded / ModDeleted / ModMoved):");
-        if (ImGui.BeginChild("EventLog", new Vector2(0, 0), true))
+        using (var child = ImRaii.Child("EventLog", new Vector2(0, 150), border: true))
         {
-            foreach (var line in _eventLog)
-                ImGui.TextUnformatted(line);
+            if (child)
+                foreach (var line in _eventLog)
+                    ImGui.TextUnformatted(line);
         }
-
-        ImGui.EndChild();
     }
 
-    private void RefreshMods()
+    private void DrawProtectTab()
     {
-        _lastError = "Scan moved to the Sort tab — see Task 13.";
+        using var tab = ImRaii.TabItem("Protect");
+        if (!tab)
+            return;
+
+        if (ImGui.Button("Toggle Heliosphere protection"))
+        {
+            var allProtected = _plugin.OrganizerState.Mods
+                .Where(m => m.HeliosphereManaged)
+                .All(m => m.Protected);
+            _plugin.OrganizerState.SetHeliosphereProtection(!allProtected);
+            _plugin.SaveProtectionState();
+        }
+
+        ImGui.Spacing();
+
+        foreach (var mod in _plugin.OrganizerState.Mods)
+        {
+            var isProtected = mod.Protected;
+            if (ImGui.Checkbox($"{mod.Name}##protect-{mod.Identifier}", ref isProtected))
+            {
+                _plugin.OrganizerState.SetProtected(mod.Identifier, isProtected);
+                _plugin.SaveProtectionState();
+            }
+        }
+    }
+
+    private void DrawSortTab()
+    {
+        using var tab = ImRaii.TabItem("Sort");
+        if (!tab)
+            return;
+
+        if (ImGui.Button("By Creator"))
+            _plugin.OrganizerState.SortByCreator(_creatorCanonicalizer.Canonicalize);
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Start Manually: pick a mod below, type a folder, click Assign.");
+
+        ImGui.InputText("Destination folder", ref _manualFolderInput, 256);
+
+        foreach (var mod in _plugin.OrganizerState.Mods.Where(m => !m.Protected))
+        {
+            if (ImGui.RadioButton(mod.Name, _selectedManualModIdentifier == mod.Identifier))
+                _selectedManualModIdentifier = mod.Identifier;
+        }
+
+        if (ImGui.Button("Assign") && _selectedManualModIdentifier is not null && _manualFolderInput.Length > 0)
+        {
+            var mod = _plugin.OrganizerState.Mods.First(m => m.Identifier == _selectedManualModIdentifier);
+            _plugin.OrganizerState.AssignManual(_selectedManualModIdentifier, $"{_manualFolderInput}/{mod.Name}");
+        }
+    }
+
+    private void DrawReviewTab()
+    {
+        using var tab = ImRaii.TabItem("Review Changes");
+        if (!tab)
+            return;
+
+        var result = _plugin.OrganizerState.Validate();
+
+        if (!result.HasIssues)
+            ImGui.TextColored(ImGuiColors.HealerGreen, "No issues found.");
+
+        foreach (var identifier in result.ProtectedViolations)
+            ImGui.TextColored(ImGuiColors.DalamudRed, $"Protected mod changed: {identifier}");
+
+        foreach (var (path, identifiers) in result.PathCollisions)
+            ImGui.TextColored(ImGuiColors.DalamudRed, $"Collision at '{path}': {string.Join(", ", identifiers)}");
+
+        ImGui.Spacing();
+        PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: true);
+
+        ImGui.Spacing();
+        ImGui.BeginDisabled();
+        ImGui.Button("Apply (disabled in Phase 1)");
+        ImGui.EndDisabled();
+    }
+
+    private void RunScan()
+    {
+        try
+        {
+            _plugin.RunScan();
+            _lastError = null;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Failed to reach Penumbra IPC: {ex.Message}";
+        }
     }
 }
