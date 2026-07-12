@@ -94,22 +94,6 @@ public sealed class MainWindow : Window, IDisposable
 
     private void RefreshMods()
     {
-        try
-        {
-            _mods = _plugin.GetModListIpc.Invoke();
-            _resolvedPaths.Clear();
-
-            foreach (var dir in _mods.Keys)
-            {
-                var (ec, path, _, _) = _plugin.GetModPathIpc.Invoke(dir);
-                _resolvedPaths[dir] = ec == PenumbraApiEc.Success ? path : $"(error: {ec})";
-            }
-
-            _lastError = null;
-        }
-        catch (Exception ex)
-        {
-            _lastError = $"Failed to reach Penumbra IPC: {ex.Message}";
-        }
+        _lastError = "Scan moved to the Sort tab — see Task 13.";
     }
 }

@@ -21,8 +21,9 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly MainWindow _mainWindow;
 
-    internal readonly GetModList GetModListIpc;
-    internal readonly GetModPath GetModPathIpc;
+    internal readonly Penumbra.Api.IpcSubscribers.GetModListAdapter GetModListAdapterIpc;
+    public readonly Organizer.OrganizerState OrganizerState = new();
+    internal Configuration Config = null!;
 
     private readonly EventSubscriber<string> _modAdded;
     private readonly EventSubscriber<string> _modDeleted;
@@ -33,8 +34,8 @@ public sealed class Plugin : IDalamudPlugin
         _mainWindow = new MainWindow(this);
         WindowSystem.AddWindow(_mainWindow);
 
-        GetModListIpc = new GetModList(PluginInterface);
-        GetModPathIpc = new GetModPath(PluginInterface);
+        Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        GetModListAdapterIpc = new Penumbra.Api.IpcSubscribers.GetModListAdapter(PluginInterface);
 
         // Read-only MVP: observe live changes, never call any write endpoint (e.g. SetModPath).
         _modAdded = ModAdded.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod added: {dir}"));
@@ -71,4 +72,31 @@ public sealed class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args) => ToggleMainUi();
 
     private void ToggleMainUi() => _mainWindow.Toggle();
+
+    public void RunScan()
+    {
+        using var modList = GetModListAdapterIpc.Invoke();
+
+        var rows = modList.Select(mod => new Organizer.OrganizerModRow
+        {
+            Identifier = mod.Identifier,
+            Name = mod.Name,
+            Author = mod.Author,
+            CurrentPath = mod.FullPath,
+            ProposedPath = mod.FullPath,
+            HeliosphereManaged = Organizer.HeliosphereDetector.IsHeliosphereManaged(mod.Identifier, mod.ModPath),
+        }).ToList();
+
+        OrganizerState.LoadScan(rows, Config.ProtectedModIdentifiers);
+        SaveProtectionState();
+    }
+
+    internal void SaveProtectionState()
+    {
+        Config.ProtectedModIdentifiers = OrganizerState.Mods
+            .Where(m => m.Protected)
+            .Select(m => m.Identifier)
+            .ToHashSet();
+        PluginInterface.SavePluginConfig(Config);
+    }
 }
