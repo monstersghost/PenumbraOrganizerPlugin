@@ -17,4 +17,16 @@ public sealed class OrganizerState
             _mods[row.Identifier] = row;
         }
     }
+
+    public void SetProtected(string identifier, bool value)
+    {
+        if (_mods.TryGetValue(identifier, out var row))
+            row.Protected = value;
+    }
+
+    public void SetHeliosphereProtection(bool value)
+    {
+        foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
+            row.Protected = value;
+    }
 }

@@ -55,4 +55,40 @@ public class OrganizerStateTests
 
         Assert.Equal(state.Mods.Single().CurrentPath, state.Mods.Single().ProposedPath);
     }
+
+    [Fact]
+    public void SetProtected_TogglesFlagForMatchingMod()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
+
+        state.SetProtected("a", true);
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void SetProtected_UnknownIdentifier_DoesNothing()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
+
+        state.SetProtected("does-not-exist", true);
+
+        Assert.False(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void SetHeliosphereProtection_OnlyAffectsHeliosphereMods()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Apple", heliosphere: true), MakeRow("b", "Banana")],
+            new HashSet<string>());
+
+        state.SetHeliosphereProtection(false);
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "a").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "b").Protected);
+    }
 }
