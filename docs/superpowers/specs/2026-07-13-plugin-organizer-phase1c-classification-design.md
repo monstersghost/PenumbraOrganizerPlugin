@@ -131,6 +131,40 @@ pass, not an oversight. A keyword-based Weapon/Ornament split was considered and
 would need to be a per-item classification within a mod rather than a whole-mod category, which is a
 larger scope change than this pass covers.
 
+### Localization: all structural markers are locale-invariant
+
+Confirmed empirically, not assumed. The user ran the identical ~2,035-mod library through the spike
+dump three ways: English game client, German game client, and English game client with Dalamud's own
+UI language set to German. The third case was byte-for-byte identical to the first — Dalamud's UI
+language has no bearing on `GetChangedItems` output, only the actual game client's language matters.
+
+Comparing the English and German game-client dumps for the same mods (matched by mod name, which is
+never localized) shows every structural marker this classifier depends on is emitted in English
+regardless of client language, while only the human-readable "payload" translates, and even that not
+always:
+
+| Shape | Marker | Payload | Example (EN → DE) |
+|---|---|---|---|
+| `Mount` suffix | stays `(Mount)` | translates | `Ancient Airship (Mount)` → `Antikes Luftschiff (Mount)` |
+| `Minion` suffix | stays `(Battle NPC)`/`(Companion)` | translates | `Beady Eye (Companion)` → `Wächterauge (Companion)` |
+| `Emote:` prefix | stays `Emote:` | translates | `Emote: Sit on Ground` → `Emote: Auf Boden setzen` |
+| `Action:` prefix | stays `Action:` | translates | `Action: Great Falcon` → `Action: Großer Falke` |
+| `NPC` suffix | stays `(NPC, {id}, {slot})` | **does not translate** | `Smallclothes (NPC, 9903-1, Legs)` identical in both |
+| `Customization:` prefix | stays `Customization:` | **does not translate** | `Customization: Au Ra Female Body 2` identical in both |
+| `Icon:` prefix | stays `Icon:` | n/a (numeric ID) | `Icon: 45463` identical in both |
+| Bare literals | unchanged | n/a | `Animation`, `Sound`, `Housing` identical in both |
+
+The likely reason `Customization`/`NPC` payloads don't translate: those are composite labels Penumbra
+assembles internally (race enum + gender enum + body-part word; or a hardcoded "NPC" slot label), not a
+single already-localized string pulled from the game's own data files — unlike Mount/Minion/Emote/Action
+names, which map directly to an already-localized Lumina sheet entry (Companion, BNpcName, Action,
+Emote) that Penumbra just displays as-is in whatever language the client is running.
+
+Net effect: this classifier's shape-matching (every rule in the priority order above) is fully
+locale-independent. The only locale-sensitive piece is the Customization sub-classifier's `BodyPart`
+keyword match (`Face`/`Hair`/`Skin`) — and since that payload is confirmed to stay in English on a
+German client, it's locale-independent too. No remaining localization risk for this design.
+
 ### Why the tie-break generalizes to "Gear wins" against every shape
 
 Originally scoped as only a Customization-vs-Gear tie-break. Real compilation-pack mods forced
@@ -181,19 +215,13 @@ original Phase 1c format spike), and must be removed as part of implementing thi
 
 ## Open risks
 
-1. **Localization is unverified.** Every sampled key, across both machines, came from an English game
-   client. If Penumbra localizes these display strings for DE/FR/JP clients (the `Customization:` /
-   `Emote:` / `Action:` prefixes, the literal `Animation`/`Vfx`/`Sound`/`Housing` words, the
-   parenthetical suffixes), the entire keyword classifier degrades to `Unknown` on non-English clients.
-   That failure mode is safe (never a wrong guess, everything routes to manual sort) but useless. A
-   question to the Penumbra developers is pending; if the keys do follow client language, either the
-   keyword tables need per-locale variants or a locale-independent signal is needed.
-2. `Icon:` keys are preserved but unused — if a mod ever produces one with *no* other recognized key,
+1. `Icon:` keys are preserved but unused — if a mod ever produces one with *no* other recognized key,
    it falls through to `Unknown` untested (not observed in either sample; every real occurrence
    co-occurred with a decisive key).
-3. The accessory/weapon collapse into `Gear` (see above) may prove too coarse in practice once users
+2. The accessory/weapon collapse into `Gear` (see above) may prove too coarse in practice once users
    rely on "By mod type" — revisit with real Unknown/miscategorization complaints, not preemptively.
-4. Sample size, while large (~2,270 mods), is drawn from two specific users' libraries and mod-site
-   browsing; a systematically different library (e.g., heavy on housing/furniture, mounts, or minions
-   relative to gear) could reveal further compilation-pack edge cases the priority order doesn't handle
-   well.
+3. Sample size, while large (~2,270 mods across the two English-client dumps, cross-checked against a
+   third, German-client dump of the same ~2,035-mod library for localization), is drawn from a small
+   number of users' libraries and mod-site browsing; a systematically different library (e.g., heavy on
+   housing/furniture, mounts, or minions relative to gear) could reveal further compilation-pack edge
+   cases the priority order doesn't handle well.
