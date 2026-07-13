@@ -14,7 +14,7 @@ UI work.
   `docs/superpowers/specs/2026-07-12-dark-theme-design.md`. Plan:
   `docs/superpowers/plans/2026-07-12-dark-theme.md`.
 
-23 tests pass (`dotnet test PenumbraOrganizer.Plugin.Tests`), build is clean.
+82 tests pass (`dotnet test PenumbraOrganizer.Plugin.Tests`), build is clean.
 
 ## Known limitations, not fixed here
 
