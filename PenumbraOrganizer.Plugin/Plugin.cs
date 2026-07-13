@@ -102,27 +102,4 @@ public sealed class Plugin : IDalamudPlugin
             .ToHashSet();
         PluginInterface.SavePluginConfig(Config);
     }
-
-    // SPIKE (temporary, for Phase 1c data gathering only — not part of the shipped feature).
-    // Dumps every scanned mod's GetChangedItems keys via the bulk adapter to a plain text file,
-    // so classifier shapes can be inspected without screenshot transcription. Remove once Phase 1c
-    // classification design is finalized against real data.
-    internal string DumpChangedItemsSpike()
-    {
-        var changedItemsIpc = new Penumbra.Api.IpcSubscribers.GetChangedItemAdapterDictionary(PluginInterface);
-        var allChangedItems = changedItemsIpc.Invoke();
-
-        var lines = new List<string>();
-        foreach (var (modIdentifier, changedItems) in allChangedItems)
-        {
-            lines.Add($"### {modIdentifier}");
-            foreach (var key in changedItems.Keys)
-                lines.Add($"  {key}");
-        }
-
-        var path = Path.Combine(PluginInterface.ConfigDirectory.FullName, "changed-items-spike-dump.txt");
-        Directory.CreateDirectory(PluginInterface.ConfigDirectory.FullName);
-        File.WriteAllLines(path, lines);
-        return path;
-    }
 }

@@ -77,21 +77,6 @@ public sealed class MainWindow : Window, IDisposable
         PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: false);
 
         ImGui.Spacing();
-        if (ImGui.Button("SPIKE: Dump changed items (temporary, Phase 1c data gathering)"))
-        {
-            try
-            {
-                var path = _plugin.DumpChangedItemsSpike();
-                LogEvent($"Changed-items spike dump written to: {path}");
-                _lastError = null;
-            }
-            catch (Exception ex)
-            {
-                _lastError = $"Spike dump failed: {ex.Message}";
-            }
-        }
-
-        ImGui.Spacing();
         ImGui.Text("Live events (ModAdded / ModDeleted / ModMoved):");
         using (var child = ImRaii.Child("EventLog", new Vector2(0, 150), border: true))
         {
