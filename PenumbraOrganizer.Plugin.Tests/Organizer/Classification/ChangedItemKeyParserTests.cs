@@ -103,4 +103,45 @@ public class ChangedItemKeyParserTests
 
         Assert.Equal(ChangedItemKeyShape.Customization, result.Shape);
     }
+
+    [Theory]
+    // key, race, gender, bodyPart, subtype, number
+    [InlineData("Customization: Miqo'te Female Face 101", "Miqo'te", "Female", "Face", null, 101)]
+    [InlineData("Customization: Miqo'te Female Face (Iris) 101", "Miqo'te", "Female", "Face", "Iris", 101)]
+    [InlineData("Customization: Au Ra Female Body (Skeleton) 1", "Au Ra", "Female", "Body", "Skeleton", 1)]
+    [InlineData("Customization: Midlander Female Hair (Accessory) 147", "Midlander", "Female", "Hair", "Accessory", 147)]
+    [InlineData("Customization: Miqo'te Male Tail 4", "Miqo'te", "Male", "Tail", null, 4)]
+    [InlineData("Customization: Midlander Female Skin Textures", "Midlander", "Female", "Skin Textures", null, null)]
+    public void Parse_CustomizationPayload_ExtractsFields(
+        string key, string? race, string? gender, string? bodyPart, string? subtype, int? number)
+    {
+        var result = ChangedItemKeyParser.Parse(key);
+
+        Assert.Equal(ChangedItemKeyShape.Customization, result.Shape);
+        Assert.Equal(race, result.Race);
+        Assert.Equal(gender, result.Gender);
+        Assert.Equal(bodyPart, result.BodyPart);
+        Assert.Equal(subtype, result.Subtype);
+        Assert.Equal(number, result.Number);
+    }
+
+    [Fact]
+    public void Parse_CustomizationPlayerPayload_HasNoRaceOrGender()
+    {
+        var result = ChangedItemKeyParser.Parse("Customization: Player Skin Textures");
+
+        Assert.Null(result.Race);
+        Assert.Null(result.Gender);
+        Assert.Equal("Skin Textures", result.BodyPart);
+    }
+
+    [Fact]
+    public void Parse_CustomizationUnknownPayload_KeepsUnknownAsBodyPart()
+    {
+        var result = ChangedItemKeyParser.Parse("Customization: Unknown");
+
+        Assert.Null(result.Race);
+        Assert.Null(result.Gender);
+        Assert.Equal("Unknown", result.BodyPart);
+    }
 }
