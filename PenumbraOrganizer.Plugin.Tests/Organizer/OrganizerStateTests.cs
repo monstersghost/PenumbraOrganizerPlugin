@@ -1,3 +1,4 @@
+using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer;
@@ -12,6 +13,20 @@ public class OrganizerStateTests
         CurrentPath = $"Unsorted/{name}",
         ProposedPath = $"Unsorted/{name}",
         HeliosphereManaged = heliosphere,
+    };
+
+    private static OrganizerModRow MakeCategorizedRow(
+        string id, string name, ModCategory? category, string? subCategory = null, bool isProtected = false) => new()
+    {
+        Identifier = id,
+        Name = name,
+        Author = "SomeAuthor",
+        CurrentPath = $"Unsorted/{name}",
+        ProposedPath = $"Unsorted/{name}",
+        HeliosphereManaged = false,
+        Category = category,
+        SubCategory = subCategory,
+        Protected = isProtected,
     };
 
     [Fact]
@@ -190,5 +205,55 @@ public class OrganizerStateTests
         state.SortByCreator(name => name);
 
         Assert.False(state.Validate().HasIssues);
+    }
+
+    [Fact]
+    public void SortByModType_GroupsByCategoryFolder()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
+
+        var count = state.SortByModType();
+
+        Assert.Equal(1, count);
+        Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByModType_UsesSubCategoryAsSecondLevel()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeCategorizedRow("a", "Cool Dance", ModCategory.Animation, "Emotes")],
+            new HashSet<string>());
+
+        state.SortByModType();
+
+        Assert.Equal("Animation and VFX/Emotes/Cool Dance", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByModType_SkipsUnknownCategory()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
+
+        var count = state.SortByModType();
+
+        Assert.Equal(0, count);
+        Assert.Equal("Unsorted/Mystery Mod", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByModType_SkipsProtectedMods()
+    {
+        var state = new OrganizerState();
+        var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
+        state.LoadScan([row], new HashSet<string> { "a" });
+
+        var count = state.SortByModType();
+
+        Assert.Equal(0, count);
+        Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
     }
 }

@@ -1,3 +1,5 @@
+using PenumbraOrganizer.Core.Classification;
+
 namespace PenumbraOrganizer.Plugin.Organizer;
 
 public sealed class OrganizerModRow
@@ -9,4 +11,6 @@ public sealed class OrganizerModRow
     public required string ProposedPath { get; set; }
     public bool Protected { get; set; }
     public bool HeliosphereManaged { get; init; }
+    public ModCategory? Category { get; init; }
+    public string? SubCategory { get; init; }
 }

@@ -1,3 +1,5 @@
+using PenumbraOrganizer.Plugin.Organizer.Classification;
+
 namespace PenumbraOrganizer.Plugin.Organizer;
 
 public sealed class OrganizerState
@@ -49,6 +51,19 @@ public sealed class OrganizerState
         {
             var folder = canonicalizeCreator(row.Author);
             row.ProposedPath = string.IsNullOrEmpty(folder) ? row.Name : $"{folder}/{row.Name}";
+            count++;
+        }
+
+        return count;
+    }
+
+    public int SortByModType()
+    {
+        var count = 0;
+        foreach (var row in _mods.Values.Where(m => !m.Protected && m.Category is not null))
+        {
+            var folder = ModTypeFolders.GetFolder(row.Category!.Value, row.SubCategory);
+            row.ProposedPath = $"{folder}/{row.Name}";
             count++;
         }
 
