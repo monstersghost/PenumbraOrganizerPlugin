@@ -15,7 +15,9 @@ in-window "dump all changed items" spike button (see Implementation notes below)
 library, and a second across a ~2,035-mod library on a different machine — roughly 2,270 mods and 17,500+
 changed-item keys in total, covering every `ModCategory` bucket the app's shared taxonomy defines except
 `Weapon` and `Ornament` (which turned out to be indistinguishable from `Gear` by shape alone — see
-Classification below) and `Pet` (which turned out to not exist as a distinct signal — see below).
+Classification below) and `Pet` (which turned out to not exist as a distinct signal — see below). The
+~2,035-mod library was additionally re-scanned on a German game client and a Japanese game client to
+verify locale-independence (see Classification, Localization).
 
 ## Goal
 
@@ -131,45 +133,47 @@ pass, not an oversight. A keyword-based Weapon/Ornament split was considered and
 would need to be a per-item classification within a mod rather than a whole-mod category, which is a
 larger scope change than this pass covers.
 
-### Localization: confirmed locale-invariant for German, Japanese unverified
+### Localization: confirmed locale-invariant for German and Japanese
 
-Tested empirically, not assumed — but only against one non-English locale so far, and German is the
-least demanding case: same script as English, similar grammar. The user ran the identical ~2,035-mod
-library through the spike dump three ways: English game client, German game client, and English game
-client with Dalamud's own UI language set to German. The third case was byte-for-byte identical to the
-first — Dalamud's UI language has no bearing on `GetChangedItems` output, only the actual game client's
-language matters.
+Tested empirically against the two most different official FFXIV client languages available: German
+(same script as English, similar grammar — the least demanding test) and Japanese (different script
+entirely, different word order — the most demanding test). Both agree.
 
-Comparing the English and German game-client dumps for the same mods (matched by mod name, which is
-never localized) shows every structural marker this classifier depends on is emitted in English
-regardless of client language, while only the human-readable "payload" translates, and even that not
-always:
+There are three independent language settings in this stack: the FFXIV game client's own language, the
+Dalamud overlay's UI language, and the XIVLauncher UI's language. Only the first one matters here —
+confirmed by running the identical ~2,035-mod library through the spike dump with an English game
+client + German Dalamud UI, which came back byte-for-byte identical to a plain English client. (The
+plugin's own UI is not localized at all, so it always renders in English regardless of any of the
+three settings — irrelevant to this classifier, which only reads `GetChangedItems` strings, not the
+plugin's own UI text.)
 
-| Shape | Marker | Payload | Example (EN → DE) |
+Comparing the English dump against both the German and Japanese game-client dumps for the same mods
+(matched by mod name, which is never localized) shows every structural marker this classifier depends
+on is emitted in English regardless of client language, while only the human-readable "payload"
+translates, and even that not always:
+
+| Shape | Marker | Payload | Example (EN → DE → JA) |
 |---|---|---|---|
-| `Mount` suffix | stays `(Mount)` | translates | `Ancient Airship (Mount)` → `Antikes Luftschiff (Mount)` |
-| `Minion` suffix | stays `(Battle NPC)`/`(Companion)` | translates | `Beady Eye (Companion)` → `Wächterauge (Companion)` |
-| `Emote:` prefix | stays `Emote:` | translates | `Emote: Sit on Ground` → `Emote: Auf Boden setzen` |
-| `Action:` prefix | stays `Action:` | translates | `Action: Great Falcon` → `Action: Großer Falke` |
-| `NPC` suffix | stays `(NPC, {id}, {slot})` | **does not translate** | `Smallclothes (NPC, 9903-1, Legs)` identical in both |
-| `Customization:` prefix | stays `Customization:` | **does not translate** | `Customization: Au Ra Female Body 2` identical in both |
-| `Icon:` prefix | stays `Icon:` | n/a (numeric ID) | `Icon: 45463` identical in both |
-| Bare literals | unchanged | n/a | `Animation`, `Sound`, `Housing` identical in both |
+| `Mount` suffix | stays `(Mount)` | translates | `Ancient Airship (Mount)` → `Antikes Luftschiff (Mount)` → `古式魔道船 (Mount)` |
+| `Minion` suffix | stays `(Battle NPC)`/`(Companion)` | translates | `Beady Eye (Companion)` → `Wächterauge (Companion)` → `タイニーアイ (Companion)` |
+| `Emote:` prefix | stays `Emote:` | translates | `Emote: Sit on Ground` → `Emote: Auf Boden setzen` → `Emote: 地面に座る` |
+| `Action:` prefix | stays `Action:` | translates | `Action: Great Falcon` → `Action: Großer Falke` → `Action: 大鷹` |
+| `NPC` suffix | stays `(NPC, {id}, {slot})` | **does not translate** | `Smallclothes (NPC, 9903-1, Legs)` identical in all three |
+| `Customization:` prefix | stays `Customization:` | **does not translate** | `Customization: Au Ra Female Body 2` identical in all three |
+| `Icon:` prefix | stays `Icon:` | n/a (numeric ID) | `Icon: 45463` identical in all three |
+| Bare literals | unchanged | n/a | `Animation`, `Sound`, `Housing` identical in all three (not even transliterated in Japanese) |
 
-The working hypothesis for why `Customization`/`NPC` payloads don't translate: those are composite
-labels Penumbra assembles internally (race enum + gender enum + body-part word; or a hardcoded "NPC"
-slot label) rather than a single already-localized string pulled from the game's own data files —
-unlike Mount/Minion/Emote/Action names, which map directly to an already-localized Lumina sheet entry
-(Companion, BNpcName, Action, Emote) that Penumbra just displays as-is in whatever language the client
-runs. If this hypothesis is right — the prefix/suffix markers are English string literals in Penumbra's
-own source, not something that branches on client locale — it should hold for every client language,
-Japanese included. But that's still an inference from a single non-English data point, and German is
-the least demanding test available: same script as English, similar sentence structure. It says nothing
-about whether a client using a completely different script and word order affects things.
+The working hypothesis for why `Customization`/`NPC` payloads don't translate at all: those are
+composite labels Penumbra assembles internally (race enum + gender enum + body-part word; or a
+hardcoded "NPC" slot label) rather than a single already-localized string pulled from the game's own
+data files — unlike Mount/Minion/Emote/Action names, which map directly to an already-localized Lumina
+sheet entry (Companion, BNpcName, Action, Emote) that Penumbra just displays as-is in whatever language
+the client runs. Confirmed across two locales as different from each other as German and Japanese, this
+is no longer a single-data-point inference.
 
-**Net effect: locale-invariance is confirmed for German, not for Japanese.** French is a smaller risk
-(closer to German/English structurally); Japanese is the one actually worth testing, since it's the
-most likely candidate to break the "these are hardcoded English literals" hypothesis if it's wrong. See
+**Net effect: this classifier's shape-matching is confirmed locale-independent across the most
+demanding test available.** French remains formally untested but is structurally much closer to
+English/German than Japanese is, making it the lowest-priority remaining gap by a wide margin — see
 Open Risks.
 
 ### Why the tie-break generalizes to "Gear wins" against every shape
@@ -222,22 +226,19 @@ original Phase 1c format spike), and must be removed as part of implementing thi
 
 ## Open risks
 
-1. **Japanese-client localization is unverified.** German is confirmed locale-invariant (see
-   Classification), but German shares English's script and broad grammar. Japanese is the official
-   FFXIV client language most likely to break the "these markers are hardcoded English literals"
-   hypothesis, if it's wrong — different script, different word order, and no guarantee Penumbra
-   treats every locale identically to German internally. The failure mode if it doesn't hold is safe
-   (keys degrade to `Unknown`, routing to manual sort, never a wrong guess) but makes "By mod type"
-   useless for Japanese-client users. Next step: repeat the same three-way spike-dump comparison
-   (English client / Japanese client / English client + Japanese Dalamud UI) that settled the German
-   case, ideally before implementation rather than after.
+1. French-client localization remains formally untested, though it's a low-priority gap: German and
+   Japanese (a maximally different pair — shared vs. distinct script, similar vs. distinct grammar)
+   both confirm every structural marker is locale-invariant, and French sits structurally between them,
+   closer to German. If it ever did behave differently, the failure mode is safe regardless (keys
+   degrade to `Unknown`, routing to manual sort, never a wrong guess) — worth a quick confirmation if
+   the same testing setup is easy to repeat, not worth blocking on.
 2. `Icon:` keys are preserved but unused — if a mod ever produces one with *no* other recognized key,
    it falls through to `Unknown` untested (not observed in either sample; every real occurrence
    co-occurred with a decisive key).
 3. The accessory/weapon collapse into `Gear` (see above) may prove too coarse in practice once users
    rely on "By mod type" — revisit with real Unknown/miscategorization complaints, not preemptively.
-4. Sample size, while large (~2,270 mods across the two English-client dumps, cross-checked against a
-   third, German-client dump of the same ~2,035-mod library for localization), is drawn from a small
-   number of users' libraries and mod-site browsing; a systematically different library (e.g., heavy on
-   housing/furniture, mounts, or minions relative to gear) could reveal further compilation-pack edge
-   cases the priority order doesn't handle well.
+4. Sample size, while large (~2,270 mods across the two English-client dumps, cross-checked against
+   German- and Japanese-client dumps of the same ~2,035-mod library for localization), is drawn from a
+   small number of users' libraries and mod-site browsing; a systematically different library (e.g.,
+   heavy on housing/furniture, mounts, or minions relative to gear) could reveal further
+   compilation-pack edge cases the priority order doesn't handle well.
