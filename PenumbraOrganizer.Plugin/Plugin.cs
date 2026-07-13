@@ -5,6 +5,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Penumbra.Api.Helpers;
 using Penumbra.Api.IpcSubscribers;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Windows;
 
 namespace PenumbraOrganizer.Plugin;
@@ -78,16 +79,30 @@ public sealed class Plugin : IDalamudPlugin
 
     public void RunScan()
     {
+        // One bulk call for all mods' changed items (Approach B in the Phase 1c spec).
+        // Plain dictionary, not disposable. If Penumbra is unavailable this throws and
+        // surfaces through MainWindow's existing scan error handling.
+        var allChangedItems = new Penumbra.Api.IpcSubscribers.GetChangedItemAdapterDictionary(PluginInterface).Invoke();
+
         using var modList = GetModListAdapterIpc.Invoke();
 
-        var rows = modList.Select(mod => new Organizer.OrganizerModRow
+        var rows = modList.Select(mod =>
         {
-            Identifier = mod.Identifier,
-            Name = mod.Name,
-            Author = mod.Author,
-            CurrentPath = mod.FullPath,
-            ProposedPath = mod.FullPath,
-            HeliosphereManaged = Organizer.HeliosphereDetector.IsHeliosphereManaged(mod.Identifier, mod.ModPath),
+            var classification = allChangedItems.TryGetValue(mod.Identifier, out var changedItems)
+                ? ModTypeClassifier.Classify(changedItems.Keys)
+                : ClassificationResult.Unknown;
+
+            return new Organizer.OrganizerModRow
+            {
+                Identifier = mod.Identifier,
+                Name = mod.Name,
+                Author = mod.Author,
+                CurrentPath = mod.FullPath,
+                ProposedPath = mod.FullPath,
+                HeliosphereManaged = Organizer.HeliosphereDetector.IsHeliosphereManaged(mod.Identifier, mod.ModPath),
+                Category = classification.Category,
+                SubCategory = classification.SubCategory,
+            };
         }).ToList();
 
         OrganizerState.LoadScan(rows, Config.ProtectedModIdentifiers);

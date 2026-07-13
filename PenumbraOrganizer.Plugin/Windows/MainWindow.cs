@@ -123,6 +123,10 @@ public sealed class MainWindow : Window, IDisposable
         if (ImGui.Button("By Creator"))
             _plugin.OrganizerState.SortByCreator(_creatorCanonicalizer.Canonicalize);
 
+        ImGui.SameLine();
+        if (ImGui.Button("By Mod Type"))
+            _plugin.OrganizerState.SortByModType();
+
         ImGui.Spacing();
         ImGui.TextUnformatted("Start Manually: pick a mod below, type a folder, click Assign.");
 

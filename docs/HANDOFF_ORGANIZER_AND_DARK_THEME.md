@@ -21,13 +21,11 @@ UI work.
 - **By Creator sort can collide.** Mods that share a display name but differ only by Penumbra's own
   numeric suffix (duplicate installs) collapse onto the same proposed path. `Validate()` catches it
   correctly; the sort logic itself has no dedup strategy. Needs a design decision before fixing.
-- **Phase 1c (by mod type) now has an approved design, not yet implemented.** The original format
-  spike (`docs/superpowers/specs/2026-07-12-changed-items-format-spike-findings.md`) proved the
-  assumed key convention wrong; the replacement classifier is fully designed in
-  `docs/superpowers/specs/2026-07-13-plugin-organizer-phase1c-classification-design.md`, grounded in
-  ~2,270 real mods and verified locale-invariant against German and Japanese game clients. A
-  temporary SPIKE dump button (commit `3e78003`) is still in `main` and must be removed as part of
-  implementing that spec.
+- **Phase 1c (by mod type) is implemented.** Scan classifies every mod from Penumbra's
+  changed-items IPC per
+  `docs/superpowers/specs/2026-07-13-plugin-organizer-phase1c-classification-design.md`; the Sort
+  tab has a "By Mod Type" button. Unknown-category mods are left in place for manual sorting by
+  design. The temporary SPIKE dump button has been removed.
 - **The window's title bar and outer border are Dalamud's own chrome**, shared across every plugin.
   The theme covers everything inside the window; it can't and shouldn't touch that.
 - **A custom font** (to get closer to the app's Segoe UI look) is possible via Dalamud's font-atlas
