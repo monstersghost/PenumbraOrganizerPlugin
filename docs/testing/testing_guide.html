@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm 16mm;
+  @bottom-center {
+    content: "Penumbra Organizer · Closed Testing Guide — page " counter(page) " of " counter(pages);
+    font-family: "DejaVu Sans";
+    font-size: 8pt;
+    color: #9aa0b5;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.5;
+  color: #2b2f42;
+  margin: 0;
+}
+code {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8.3pt;
+  background: #eef1fb;
+  color: #3f4bb8;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ---------- Cover header ---------- */
+.hero {
+  background: linear-gradient(135deg, #3b2a7a 0%, #6c3fb5 55%, #a04bd8 100%);
+  border-radius: 12px;
+  color: #fff;
+  padding: 26px 28px 22px 28px;
+  margin-bottom: 14px;
+}
+.hero .badge {
+  display: inline-block;
+  background: #ffb547;
+  color: #4a2d00;
+  font-weight: bold;
+  font-size: 8pt;
+  letter-spacing: 1.5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-bottom: 10px;
+}
+.hero h1 { margin: 0 0 6px 0; font-size: 22pt; line-height: 1.15; }
+.hero p { margin: 0; font-size: 9.5pt; color: #e8ddfa; }
+
+.alertbar {
+  background: #fff3e2;
+  border-left: 5px solid #f59e0b;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 0 0 14px 0;
+  font-size: 9pt;
+  color: #6b4a10;
+}
+.alertbar b { color: #92400e; }
+
+/* ---------- TOC ---------- */
+.toc {
+  background: #f5f6fc;
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+}
+.toc h2 { margin: 0 0 6px 0; font-size: 10pt; color: #3b2a7a; letter-spacing: 1px; text-transform: uppercase; }
+.toc table { width: 100%; border-collapse: collapse; }
+.toc td { padding: 2px 6px; font-size: 9pt; vertical-align: top; }
+.toc .n { font-weight: bold; width: 22px; }
+.t-red .n { color: #dc2626; } .t-blue .n { color: #2563eb; } .t-green .n { color: #059669; }
+.t-purple .n { color: #7c3aed; } .t-teal .n { color: #0d9488; }
+
+/* ---------- Section headings ---------- */
+.sec {
+  page-break-inside: avoid;
+  margin: 20px 0 10px 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #fff;
+}
+.sec h2 { margin: 0; font-size: 13.5pt; }
+.sec .num {
+  display: inline-block;
+  background: rgba(255,255,255,0.25);
+  border-radius: 6px;
+  padding: 0 8px;
+  margin-right: 8px;
+}
+.sec-red   { background: linear-gradient(90deg, #dc2626, #f97316); }
+.sec-blue  { background: linear-gradient(90deg, #1d4ed8, #3b82f6); }
+.sec-green { background: linear-gradient(90deg, #047857, #10b981); }
+.sec-purple{ background: linear-gradient(90deg, #6d28d9, #a855f7); }
+.sec-teal  { background: linear-gradient(90deg, #0f766e, #14b8a6); }
+
+.sub {
+  margin: 16px 0 8px 0;
+  font-size: 11pt;
+  font-weight: bold;
+  color: #065f46;
+  border-bottom: 2px solid #a7f3d0;
+  padding-bottom: 3px;
+  page-break-after: avoid;
+}
+.sub .tag {
+  display: inline-block;
+  background: #059669;
+  color: #fff;
+  font-size: 8.5pt;
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin-right: 7px;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  page-break-inside: avoid;
+}
+.card h3 { margin: 0 0 5px 0; font-size: 10pt; }
+.card p { margin: 4px 0; }
+.card-amber { background: #fff8ec; border-left: 5px solid #f59e0b; }
+.card-amber h3 { color: #b45309; }
+.card-teal { background: #effaf8; border-left: 5px solid #14b8a6; }
+.card-teal h3 { color: #0f766e; }
+
+.stepnum {
+  display: inline-block;
+  width: 17px; height: 17px;
+  line-height: 17px;
+  text-align: center;
+  background: #f59e0b;
+  color: #fff;
+  font-weight: bold;
+  font-size: 8.5pt;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+/* ---------- Install steps ---------- */
+ol.steps { margin: 6px 0; padding-left: 0; list-style: none; counter-reset: step; }
+ol.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 4px 0 4px 30px;
+  margin: 3px 0;
+}
+ol.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0; top: 5px;
+  width: 19px; height: 19px;
+  line-height: 19px;
+  text-align: center;
+  background: #3b82f6;
+  color: #fff;
+  font-weight: bold;
+  font-size: 9pt;
+  border-radius: 50%;
+}
+
+/* ---------- Checklist ---------- */
+ul.checks { margin: 4px 0 10px 0; padding: 0; list-style: none; }
+ul.checks li {
+  position: relative;
+  padding: 5px 10px 5px 30px;
+  margin: 4px 0;
+  background: #f8f9fd;
+  border: 1px solid #e4e7f2;
+  border-radius: 6px;
+  page-break-inside: avoid;
+}
+ul.checks li::before {
+  content: "";
+  position: absolute;
+  left: 9px; top: 8px;
+  width: 11px; height: 11px;
+  border: 2px solid #10b981;
+  border-radius: 3px;
+  background: #fff;
+}
+.exp { color: #047857; font-weight: bold; }
+.bug { color: #dc2626; font-weight: bold; }
+.note {
+  background: #eef4ff;
+  border-left: 4px solid #3b82f6;
+  border-radius: 5px;
+  padding: 7px 12px;
+  margin: 8px 0;
+  font-size: 9pt;
+  color: #1e3a8a;
+  page-break-inside: avoid;
+}
+
+/* ---------- Report list ---------- */
+ol.report { margin: 6px 0; padding-left: 0; list-style: none; counter-reset: rep; }
+ol.report li {
+  counter-increment: rep;
+  position: relative;
+  padding: 6px 10px 6px 32px;
+  margin: 5px 0;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 6px;
+  page-break-inside: avoid;
+}
+ol.report li::before {
+  content: counter(rep);
+  position: absolute;
+  left: 8px; top: 8px;
+  width: 17px; height: 17px;
+  line-height: 17px;
+  text-align: center;
+  background: #9333ea;
+  color: #fff;
+  font-weight: bold;
+  font-size: 8.5pt;
+  border-radius: 50%;
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="badge">CLOSED TEST BUILD · v0.4.0.1</div>
+  <h1>Penumbra Organizer<br>Closed Testing Guide</h1>
+  <p>You're testing a plugin that moves and deletes real data inside Penumbra's own configuration. It has passed unit tests and code review, but has <b>not</b> yet been exercised against a wide range of real, live mod libraries. Read the Precautions section before doing anything else.</p>
+</div>
+
+<div class="alertbar">
+  <b>If something breaks, that's exactly what this round is for.</b> Report it — see Section 3, "How to report a problem".
+</div>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <table>
+    <tr class="t-red"><td class="n">0</td><td><b>Precautions</b> — read before installing anything</td></tr>
+    <tr class="t-blue"><td class="n">1</td><td><b>How to install</b> — Dev Plugin (testing build, not a public release)</td></tr>
+    <tr class="t-green"><td class="n">2</td><td><b>Testing checklist</b> — Scan · Protect · Sort · Review/Export · Apply · History/Restore · Folder Cleanup · Classification · Polish</td></tr>
+    <tr class="t-purple"><td class="n">3</td><td><b>How to report a problem</b></td></tr>
+    <tr class="t-teal"><td class="n">4</td><td><b>Known limitations</b> — expected for this build, not bugs</td></tr>
+  </table>
+</div>
+
+<!-- ================= SECTION 0 ================= -->
+<div class="sec sec-red"><h2><span class="num">0</span>Precautions: read this before you install anything</h2></div>
+
+<div class="card card-amber">
+  <h3><span class="stepnum">1</span>Manually back up Penumbra's own config folder</h3>
+  <p>This plugin has its own rollback/history feature, but that feature lives <i>inside</i> the system being tested. If something goes wrong badly enough, you want a backup that doesn't depend on the plugin working correctly. This is a five-minute, one-time safety net independent of everything else in this guide.</p>
+  <p>• Close the game (or at least close Penumbra's window; closing the game is safer).<br>
+  • Navigate to: <code>%APPDATA%\XIVLauncher\pluginConfigs\Penumbra\</code><br>
+  • Copy that entire <code>Penumbra</code> folder somewhere safe — a different drive if possible, e.g. <code>D:\PenumbraConfigBackup-2026-07-20\</code></p>
+  <p><b>You do NOT need to back up your actual mod files</b> (the big mod storage folder you picked in Penumbra's settings). This plugin never touches file contents, only Penumbra's internal virtual-folder paths for each mod, which live inside the config folder above.</p>
+  <p>If anything goes seriously wrong during testing: close the game, restore this folder over the live one, reopen. You're back to exactly where you started, independent of anything the plugin did.</p>
+</div>
+
+<div class="card card-amber">
+  <h3><span class="stepnum">2</span>Note your current mod count and a few notable mod names/paths</h3>
+  <p>Take a screenshot of Penumbra's own mod list before you start, or jot down the total mod count and 3–5 mod names you'd recognize. This gives you a quick "does this look right" reference after each test, separate from whatever the plugin itself reports.</p>
+</div>
+
+<div class="card card-amber">
+  <h3><span class="stepnum">3</span>If you can, test on a copy of your setup rather than your only one</h3>
+  <p>Not everyone can do this (a full mod library can be huge), but if you have a spare machine, a spare Windows user account, or a secondary FFXIV install, that's the lowest-risk way to test. If not, Precaution #1 above is your safety net. Don't skip it.</p>
+</div>
+
+<div class="card card-amber">
+  <h3><span class="stepnum">4</span>Don't test somewhere high-stakes</h3>
+  <p>Don't test on your only/main character during a raid night, a static run, or anything where a stuck game client would be costly. This plugin only touches Penumbra's own data, not game state, but a Dalamud plugin bug can in rare cases affect client stability, so test somewhere low-stakes.</p>
+</div>
+
+<!-- ================= SECTION 1 ================= -->
+<div class="sec sec-blue"><h2><span class="num">1</span>How to install (Dev Plugin: testing build)</h2></div>
+
+<p>This build is <b>not</b> on any public plugin repository. You'll load it as a "Dev Plugin," Dalamud's built-in mechanism for exactly this kind of closed testing. It shows up in your plugin list with a wrench icon marking it as a testing/dev plugin, distinct from normal installed plugins.</p>
+
+<ol class="steps">
+  <li>You'll receive a <code>.zip</code> file (e.g. <code>PenumbraOrganizer.Plugin-0.4.0.1.zip</code>). Extract it to a folder you'll keep around for the duration of testing. Don't extract it to Downloads and delete it later; Dalamud needs to keep reading from that folder. A good spot: <code>Documents\PenumbraOrganizerTest\</code></li>
+  <li>Confirm the extracted folder directly contains <code>PenumbraOrganizer.Plugin.dll</code> and <code>PenumbraOrganizer.Plugin.json</code> (not nested one level deeper inside another folder). If your zip tool extracted a wrapper folder, go one level in until you see those two files side by side.</li>
+  <li>In-game, open the Dalamud settings (<code>/xlsettings</code> or the wrench icon on the Dalamud plugin installer window).</li>
+  <li>Go to the <b>Experimental</b> tab.</li>
+  <li>Under <b>Dev Plugin Locations</b>, click <b>Add</b>. This opens a file picker; browse into the folder from step 1 and select <code>PenumbraOrganizer.Plugin.dll</code> itself (not the folder, and not the <code>.json</code> manifest).</li>
+  <li>Click <b>Save and Close</b>.</li>
+  <li>Open the plugin installer (<code>/xlplugins</code>), go to the <b>Dev Tools</b> / <b>Installed Plugins</b> tab. You should see <b>Penumbra Organizer</b> listed with a wrench/testing indicator. If it's not there, use the installer's refresh/reload button.</li>
+  <li>Enable it if it isn't already.</li>
+  <li>Run <code>/porganizer</code> to open the plugin window, or use the icon/button Dalamud shows for it.</li>
+</ol>
+
+<div class="note"><b>To update to a newer test build later:</b> close the game (or at least disable the plugin), replace the contents of the same folder with the new zip's contents, reopen/re-enable. Dalamud will pick up the new DLL.</div>
+
+<div class="note"><b>To fully remove it when testing is done:</b> disable and remove it from the plugin installer, then remove the folder from Dev Plugin Locations in Settings → Experimental, then delete the extracted folder. This does not touch Penumbra or your mods. See Precaution #1 if you want extra confidence, but nothing about uninstalling this plugin should require restoring that backup.</div>
+
+<!-- ================= SECTION 2 ================= -->
+<div class="sec sec-green"><h2><span class="num">2</span>Testing checklist</h2></div>
+
+<p>Work through these roughly in order. Later sections (Apply, History/Restore, Folder Cleanup) build on state from Scan/Sort, and Restore specifically needs an Apply to have already happened. Check each box as you go, and note anything that didn't match <span class="exp">Expected</span> — even if it's minor.</p>
+
+<div class="sub"><span class="tag">2.1</span>Scan</div>
+<ul class="checks">
+  <li>Open the plugin (<code>/porganizer</code>), go to the <b>Scan</b> tab.</li>
+  <li>Click "Refresh mod list". <span class="exp">Expected:</span> the mod count shown matches what you noted in Precaution #2, and the table populates with Name/Author/Current Path for every mod.</li>
+  <li>Scroll through the list. <span class="exp">Expected:</span> no garbled/mojibake text for mods with non-English names (Japanese/Korean/Chinese/German mod names should render correctly, not as <code>?????</code> or boxes).</li>
+  <li>Install or remove a mod in Penumbra directly (outside the plugin), then re-click "Refresh mod list". <span class="exp">Expected:</span> the change is reflected; plugin state isn't stuck on the first scan.</li>
+</ul>
+
+<div class="sub"><span class="tag">2.2</span>Protect</div>
+<ul class="checks">
+  <li>Go to the <b>Protect</b> tab.</li>
+  <li>Check the box next to 2–3 individual mods. <span class="exp">Expected:</span> they show checked and (elsewhere in the UI, e.g. Scan/Review tables) their name renders in gold/amber text.</li>
+  <li>Click "Toggle protect all". <span class="exp">Expected:</span> every mod becomes protected (all checked). Click it again. <span class="exp">Expected:</span> every mod becomes unprotected (all unchecked): a true toggle, not accumulate-only.</li>
+  <li>If you have any Heliosphere-managed mods: click "Toggle Heliosphere protection", confirm only Heliosphere mods are affected, and confirm manually <i>unchecking</i> a Heliosphere mod and then re-scanning re-protects it automatically (Heliosphere mods are meant to always re-protect on Scan).</li>
+  <li>Close and reopen the plugin window (or restart the game). <span class="exp">Expected:</span> your protection choices persisted.</li>
+  <li>Type a few characters into the "Search mods and folders" box. <span class="exp">Expected:</span> both the Folders list and the Mods list filter down to matches as you type (mod name, author, identifier, or current path for mods; folder path for folders). Clear the box. <span class="exp">Expected:</span> everything reappears.</li>
+  <li><b>Folder-level protection:</b> find a folder in the Folders list that contains several mods (e.g. <code>Gear/Feet</code> if you have mods sorted there) and check it. <span class="exp">Expected:</span> every mod currently in that folder <i>and any subfolder under it</i> shows as protected, with a "(via folder: ...)" note next to each one on the Mods list. Uncheck the folder. <span class="exp">Expected:</span> those mods become unprotected again, unless something else (individual protection or Heliosphere) still protects them.</li>
+  <li><b>Ancestor-folder protection:</b> if you have mods nested at least two folders deep (e.g. <code>Gear/Feet/Boots</code>), confirm <i>both</i> <code>Gear</code> and <code>Gear/Feet</code> appear as separate, individually checkable rows in the Folders list, not just the deepest one. Check the top-level ancestor (e.g. <code>Gear</code>). <span class="exp">Expected:</span> every mod anywhere under it, at any depth, becomes protected — this is new in this build; a top-level folder should now be enough to protect an entire directory tree without checking every subfolder individually.</li>
+</ul>
+
+<div class="sub"><span class="tag">2.3</span>Sort</div>
+<p>Run each of these, checking the <b>Review Changes</b> tab after each one to see the proposed new paths before applying anything (do not click Apply yet in this section).</p>
+<ul class="checks">
+  <li><b>By Creator:</b> mods land under <code>Creator/Modname</code> folders, grouped by author.</li>
+  <li><b>By Mod Type:</b> Gear mods all land as one flat <code>Gear/</code> folder, no subfolders by slot.</li>
+  <li><b>By Mod Type Detailed:</b> Gear mods split into subfolders by slot where the plugin was able to determine one (e.g. <code>Gear/Feet</code>, <code>Gear/Head</code>) with an unresolved remainder in a plain <code>Gear/</code> catch-all. Every other category (Face, Hair, NPC, Mount, Body, etc.) behaves the same as "By Mod Type" for those categories.</li>
+  <li><b>By Type Then Creator:</b> <code>Type/Creator/Modname</code>.</li>
+  <li><b>By Creator Then Type:</b> <code>Creator/Type/Modname</code>.</li>
+  <li><b>Manual assign:</b> type a few characters into the "Search mods" box above the manual-assign list, confirm the list filters down. Check the boxes next to 3–4 mods (protected mods should not appear in this list at all), type a custom destination folder, click "Assign N selected mods". <span class="exp">Expected:</span> only the checked mods' proposed paths change, to <code>&lt;your folder&gt;/&lt;mod name&gt;</code> each; a summary line reports how many were assigned and how many were skipped. Clear the search box and confirm your checked selections are still checked (selection should survive a filter-text change).</li>
+  <li>After any sort, confirm protected mods' proposed paths never changed (Review Changes tab should show no proposed change for protected mods regardless of which sort you ran).</li>
+</ul>
+
+<div class="sub"><span class="tag">2.4</span>Review Changes / Export / Workbook</div>
+<ul class="checks">
+  <li>On the <b>Review Changes</b> tab, confirm the table shows both Current Path and Proposed Path per mod, and that changed rows show the proposed path in green.</li>
+  <li>Click "Export". <span class="exp">Expected:</span> a text file is written (path shown in the UI) with every mod's full details and the current validation result. Open it and confirm it's not empty or garbled.</li>
+  <li>Pick a workbook strategy from the dropdown, click "Export Workbook". <span class="exp">Expected:</span> an <code>.xlsx</code> file is produced; click "Open Workbook" and confirm Excel (or your spreadsheet app) opens it without the game freezing or disconnecting.</li>
+  <li>Edit a few destination cells in the exported workbook, save it, then use "Import Workbook" (file picker should be Dalamud's own in-game dialog, <span class="bug">not</span> a Windows Explorer window; if you see a native Windows file dialog anywhere in this plugin, that's a bug, report it). <span class="exp">Expected:</span> your edited destinations are reflected back in the plugin's Review Changes tab.</li>
+  <li>Deliberately create a collision: manually assign two <i>different</i> mods to the exact same proposed path. <span class="exp">Expected:</span> the Review tab shows a red collision error naming both mods, and the Apply button is disabled while the collision exists.</li>
+  <li>With a collision or protected-violation present, click "Protect &amp; Skip All Blocking Mods". <span class="exp">Expected:</span> the offending mods become protected and pinned to their current path, the error clears, Apply re-enables.</li>
+  <li>Click "Show Config File". <span class="exp">Expected:</span> a Windows Explorer window opens with the plugin's own settings JSON (protected mod list) pre-selected, so you can copy or zip it directly.</li>
+  <li>Click "Create Diagnostic Dump", then "Show Dump File". <span class="exp">Expected:</span> Explorer opens with a text file pre-selected. Open it and confirm it has a state summary (last error, last Apply/Restore/Folder Cleanup results, mod/protection counts, rollback history summary, session event log), and that it does <b>not</b> contain any full filesystem path with your Windows username in it; <span class="bug">if it does, that's a bug — report it</span>.</li>
+  <li><b>Diagnostics across a reload:</b> after running an Apply (2.5) or a Restore (2.6), fully disable and re-enable the plugin (or restart the game), then immediately click "Create Diagnostic Dump" again <i>without</i> running anything else first. <span class="exp">Expected:</span> the dump's "Last Apply result" / "Last Restore result" sections show your prior operation's outcome, phrased as "no ... run this session; last known from a prior session: ...", instead of just "(no ... run this session)" with the result silently gone.</li>
+</ul>
+
+<div class="sub"><span class="tag">2.5</span>Apply: the first real write test</div>
+<div class="note"><b>Do this only after Precaution #1's backup is in place.</b></div>
+<ul class="checks">
+  <li>Run a sort that produces a reasonable number of changes (not thousands at once for your first try; a few dozen is a good first test). Go to Review Changes, click <b>Apply</b>, confirm the popup shows the correct mod count, click "Yes, Apply".</li>
+  <li><span class="exp">Expected:</span> a result summary appears ("Apply: N succeeded, N failed"). If any failed, the failure reason should be a real Penumbra error code, not a crash.</li>
+  <li>Go to Penumbra's own UI directly and confirm the mods actually moved to the folders the plugin proposed.</li>
+  <li>Go to the <b>History</b> tab. <span class="exp">Expected:</span> a new snapshot appears at the top of the list automatically, timestamped just before your Apply, with an auto-description like "N mods moved".</li>
+</ul>
+
+<div class="sub"><span class="tag">2.6</span>History / Restore</div>
+<p>Do this after at least one successful Apply from 2.5.</p>
+<ul class="checks">
+  <li>On the <b>History</b> tab, click "Create Backup", optionally type a label, confirm a new snapshot appears in the list with your label.</li>
+  <li>Run another Sort + Apply (a different strategy than before), so you now have at least 3 snapshots: the pre-first-Apply one, your manual one, and the pre-second-Apply one.</li>
+  <li>Click <b>Restore</b> on the <i>oldest</i> snapshot. <span class="exp">Expected:</span> a confirmation popup shows exact counts (how many mods will move, how many are already at their snapshot path, how many will be relocated to root, how many are no longer installed) before you confirm anything.</li>
+  <li>Confirm the restore. <span class="exp">Expected:</span> a result summary appears; go check Penumbra's UI directly and confirm mods are back at (or close to) their original paths from before your first Apply.</li>
+  <li>Check the History tab again. <span class="exp">Expected:</span> a <i>new</i> snapshot was automatically added just before the restore ran (so the restore itself is undoable). You should now have one more entry than before. This should now appear immediately without needing to click anything else first (if you see a <i>stale</i> History list here — the new snapshot missing until you create a manual backup or restore something else — that's a regression, report it).</li>
+  <li><b>Edge case — mod installed after a snapshot:</b> install a new mod in Penumbra (or note one you installed after your first snapshot), then Restore to that first snapshot. <span class="exp">Expected:</span> the new mod gets moved to the Penumbra root (no subfolder), not left where it was and not causing an error.</li>
+  <li><b>Edge case — mod removed since a snapshot:</b> if you can safely uninstall a test mod, do so, then Restore to a snapshot that includes it. <span class="exp">Expected:</span> it's reported in the result summary as skipped because it's no longer installed, not as an error, and nothing else in the restore is blocked by it.</li>
+  <li><b>Edge case — protected or Heliosphere-managed mod (Exact Restore):</b> protect a mod (individually, via a folder, or confirm you have a Heliosphere-managed mod), then Restore to a snapshot where that mod had a different historical path. <span class="exp">Expected — this is the opposite of older builds:</span> the confirmation popup shows a yellow warning line with a count of currently-protected/Heliosphere-managed mods that will move anyway, and after confirming, that mod's path <i>does</i> move back to its historical path from the snapshot. Restore is meant to reproduce the snapshot exactly, ignoring current protection — protection only blocks Sort/Apply, not Restore. <span class="bug">If a protected mod is instead skipped and left in place, that's a bug — report it.</span></li>
+  <li>Click <b>Delete</b> on one of the snapshots (not the most recent one). <span class="exp">Expected:</span> it disappears from the list, and restoring to any <i>other</i> snapshot still works normally afterward.</li>
+  <li>Restart the game entirely, reopen the plugin, go to History. <span class="exp">Expected:</span> every snapshot you created is still there; history persists across restarts.</li>
+</ul>
+
+<div class="sub"><span class="tag">2.7</span>Folder Cleanup</div>
+<ul class="checks">
+  <li>After at least one Apply has moved mods out of some folders, go to the Review Changes tab's Orphaned Folders section. <span class="exp">Expected:</span> any now-empty folders left behind in Penumbra's own <code>organization.json</code> are listed, split into a plain-empty section and a (harder to accidentally delete) customized-empty section. You should also see a "Re-read organization.json" button and a "Last read: HH:MM:SS (Ns ago)" line next to it.</li>
+  <li><b>If detection looks stale or wrong</b> (e.g. after sorting/restoring a large number of mods, the list shows far fewer orphaned folders than you'd expect): click "Re-read organization.json". This re-reads the file from disk — it does <b>not</b> ask Penumbra for fresh data, so if Penumbra itself hasn't written its latest folder state to disk yet, the count may not change even after re-reading. If that happens: move any one folder manually in Penumbra's own UI (or click Penumbra's "Rediscover Mods"), then click "Re-read organization.json" again. <span class="exp">Expected:</span> the count updates to the full, correct set once Penumbra has actually written to disk. If you can, note whether the count changed on the <i>first</i> re-read (before touching Penumbra) or only after — this specific detail is useful for a report if the timing looks off.</li>
+  <li>Select a few, run the cleanup. <span class="exp">Expected:</span> a success message with counts; check Penumbra's own folder tree UI. It still shows the pruned folders until you click Penumbra's own "Rediscover Mods" button (the plugin should tell you this; that's expected, not a bug).</li>
+  <li>Click Penumbra's "Rediscover Mods". <span class="exp">Expected:</span> the pruned folders are actually gone from Penumbra's UI now.</li>
+  <li>Click "Rollback Folder Cleanup" (available right after a cleanup run). <span class="exp">Expected:</span> the pruned folders come back, including any custom color/description a customized folder had.</li>
+</ul>
+
+<div class="sub"><span class="tag">2.8</span>NPC / Body-slot / Gear-slot classification (spot-check, not exhaustive)</div>
+<ul class="checks">
+  <li>If you have any NPC/enemy/boss-named mods, sort "By Mod Type" and confirm they land under an NPC-related folder, not miscategorized as Gear.</li>
+  <li>If you have any Bibo+/Yet-Another-Body-style mods, confirm they classify as Body, not Gear.</li>
+  <li>On the Scan tab, try the NPC name list "refresh" control if visible. <span class="exp">Expected:</span> it either updates successfully or fails with a clear message. It should not hang the UI or crash.</li>
+</ul>
+
+<div class="sub"><span class="tag">2.9</span>General / polish</div>
+<ul class="checks">
+  <li>Confirm the plugin window title shows a version number (<code>Penumbra Organizer v0.4.0.1</code> or similar), not blank or "unknown".</li>
+  <li>Confirm the plugin's icon (not a generic placeholder) shows in Dalamud's plugin list.</li>
+  <li>Throughout all of the above, confirm you never saw a native Windows file-picker dialog pop up (every file dialog in this plugin should be Dalamud's own in-game style). A native dialog pauses the game and can cause a disconnect; <span class="bug">seeing one would be a real bug to report</span>.</li>
+  <li>Leave the plugin window open and tabbed through for a while during normal play. <span class="exp">Expected:</span> no noticeable stutter/FPS drop from the plugin being open, even on the History tab with several snapshots.</li>
+</ul>
+
+<!-- ================= SECTION 3 ================= -->
+<div class="sec sec-purple"><h2><span class="num">3</span>How to report a problem</h2></div>
+
+<p>For each issue, please include:</p>
+<ol class="report">
+  <li><b>Which checklist item</b> (e.g. "2.6 Restore, edge case: protected mod").</li>
+  <li><b>What you expected vs. what happened.</b></li>
+  <li><b>Your Dalamud log.</b> <code>/xllog</code> in-game, or the log file directly at <code>%APPDATA%\XIVLauncher\dalamud.log</code>. Copy the relevant section from around when the issue happened (timestamps help). This build logs its own major operations (Scan, Apply, Restore, Create Backup, Delete Snapshot, Folder Cleanup, Folder Cleanup Rollback) to this same file, including per-mod failure reasons on Apply/Restore, so search for "Penumbra Organizer" (or your timestamp) in the log rather than just sending the very last few lines.</li>
+  <li><b>The diagnostic dump.</b> On the Review Changes tab, click "Create Diagnostic Dump", then "Show Dump File", and attach it. It's a plain text summary of the session (last results, mod/protection counts, rollback history, event log), safe to attach alongside the Dalamud log.</li>
+  <li>If it's a File/Apply/Restore issue: whether Precaution #1's backup folder is still intact (so we know recovery is possible either way).</li>
+  <li>Roughly how many mods you have installed. Several bugs in this plugin's history only showed up at real scale (hundreds+ of mods), not in small test libraries.</li>
+</ol>
+
+<div class="alertbar">
+  Do <b>not</b> try to fix Penumbra's state yourself beyond restoring Precaution #1's backup if needed. <b>Report first</b>, restore if you're blocked from playing, and we'll sort out the root cause from the report.
+</div>
+
+<!-- ================= SECTION 4 ================= -->
+<div class="sec sec-teal"><h2><span class="num">4</span>Known limitations (not bugs, expected for this build)</h2></div>
+
+<div class="card card-teal">
+  <h3>Not a public release</h3>
+  <p>It won't auto-update; you'll get new zips manually for each test round.</p>
+</div>
+<div class="card card-teal">
+  <h3>Rollback/History covers Apply only</h3>
+  <p>Folder Cleanup still has its own separate single-backup mechanism (its own "Rollback Folder Cleanup" button), not the multi-snapshot History tab.</p>
+</div>
+<div class="card card-teal">
+  <h3>No retention limit on saved snapshots</h3>
+  <p>The history file will grow the more you use Create Backup/Apply/Restore over a long test session. This is a known, accepted trade-off for this build, not something to report.</p>
+</div>
+<div class="card card-teal">
+  <h3>Folder Cleanup reload banner</h3>
+  <p>Only clears via a full Scan, not Penumbra's own Rediscover Mods alone; expected, not a bug.</p>
+</div>
+
+</body>
+</html>

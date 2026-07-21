@@ -1,0 +1,12 @@
+{
+  "Author": "Penumbra Organizer Contributors",
+  "Name": "Penumbra Organizer",
+  "Punchline": "Organize your Penumbra mod library by creator, type, or both.",
+  "Description": "Scans your installed Penumbra mods and proposes an organized folder layout (by creator, mod type, or both), with review, protect, rollback history, and workbook import/export support before anything is applied.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "penumbra",
+    "organizer",
+    "sorting"
+  ]
+}

@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+dist/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# NuGet
+packages/
+*.nupkg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git worktrees (isolated dev workspaces, not project content)
+.claude/worktrees/
+
+# Claude Code tooling packages (not project content)
+.agents/
+.claude/skills/
+agent/
+skills-lock.json
+
+# Cross-repo handoff note (internal, not project content)
+docs/HANDOFF_TO_STANDALONE_APP.md
+
+# Subagent-driven-development scratch (per-worktree progress ledger, not project content)
+.superpowers/

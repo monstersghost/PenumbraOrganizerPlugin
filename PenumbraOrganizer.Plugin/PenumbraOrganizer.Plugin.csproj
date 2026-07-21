@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+
+  <PropertyGroup>
+    <Version>0.4.0.1</Version>
+    <Product>Penumbra Organizer Plugin (MVP)</Product>
+    <Authors>Penumbra Organizer Contributors</Authors>
+    <Copyright>Copyright (c) 2026 Penumbra Organizer Contributors</Copyright>
+    <PackageProjectUrl>https://github.com/monstersghost/PenumbraOrganizerPlugin</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/monstersghost/PenumbraOrganizerPlugin</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- No longer used directly (file dialogs now use Dalamud's in-game FileDialogManager), but removing it breaks NuGet restore of ClosedXML's System.IO.Packaging dependency (NU1101) -->
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.5.2" />
+    <PackageReference Include="Penumbra.Api" Version="5.15.1" />
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Organizer\NpcNames\npc-name-list-seed.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\ModCategory.cs" Link="Linked\ModCategory.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\ModClassificationModels.cs" Link="Linked\ModClassificationModels.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Interfaces\ICreatorCanonicalizer.cs" Link="Linked\ICreatorCanonicalizer.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Services\CreatorCanonicalizer.cs" Link="Linked\CreatorCanonicalizer.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Models\WorkbookWorkflowModels.cs" Link="Linked\WorkbookWorkflowModels.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Models\DomainModels.cs" Link="Linked\DomainModels.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Models\OrganizerModels.cs" Link="Linked\OrganizerModels.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Identity\ScanIdentity.cs" Link="Linked\ScanIdentity.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\EquipmentSlot.cs" Link="Linked\EquipmentSlot.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\EquipmentSlotMapper.cs" Link="Linked\EquipmentSlotMapper.cs" />
+    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Infrastructure\Exports\WorkbookWorkflowService.cs" Link="Linked\WorkbookWorkflowService.cs" />
+  </ItemGroup>
+
+</Project>

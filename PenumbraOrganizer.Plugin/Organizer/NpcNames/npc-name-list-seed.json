@@ -1,0 +1,20 @@
+{
+  "Version": 1,
+  "NPCs": [
+    "Y'shtola", "Thancred", "Alphinaud", "Alisaie", "Urianger", "Krile",
+    "G'raha Tia", "Estinien", "Yshtola", "Ryne", "Feo Ul", "Emet-Selch",
+    "Zenos yae Galvus", "Minfilia", "Papalymo", "Moenbryda", "Haurchefant",
+    "Lyse", "Y'mhitra"
+  ],
+  "Enemies": [
+    "Titania", "Garuda", "Ifrit", "Shiva", "Ramuh", "Leviathan", "Ravana",
+    "Bismarck", "Sephirot", "Sophia", "Zurvan", "Susano", "Lakshmi",
+    "Shinryu", "Tsukuyomi"
+  ],
+  "Bosses": [
+    "Zenos yae Galvus", "Nidhogg", "Omega", "Shinryu", "Zurvan",
+    "The Cloud of Darkness", "King Thordan", "Fatebreaker", "Barbariccia",
+    "Halone", "Ser Charibert"
+  ],
+  "Excluded": []
+}
