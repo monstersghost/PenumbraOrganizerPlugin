@@ -51,7 +51,8 @@ below unless a phase explicitly says otherwise.
   app's own `ModPathClassifier`). See
   `docs/superpowers/specs/2026-07-18-plugin-organizer-gear-slot-classification-design.md` and
   `docs/superpowers/plans/2026-07-18-plugin-organizer-gear-slot-classification.md`.
-- **Library Search (reverse changed-item lookup) — implemented, pending in-game verification.** New
+- **Library Search (reverse changed-item lookup) — implemented, confirmed working on the author's
+  in-game setup; wider verification via Discord testers.** New
   read-only "Search" tab: find every installed mod (enabled or not) by the game items it changes,
   independent of the Sort tab's Scan/classification state. Built on a new `LibrarySearch/` namespace
   (mod-centric index + facet/slot filter engine), reusing `ChangedItemKeyParser`/`ModTypeClassifier`/
