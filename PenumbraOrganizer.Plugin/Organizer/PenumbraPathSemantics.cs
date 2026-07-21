@@ -73,6 +73,19 @@ public static class PenumbraPathSemantics
     }
 
     /// <summary>
+    /// Canonical form of a full virtual path for a mod with the given display name: same value
+    /// for any two paths <see cref="AreEquivalent"/> would call equivalent. Used wherever paths
+    /// need to be hashed or grouped rather than compared pairwise (operation plan integrity hash).
+    /// </summary>
+    public static string Normalize(string path, string displayName)
+    {
+        SplitPath(path, out var folder, out var leaf);
+        var display = FixName(displayName);
+        var token = LeafToken(leaf, display);
+        return (folder + "\\" + token).ToLowerInvariant();
+    }
+
+    /// <summary>
     /// The persisted identity of a leaf name, per DataPath.UpdateByNode:
     /// - a leaf equal to the display name persists as SortName = null (checked FIRST, so a mod
     ///   genuinely named "Foo (2)" keeps that identity);

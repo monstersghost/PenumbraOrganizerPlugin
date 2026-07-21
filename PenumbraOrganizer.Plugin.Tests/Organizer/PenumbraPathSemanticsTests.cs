@@ -111,4 +111,36 @@ public class PenumbraPathSemanticsTests
         Assert.True(PenumbraPathSemantics.AreEquivalent("Gear/Foo (2)", "Gear/Foo (2)", "Foo (2)"));
         Assert.False(PenumbraPathSemantics.AreEquivalent("Gear/Foo", "Gear/Foo (2)", "Foo (2)"));
     }
+
+    // --- Normalize: canonical form for hash-based comparison ---
+
+    [Theory]
+    [InlineData("Gear\\Foo", "Gear\\Foo (2)", "Foo")]      // duplicate marker on the display name itself
+    [InlineData("Gear\\Foo", "Gear\\Foo", "Foo")]           // already identical
+    public void Normalize_ProducesSameStringForEquivalentPaths(string a, string b, string displayName)
+    {
+        var normalizedA = PenumbraPathSemantics.Normalize(a, displayName);
+        var normalizedB = PenumbraPathSemantics.Normalize(b, displayName);
+
+        Assert.Equal(normalizedA, normalizedB);
+        Assert.True(PenumbraPathSemantics.AreEquivalent(a, b, displayName));
+    }
+
+    [Fact]
+    public void Normalize_ProducesDifferentStringsForDifferentLocations()
+    {
+        var normalizedA = PenumbraPathSemantics.Normalize("Gear\\Foo", "Foo");
+        var normalizedB = PenumbraPathSemantics.Normalize("Weapons\\Foo", "Foo");
+
+        Assert.NotEqual(normalizedA, normalizedB);
+    }
+
+    [Fact]
+    public void Normalize_IsCaseInsensitive()
+    {
+        var normalizedA = PenumbraPathSemantics.Normalize("Gear\\Foo", "Foo");
+        var normalizedB = PenumbraPathSemantics.Normalize("gear\\foo", "Foo");
+
+        Assert.Equal(normalizedA, normalizedB);
+    }
 }
