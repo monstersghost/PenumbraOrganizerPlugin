@@ -17,7 +17,7 @@ Dalamud, via XIVLauncher. Penumbra installed and enabled: every tab depends on P
 being available, and if Penumbra isn't running, Refresh mod list shows a connection error instead
 of a mod list.
 
-## The five tabs
+## The six tabs
 
 ### Scan
 
@@ -169,6 +169,28 @@ captures its own pre-restore snapshot first, so a restore is itself undoable.
 Delete removes a snapshot from the list; restoring to any other snapshot still works normally
 afterward. History persists across game restarts.
 
+### Search
+
+A read-only reverse lookup: find every installed mod, enabled or not, by the game items it changes.
+It's independent of the Sort tab. It builds its own index and never moves, protects, or otherwise
+modifies anything.
+
+Build/Refresh Index scans your installed mods and their changed-items sets into a searchable index.
+This is separate from the Scan tab's own scan, so click it once here before searching, and again
+after installing or removing mods. A summary line reports what was indexed (mod count, total changed
+items, and a gear-slot breakdown); the index's build time is shown beneath it.
+
+Two text boxes narrow the results: "Mod name contains" matches against the mod's name, and "Item
+contains" matches against the names of the items it changes. The Categories row filters by mod
+category (with an Unknown toggle for mods that didn't classify). When Gear is among the selected
+categories, a Slots row appears to filter Gear mods by equipment slot, plus an Unresolved toggle
+for Gear mods whose slot couldn't be determined.
+
+Results show in two panes. The left pane lists the matching mods as `Name (Author)`; click one to
+select it. The right pane lists that mod's changed items. If a mod matched only because of the "Mod
+name contains" box and not because of any item, a red "Matched by mod name, not by item" note
+appears above its item list, so you can tell a name hit from an item hit.
+
 ## Typical workflows
 
 First-time sort: Scan, pick a Sort strategy, review the proposed paths on Review Changes, then
@@ -187,6 +209,9 @@ you've since protected.
 After moving mods around inside Penumbra directly: Scan, check the Orphaned Folders section on
 Review Changes, Clean Up Selected Folders, click Rediscover Mods in Penumbra, then Scan again to
 confirm.
+
+Finding which mod changes a given item: open the Search tab, Build/Refresh Index, type part of the
+item name into "Item contains", then click a matching mod to see its full changed-items list.
 
 ## Where files live
 

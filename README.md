@@ -18,6 +18,7 @@ before applying them.
 * Remove empty folders left behind after mods are reorganized
 * Export your mod organization to an Excel workbook
 * Import edited organization workbooks back into the plugin
+* Search your whole library to find which installed mods change a given game item
 
 ## Installation
 

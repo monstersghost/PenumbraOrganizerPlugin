@@ -44,7 +44,7 @@ Entry point:
   the UI calls: `RunScan`, `ApplyChanges`, `RollbackLastApply`, `ExportWorkbook`/`ImportWorkbook`,
   `ExportReview`, `DetectOrphanedFolders`/`CleanUpFolders`/`RollbackFolderCleanup`, and
   `RefreshNpcNamesAsync`. It contains no ImGui code.
-- `Windows/MainWindow.cs` holds all UI (ImGui, through Dalamud's binding) across four tabs. Beyond
+- `Windows/MainWindow.cs` holds all UI (ImGui, through Dalamud's binding) across six tabs. Beyond
   thin try/catch wrappers around `Plugin`'s methods and local UI state (selected checkboxes,
   last-result caches for display), it has no business logic of its own.
 
