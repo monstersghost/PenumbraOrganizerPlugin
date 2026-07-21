@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 
@@ -40,12 +41,17 @@ public sealed record OperationPlan(
 
 public static class OperationPlanCodec
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
     public static void Save(string path, OperationPlan plan)
     {
         if (!plan.Verify())
             throw new InvalidOperationException("Refusing to persist an OperationPlan that fails its own integrity check.");
 
-        AtomicFile.CreateOrReplace(path, JsonSerializer.Serialize(plan));
+        AtomicFile.CreateOrReplace(path, JsonSerializer.Serialize(plan, SerializerOptions));
     }
 
     public static bool TryLoad(string path, out OperationPlan? plan)
@@ -57,7 +63,7 @@ public static class OperationPlanCodec
         OperationPlan? candidate;
         try
         {
-            candidate = JsonSerializer.Deserialize<OperationPlan>(contents);
+            candidate = JsonSerializer.Deserialize<OperationPlan>(contents, SerializerOptions);
         }
         catch (JsonException)
         {

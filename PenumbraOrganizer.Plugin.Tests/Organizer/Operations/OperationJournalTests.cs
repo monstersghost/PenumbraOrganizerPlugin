@@ -7,6 +7,7 @@ public class OperationJournalTests
     private static OperationJournal SampleJournal(OperationStage status = OperationStage.Mutating) => new(
         OperationId: Guid.NewGuid(),
         Type: OperationType.Apply,
+        SchemaVersion: OperationJournal.CurrentSchemaVersion,
         Status: status,
         StartedAt: DateTimeOffset.UtcNow,
         TotalItems: 401,
@@ -67,6 +68,52 @@ public class OperationJournalTests
 
             Assert.False(loaded);
             Assert.Null(result);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryLoad_ReturnsFalseWhenSchemaVersionMismatched()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(dir.FullName, "journal.json");
+            var journal = SampleJournal();
+            OperationJournalCodec.Save(path, journal);
+
+            var tamperedJson = File.ReadAllText(path)
+                .Replace("\"SchemaVersion\":1", "\"SchemaVersion\":999");
+            File.WriteAllText(path, tamperedJson);
+
+            var loaded = OperationJournalCodec.TryLoad(path, out var result);
+
+            Assert.False(loaded);
+            Assert.Null(result);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Save_WritesEnumsAsStringsNotNumbers()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(dir.FullName, "journal.json");
+            var journal = SampleJournal(OperationStage.Mutating);
+
+            OperationJournalCodec.Save(path, journal);
+            var rawJson = File.ReadAllText(path);
+
+            Assert.Contains("\"Status\":\"Mutating\"", rawJson);
+            Assert.DoesNotContain("\"Status\":2", rawJson);
         }
         finally
         {

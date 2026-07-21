@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 
@@ -19,6 +20,7 @@ public enum OperationStage
 public sealed record OperationJournal(
     Guid OperationId,
     OperationType Type,
+    int SchemaVersion,
     OperationStage Status,
     DateTimeOffset StartedAt,
     int TotalItems,
@@ -30,6 +32,8 @@ public sealed record OperationJournal(
     Guid? RecoveryOfOperationId,
     DateTimeOffset UpdatedAt)
 {
+    public const int CurrentSchemaVersion = 1;
+
     private static readonly HashSet<OperationStage> TerminalStages =
     [
         OperationStage.Completed,
@@ -44,8 +48,13 @@ public sealed record OperationJournal(
 
 public static class OperationJournalCodec
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
     public static void Save(string path, OperationJournal journal) =>
-        AtomicFile.CreateOrReplace(path, JsonSerializer.Serialize(journal));
+        AtomicFile.CreateOrReplace(path, JsonSerializer.Serialize(journal, SerializerOptions));
 
     public static bool TryLoad(string path, out OperationJournal? journal)
     {
@@ -53,16 +62,21 @@ public static class OperationJournalCodec
         if (!AtomicFile.TryReadValidated(path, out var contents) || contents is null)
             return false;
 
+        OperationJournal? candidate;
         try
         {
-            journal = JsonSerializer.Deserialize<OperationJournal>(contents);
+            candidate = JsonSerializer.Deserialize<OperationJournal>(contents, SerializerOptions);
         }
         catch (JsonException)
         {
             return false;
         }
 
-        return journal is not null;
+        if (candidate is null || candidate.SchemaVersion != OperationJournal.CurrentSchemaVersion)
+            return false;
+
+        journal = candidate;
+        return true;
     }
 }
 
