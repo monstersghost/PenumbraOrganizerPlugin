@@ -37,7 +37,14 @@ public static class AtomicFile
             return false;
         }
 
-        contents = File.ReadAllText(path);
+        var text = File.ReadAllText(path);
+        if (string.IsNullOrEmpty(text))
+        {
+            contents = null;
+            return false;
+        }
+
+        contents = text;
         return true;
     }
 }

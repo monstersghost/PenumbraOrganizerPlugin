@@ -122,6 +122,26 @@ public class AtomicFileTests
     }
 
     [Fact]
+    public void TryReadValidated_ReturnsFalseWhenFileIsEmpty()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(dir.FullName, "empty.json");
+            File.WriteAllText(path, string.Empty);
+
+            var found = AtomicFile.TryReadValidated(path, out var contents);
+
+            Assert.False(found);
+            Assert.Null(contents);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void CreateOrReplace_CreatesDestinationDirectoryIfMissing()
     {
         var dir = Directory.CreateTempSubdirectory();
