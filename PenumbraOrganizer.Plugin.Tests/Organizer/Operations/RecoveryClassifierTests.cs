@@ -118,3 +118,70 @@ public class RecoveryClassifierTests
         Assert.Equal("m1", result[0].Identifier);
     }
 }
+
+public class RecoveryOutcomeTests
+{
+    private static ItemRecoveryClassification C(ItemRecoveryState state) => new("m", state);
+
+    [Fact]
+    public void DeriveOutcome_NoMutationsDetected_WhenAllChangedItemsAreAtOriginal()
+    {
+        var outcome = RecoveryClassifier.DeriveOutcome([C(ItemRecoveryState.AtOriginal), C(ItemRecoveryState.AtOriginal)]);
+
+        Assert.Equal(RecoveryOutcome.NoMutationsDetected, outcome);
+    }
+
+    [Fact]
+    public void DeriveOutcome_CompletedButNotFinalized_WhenAllChangedItemsAreAtTarget()
+    {
+        var outcome = RecoveryClassifier.DeriveOutcome([C(ItemRecoveryState.AtTarget), C(ItemRecoveryState.AtTarget)]);
+
+        Assert.Equal(RecoveryOutcome.CompletedButNotFinalized, outcome);
+    }
+
+    [Fact]
+    public void DeriveOutcome_PartiallyApplied_WhenMixOfOriginalAndTargetWithNoNeither()
+    {
+        var outcome = RecoveryClassifier.DeriveOutcome([C(ItemRecoveryState.AtOriginal), C(ItemRecoveryState.AtTarget)]);
+
+        Assert.Equal(RecoveryOutcome.PartiallyApplied, outcome);
+    }
+
+    [Fact]
+    public void DeriveOutcome_Indeterminate_WhenAnyItemIsAtNeither()
+    {
+        var outcome = RecoveryClassifier.DeriveOutcome([C(ItemRecoveryState.AtOriginal), C(ItemRecoveryState.AtNeither)]);
+
+        Assert.Equal(RecoveryOutcome.Indeterminate, outcome);
+    }
+
+    [Fact]
+    public void DeriveOutcome_Indeterminate_WhenAnyItemIsUnexpectedlyMissing()
+    {
+        var outcome = RecoveryClassifier.DeriveOutcome([C(ItemRecoveryState.AtOriginal), C(ItemRecoveryState.MissingLive)]);
+
+        Assert.Equal(RecoveryOutcome.Indeterminate, outcome);
+    }
+
+    [Fact]
+    public void DeriveOutcome_AtBothItemsAreExcludedFromClassificationEntirely()
+    {
+        // AtBoth items must not inflate the "all AtOriginal" or "all AtTarget" checks in either
+        // direction (design section 7) — mixing them in with real AtOriginal items must not flip
+        // a genuinely-unstarted operation into looking "partially applied".
+        var outcome = RecoveryClassifier.DeriveOutcome(
+            [C(ItemRecoveryState.AtOriginal), C(ItemRecoveryState.AtOriginal), C(ItemRecoveryState.AtBoth)]);
+
+        Assert.Equal(RecoveryOutcome.NoMutationsDetected, outcome);
+    }
+
+    [Fact]
+    public void DeriveOutcome_NoMutationsDetected_WhenOnlyAtBothItemsExist()
+    {
+        // Degenerate case: every planned item turned out to be a no-op (original and target
+        // normalize to the same location). Nothing changed, so nothing was mutated.
+        var outcome = RecoveryClassifier.DeriveOutcome([C(ItemRecoveryState.AtBoth), C(ItemRecoveryState.AtBoth)]);
+
+        Assert.Equal(RecoveryOutcome.NoMutationsDetected, outcome);
+    }
+}

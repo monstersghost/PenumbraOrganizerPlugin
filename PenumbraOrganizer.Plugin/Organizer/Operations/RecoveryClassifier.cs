@@ -13,6 +13,14 @@ public enum ItemRecoveryState
 
 public sealed record ItemRecoveryClassification(string Identifier, ItemRecoveryState State);
 
+public enum RecoveryOutcome
+{
+    NoMutationsDetected,
+    CompletedButNotFinalized,
+    PartiallyApplied,
+    Indeterminate,
+}
+
 /// <summary>
 /// Design doc section 7. Every comparison uses PenumbraPathSemantics.AreEquivalent, never raw
 /// string equality — see PenumbraPathSemantics.cs for why a live path can legitimately differ
@@ -59,5 +67,30 @@ public static class RecoveryClassifier
             (false, true) => ItemRecoveryState.AtTarget,
             _ => ItemRecoveryState.AtNeither,
         };
+    }
+
+    public static RecoveryOutcome DeriveOutcome(IReadOnlyList<ItemRecoveryClassification> classifications)
+    {
+        // AtBoth items are no-ops (original and target are the same persisted location) and
+        // are excluded from every rule below — design section 7.
+        var changed = classifications.Where(c => c.State != ItemRecoveryState.AtBoth).ToList();
+
+        if (changed.Count == 0)
+            return RecoveryOutcome.NoMutationsDetected;
+
+        if (changed.Any(c => c.State is ItemRecoveryState.AtNeither
+                or ItemRecoveryState.MissingLive
+                or ItemRecoveryState.MissingSnapshot))
+            return RecoveryOutcome.Indeterminate;
+
+        var allAtOriginal = changed.All(c => c.State == ItemRecoveryState.AtOriginal);
+        if (allAtOriginal)
+            return RecoveryOutcome.NoMutationsDetected;
+
+        var allAtTarget = changed.All(c => c.State == ItemRecoveryState.AtTarget);
+        if (allAtTarget)
+            return RecoveryOutcome.CompletedButNotFinalized;
+
+        return RecoveryOutcome.PartiallyApplied;
     }
 }
