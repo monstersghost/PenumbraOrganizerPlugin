@@ -3,7 +3,7 @@
     "Author": "Penumbra Organizer Contributors",
     "Name": "Penumbra Organizer",
     "Punchline": "Organize your Penumbra mod library by creator, type, or both.",
-    "Description": "Scans your installed Penumbra mods and proposes an organized folder layout (by creator, mod type, or both), with review, protect, and workbook import/export support before anything is applied.",
+    "Description": "Sorts your installed Penumbra mods into folders by creator, type, or both. You approve every move before it happens, protect anything you want left alone, and can export or import the whole plan as an Excel workbook.",
     "Tags": [
       "penumbra",
       "organizer",
