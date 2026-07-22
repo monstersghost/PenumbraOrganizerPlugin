@@ -1,7 +1,7 @@
 # Operation Controller, Frame-Budgeted Execution, and Recovery UI
 
 Date: 2026-07-22
-Status: Design approved (revision 2), not yet implemented
+Status: Design approved, implementation-ready (revision 3), not yet implemented
 Builds on: `docs/superpowers/specs/2026-07-21-incremental-operations-design.md` (original design)
 and the merged persistence foundations (`docs/superpowers/plans/2026-07-21-operation-persistence-foundations.md`)
 
@@ -118,6 +118,23 @@ reject on reload, same principle as v1):
 - A `CycleBreakingTemporaryMove` step is never the last step for its identifier.
 - Recovery target identifiers are unique.
 - Execution-step indices are contiguous, starting at 0, strictly ordered.
+- Every `GroupId` is non-negative and assigned deterministically (0-based, in the order
+  `OrderMovesForApply` first emits each group) — not arbitrary, so the same input plan always
+  produces the same `GroupId` assignment.
+- **All steps sharing a `GroupId` occupy one contiguous `StepIndex` range.** This is required, not
+  incidental — §5's group-cascade behavior depends on being able to skip "the rest of this group" as
+  a single contiguous slice of `ExecutionSteps` without scanning the whole remaining list, and
+  without risking a skip that jumps over an unprocessed step belonging to a different group (see §5's
+  cursor-safety rule).
+- A single identifier never appears in more than one `GroupId`.
+- Every recovery target maps to exactly one `GroupId` (derivable from its identifier's steps, but
+  validated explicitly rather than assumed).
+- A `CycleBreakingTemporaryMove` step and its identifier's corresponding `FinalMove` step always
+  share the same `GroupId`.
+
+Chain, swap, and rotation test cases (already implied by `ApplyPlanner`'s existing test coverage)
+must each assert group membership explicitly, not just step order — a passing order-only test could
+still hide a `GroupId` that isn't actually contiguous.
 
 **Integrity hash — fully canonical, length-prefixed, not delimiter-based.** A `\0` delimiter is only
 safe if every string field is guaranteed never to contain `\0`; that's an invariant the hash would
@@ -350,11 +367,17 @@ internal enum TargetMutationStatus
    emits a diagnostic event.
 4. Determine disposition and **append a durable `OperationStepResult` (§5a) before advancing
    `ProcessedStepCount`** past that step's index.
-5. **Group-cascade on failure**: when a step's IPC call itself fails (any non-`Success` result, not a
-   pre-emptive skip), every remaining not-yet-processed step sharing its `GroupId` is immediately
-   recorded with disposition `SkippedAfterEarlierFailure` and `ProcessedStepCount` advances past all
-   of them in the same pass — not just the failed step's own later final-move step. This is what
-   prevents a single failed temp hop from producing a series of misleading, seemingly-unrelated
+5. **Group-cascade on failure — cursor safety.** `ProcessedStepCount` is a contiguous-prefix cursor:
+   it can never validly skip past a later step without every step before it already being processed,
+   including steps belonging to other groups. This is exactly why §3 requires every group's steps to
+   occupy one contiguous `StepIndex` range — that requirement is what makes cascading safe. When a
+   step's IPC call itself fails (any non-`Success` result, not a pre-emptive skip): append a
+   `SkippedAfterEarlierFailure` result for every remaining step in that failed step's contiguous
+   `GroupId` range, then advance `ProcessedStepCount` to the index immediately following that range
+   — never further, and never in a way that could leave a gap. Because the range is contiguous by
+   construction, "skip to the end of this group" and "advance the cursor past everything just
+   skipped" are the same operation; there is no interleaving case to handle. This is what prevents a
+   single failed temp hop from producing a series of misleading, seemingly-unrelated
    `PathRenameFailed` reports for every other identifier whose move depended on that hop's target
    being vacated.
 6. Checkpoint the journal (`CheckpointPolicy.IsDue`, unchanged from v1) after each step or cascade
@@ -417,6 +440,31 @@ over one incomplete record. Ordering guarantee: the result line for a step is ap
 journal checkpoint advances `ProcessedStepCount` past it (§4's requirement), so a crash between the
 two only ever leaves the journal slightly behind a result that's already durably recorded — never
 the reverse.
+
+**Reconciliation rule at startup — the journal, not the result log, is the authority on committed
+progress.** The append-before-checkpoint ordering above means `results.jsonl` can legitimately be
+*ahead* of `journal.ProcessedStepCount` after a crash (a result was appended, then the process died
+before the journal checkpoint that would have advanced past it). Startup reconciliation must resolve
+this deterministically:
+
+- Parse every valid line in `results.jsonl`.
+- Require **exactly one** valid result for every `StepIndex < ProcessedStepCount`. A gap (a missing
+  result below the journal's cursor) means the journal claims progress the result log can't
+  substantiate — this is not recoverable by inference; it makes the operation `Indeterminate` and
+  routes to the normal recovery flow (§9), it does not get silently patched over.
+- A duplicate result for the same `StepIndex` is rejected the same way — evidence of a corrupted or
+  double-written log, not something to pick one of arbitrarily.
+- A result whose `Identifier` doesn't match the plan's step at that `StepIndex` is rejected the same
+  way — evidence the result log and plan have diverged.
+- Results with `StepIndex >= ProcessedStepCount` are **expected and normal** (the ahead-of-journal
+  case described above) — they're preserved for diagnostics but never used to advance
+  `ProcessedStepCount` on their own. **The journal's `ProcessedStepCount` is never auto-advanced from
+  extra result lines.** Promoting an appended-but-uncheckpointed write into committed progress would
+  mean a result that was written but never confirmed by the journal's own checkpoint gets treated as
+  confirmed anyway — exactly the kind of silent authority-inversion this whole reconciliation rule
+  exists to prevent. If execution resumes, it resumes from `ProcessedStepCount` as the journal last
+  recorded it, re-processing (or re-cascading) anything at or after that index regardless of what the
+  result log shows past that point.
 
 **Cancellation vs. verification trust — precedence rule.** The original draft said `Stage = Cancelled`
 regardless of what verification finds; that's wrong when verification itself returns
@@ -802,6 +850,17 @@ Policy:
   classifier for the v2 state set, not as a separate follow-up.
 - The `\`-vs-`/` test literal fix (persistence foundations' Task 2 and Task 5 tests) ships as its
   own small, independent task — unrelated to everything else in this plan, no reason to entangle it.
+- **Recommended, not required — decide during the journal task, not here.** `Stage = Cancelled` plus
+  `CancellationRequested`/`ProcessedStepCount` can explain *that* a run was cancelled and roughly how
+  far it got, but not *why it stopped where it did* without cross-referencing the result log and
+  resolution fields — diagnostics would be clearer with an explicit `OperationCompletionReason`/
+  `OperationFailureReason` pair (`Normal`/`UserCancelled`/`CompletedWithItemFailures`/
+  `VerificationTimedOut` and `IpcUnavailable`/`JournalWriteFailed`/`PlanInvalid`/`RefreshUnavailable`
+  or similar) alongside `Stage`/`Resolution`, rather than always reconstructing the reason from
+  several other fields together. This doesn't change any architectural decision in this document —
+  it's an additive diagnostics field — so it's left for whoever implements `OperationJournal` v2 to
+  size concretely against the actual failure paths that exist by then, rather than speculatively
+  enumerated here.
 
 ## 12. What this design does not cover
 
@@ -812,22 +871,33 @@ Policy:
 
 ## 13. Implementation sequencing (for the follow-on plan(s))
 
-Expected to split into multiple sequenced implementation plans, mirroring how the persistence
-foundations work was split from this:
+Five sequenced implementation plans, mirroring how the persistence foundations work was split from
+this — kept as a five-way split, but the first two boundaries are drawn slightly differently than an
+earlier pass through this section had them, to keep "pure, heavily unit-tested, no Dalamud" work
+together as one coherent plan rather than splitting it across the schema work and the controller work:
 
-1. Schema v2 migration: `OperationPlan`/`OperationJournal`/`RecoveryClassifier` rewrite (canonical
-   hash, `GroupId`, `ProcessedStepCount`, `Resolution`), `ApplyPlanner.ApplyStep.IsTemporary`+`GroupId`,
-   `OperationStorage` (multi-operation layout, discovery, retention), `StepResultLog`,
-   `DiagnosticsLog`, adapter interface + `PenumbraOperationsAdapter`, `IElapsedTimeSource`,
-   duplicate-identifier guard, `AtomicFile` `IOException` catch, `\`-vs-`/` test literal fix.
-2. `OperationController` + `PathMutationOperation` + frame-budgeted execution (including group-cascade
-   on failure) + `Refreshing` + verification settlement, wired to Apply only.
-3. `PathMutationOperation` configured for Restore, reusing the same controller/execution machinery
-   (validating §14's composition choice actually holds once a second real caller exists).
-4. Recovery classification, `RecoveryAssessment`, startup wiring, multi-journal discovery, the three
-   resolutions, retention cleanup.
-5. `MainWindow` UI wiring (progress display, capability-gated buttons, Stop control, recovery
-   dialog) and diagnostics dump changes.
+**Plan A — Schema and storage foundations** (pure, mostly Dalamud-free, heavily unit-tested):
+`OperationPlan` v2 (canonical hash, `GroupId`, contiguity invariants), `OperationJournal` v2
+(`ProcessedStepCount`, `Resolution`, `CancellationRequested`), `ApplyPlanner` step metadata and group
+invariants (`IsTemporary`, `GroupId`, contiguous-range guarantee), `StepResultLog` plus its
+reconciliation rule (§5a), `OperationStorage` (multi-operation layout, recovery graph discovery,
+retention), `DiagnosticsLog`, adapter result types, `IElapsedTimeSource`, duplicate-identifier guard,
+`AtomicFile` `IOException` catch, `\`-vs-`/` test literal fix.
+
+**Plan B — Apply execution engine**: `PathMutationOperation`, `OperationController`, frame budgeting,
+group-cascade behavior (cursor-safe per §3/§5's contiguity requirement), journal/result commit
+ordering, cancellation, `Refreshing`, verification settlement — wired to Apply only.
+
+**Plan C — Restore integration**: `PathMutationOperation` configured for Restore, reusing Plan B's
+machinery unchanged. This is the abstraction test for §14 — if Restore needs no branching beyond plan
+construction and display metadata, the single-type decision is confirmed; if it needs real branching,
+that's the signal to split before it's harder to undo.
+
+**Plan D — Recovery**: `RecoveryAssessment`, startup deferred classification, multiple-root handling,
+Continue/Restore Previous State/Keep Current, successor/parent terminalization ordering.
+
+**Plan E — UI and diagnostics presentation**: capability lockout, progress display, Stop control,
+recovery dialog (including multiple-root selection), diagnostics dump, operation history display.
 
 ## 14. Architectural note: composition over inheritance
 
