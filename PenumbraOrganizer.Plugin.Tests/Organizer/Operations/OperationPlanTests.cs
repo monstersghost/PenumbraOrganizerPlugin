@@ -121,8 +121,13 @@ public class OperationPlanTests
     public void Create_ThrowsWhenARecoveryTargetsIdentifierMapsToNoGroup()
     {
         // "mod-b" has a recovery target but never appears in any execution step, so it maps to zero
-        // GroupIds rather than exactly one - invariant 10, checked explicitly and independently of
-        // the "identifier appears in two groups" check (invariant 9), which never even sees it.
+        // GroupIds rather than exactly one. This does exercise invariant 10's code (the Count==0 branch),
+        // but that branch is a byte-for-byte duplicate of Create_ThrowsWhenARecoveryTargetHasNoStep below -
+        // both construct the exact same steps/targets. Given the current data model, invariant 10's
+        // meaningful Count>1 branch can never fire independently (see the comment on invariant 10 in
+        // OperationPlan.Validate), so this test does not prove independent enforcement of that branch. It
+        // is retained as documentation of invariant 10's intent and as a regression test that this
+        // malformed input is rejected by *some* check.
         var steps = new OperationExecutionStep[]
         {
             new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0),
@@ -142,7 +147,14 @@ public class OperationPlanTests
     {
         // Deliberately malformed input: ApplyPlanner would never emit this itself, but OperationPlan.Create
         // takes raw lists and must defend against a malformed caller. X's temp hop is in group 0 while its
-        // final move ends up in group 1 - invariant 11, checked explicitly.
+        // final move ends up in group 1. This scenario also makes "X" appear with two different GroupIds
+        // across its steps, so it is actually caught by the pre-existing "identifier appears in more than
+        // one group" check earlier in Validate (invariant 9) - NOT by invariant 11's own code, which never
+        // runs for this input because Validate has already thrown by then. The test still correctly proves
+        // this malformed scenario is rejected overall; it just does not prove invariant 11's branch
+        // executes (see the comment on invariant 11 in OperationPlan.Validate for why that branch is
+        // currently unreachable given the data model). Retained as a regression test and as documentation
+        // of invariant 11's intent, not as proof of independent enforcement.
         var steps = new OperationExecutionStep[]
         {
             new(0, "X", "TEMP", OperationStepKind.CycleBreakingTemporaryMove, 0),

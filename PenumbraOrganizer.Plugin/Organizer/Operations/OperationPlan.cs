@@ -101,10 +101,16 @@ public sealed record OperationPlan(
             lastStepByIdentifier[s.Identifier] = s; // index-ordered, so the final write is the highest-index step
         }
 
-        // Invariant 10 (explicit, defense-in-depth): every recovery target's identifier maps to exactly
-        // one GroupId. This is recomputed independently from `steps` directly (not via groupByIdentifier
-        // above) so it still catches a regression even if the "one identifier per group" check above is
-        // ever refactored away.
+        // Invariant 10 (defense-in-depth; NOT independently reachable today): every recovery target's
+        // identifier maps to exactly one GroupId. Given the current data model, any input that would hit
+        // the meaningful Count>1 branch here has already thrown on the "identifier appears in more than
+        // one group" check above (which builds groupByIdentifier from the same `steps`) - so in practice
+        // only the trivial Count==0 branch (a target whose identifier has no matching step at all) is ever
+        // reached, and even that overlaps with the "recovery target has no execution step" check further
+        // below. This block exists purely so a future refactor of the check above (or of the data model,
+        // e.g. if OperationRecoveryTarget ever grows its own GroupId) can't silently reintroduce an
+        // invariant-10 violation with nothing left to catch it. It is not currently exercised as an
+        // independent code path by any test - see the comment on the corresponding test.
         foreach (var t in targets)
         {
             var distinctGroupsForIdentifier = steps
@@ -117,9 +123,17 @@ public sealed record OperationPlan(
                     $"Recovery target '{t.Identifier}' must map to exactly one GroupId; found {distinctGroupsForIdentifier.Count}.");
         }
 
-        // Invariant 11 (explicit, defense-in-depth): a cycle-breaking temporary step and its identifier's
-        // corresponding final step must share the same GroupId. Compared directly against
-        // lastStepByIdentifier rather than relying on the per-step throw above.
+        // Invariant 11 (defense-in-depth; NOT independently reachable today): a cycle-breaking temporary
+        // step and its identifier's corresponding final step must share the same GroupId. Because
+        // OperationRecoveryTarget carries no independent GroupId of its own, any input that violates this
+        // necessarily makes that identifier appear with two different GroupIds across its steps - which
+        // the "identifier appears in more than one group" check above already throws on, earlier in this
+        // same Validate method, before this loop ever runs. This block exists so a future refactor of that
+        // check (or of the data model) doesn't silently reintroduce an invariant-11 violation with nothing
+        // left to catch it. Do not reorder the checks to make this reachable today: that would change
+        // which error message a real violation surfaces first, which is a real UX regression for
+        // debugging. Not currently exercised as an independent code path by any test - see the comment on
+        // the corresponding test.
         foreach (var s in steps)
         {
             if (s.Kind != OperationStepKind.CycleBreakingTemporaryMove)
