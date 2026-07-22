@@ -44,6 +44,53 @@ public static class OperationRecoveryGraph
 
     private static bool TryFindCycle(Dictionary<Guid, Guid> childToParent, out HashSet<Guid> cycleMembers)
     {
+        if (!TryFindCoreCycle(childToParent, out var coreCycle))
+        {
+            cycleMembers = [];
+            return false;
+        }
+
+        // A single walk only discovers the core cyclic nodes themselves (e.g. {B, C}). Any number of
+        // separate, structurally-identical non-cyclic "tails" can feed into that same cycle from
+        // different directions (e.g. D -> B and E -> C), and which one (if any) the first walk
+        // happened to pass through depends on Dictionary key enumeration order - not on graph
+        // structure. Do a second, full pass over every node with a parent edge and include it (and
+        // everything on its walk-up) whenever that walk reaches the core cycle. This makes the
+        // reported set the complete, order-independent set of every journal that transitively feeds
+        // into the cycle.
+        cycleMembers = new HashSet<Guid>(coreCycle);
+        foreach (var start in childToParent.Keys)
+        {
+            var walked = new HashSet<Guid>();
+            var current = start;
+            while (true)
+            {
+                if (coreCycle.Contains(current))
+                {
+                    cycleMembers.UnionWith(walked);
+                    cycleMembers.Add(current);
+                    break;
+                }
+
+                if (!walked.Add(current))
+                    break; // a different, disjoint cycle - not connected to coreCycle, stop walking it here.
+
+                if (!childToParent.TryGetValue(current, out var parent))
+                    break; // walked off the set without ever reaching the core cycle.
+
+                current = parent;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Finds ONE genuine cycle (the nodes that actually repeat when walking parent edges) and
+    /// returns just that core cyclic node set - not the entire path walked to discover it.
+    /// </summary>
+    private static bool TryFindCoreCycle(Dictionary<Guid, Guid> childToParent, out HashSet<Guid> coreCycle)
+    {
         var globallyResolved = new HashSet<Guid>();
 
         foreach (var start in childToParent.Keys)
@@ -51,24 +98,29 @@ public static class OperationRecoveryGraph
             if (globallyResolved.Contains(start))
                 continue;
 
-            var pathVisited = new HashSet<Guid>();
+            var pathOrder = new List<Guid>();
+            var pathIndex = new Dictionary<Guid, int>();
             var current = start;
             while (childToParent.TryGetValue(current, out var parent))
             {
-                if (!pathVisited.Add(current))
+                if (pathIndex.TryGetValue(current, out var repeatIndex))
                 {
-                    cycleMembers = pathVisited;
+                    // Only the nodes from the first occurrence of the repeated node onward form the
+                    // actual cycle - everything before that is a non-cyclic tail leading into it.
+                    coreCycle = pathOrder.Skip(repeatIndex).ToHashSet();
                     return true;
                 }
 
+                pathIndex[current] = pathOrder.Count;
+                pathOrder.Add(current);
                 current = parent;
             }
 
-            pathVisited.Add(current); // the terminal node this path walked up to (not itself a child of anything in-set)
-            globallyResolved.UnionWith(pathVisited);
+            pathOrder.Add(current); // the terminal node this path walked up to (not itself a child of anything in-set)
+            globallyResolved.UnionWith(pathOrder);
         }
 
-        cycleMembers = [];
+        coreCycle = [];
         return false;
     }
 }

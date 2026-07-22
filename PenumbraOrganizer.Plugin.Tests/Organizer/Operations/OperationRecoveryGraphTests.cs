@@ -153,4 +153,47 @@ public class OperationRecoveryGraphTests
         Assert.Equal(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, result.Status);
         Assert.Equal(new HashSet<Guid> { idA, idB }, result.AuthoritativeOperationIds.ToHashSet());
     }
+
+    [Fact]
+    public void Analyze_TwoSeparateTailsFeedingIntoTheSameCycle_BothTailsIncludedInCycleMembers()
+    {
+        var tailD = Guid.NewGuid();
+        var tailE = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var idC = Guid.NewGuid();
+        var journals = new[]
+        {
+            Journal(tailD, recoveryOf: idB),
+            Journal(tailE, recoveryOf: idC),
+            Journal(idB, recoveryOf: idC),
+            Journal(idC, recoveryOf: idB),
+        };
+
+        var result = OperationRecoveryGraph.Analyze(journals);
+
+        Assert.Equal(OperationRecoveryGraphStatus.CycleDetected, result.Status);
+        Assert.Equal(new HashSet<Guid> { tailD, tailE, idB, idC }, result.AuthoritativeOperationIds.ToHashSet());
+    }
+
+    [Fact]
+    public void Analyze_TwoSeparateTailsFeedingIntoTheSameCycle_ResultIsIndependentOfInputOrder()
+    {
+        var tailD = Guid.NewGuid();
+        var tailE = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var idC = Guid.NewGuid();
+        var journalsForward = new[]
+        {
+            Journal(tailD, recoveryOf: idB),
+            Journal(tailE, recoveryOf: idC),
+            Journal(idB, recoveryOf: idC),
+            Journal(idC, recoveryOf: idB),
+        };
+        var journalsReversed = journalsForward.Reverse().ToArray();
+
+        var resultForward = OperationRecoveryGraph.Analyze(journalsForward);
+        var resultReversed = OperationRecoveryGraph.Analyze(journalsReversed);
+
+        Assert.Equal(resultForward.AuthoritativeOperationIds.ToHashSet(), resultReversed.AuthoritativeOperationIds.ToHashSet());
+    }
 }
