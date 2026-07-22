@@ -37,7 +37,20 @@ public static class AtomicFile
             return false;
         }
 
-        var text = File.ReadAllText(path);
+        string text;
+        try
+        {
+            text = File.ReadAllText(path);
+        }
+        catch (IOException)
+        {
+            // A locked or sharing-violated file is "no valid data right now", not a crash — the
+            // Try contract callers rely on (OperationPlanCodec/OperationJournalCodec.TryLoad) only
+            // catches JsonException, so an IOException here would otherwise escape them.
+            contents = null;
+            return false;
+        }
+
         if (string.IsNullOrEmpty(text))
         {
             contents = null;

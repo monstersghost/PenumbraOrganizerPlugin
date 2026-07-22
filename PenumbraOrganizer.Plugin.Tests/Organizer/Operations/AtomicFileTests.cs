@@ -158,4 +158,27 @@ public class AtomicFileTests
             dir.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public void TryReadValidated_ReturnsFalseWhenFileIsLockedForReading()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(dir.FullName, "locked.json");
+            File.WriteAllText(path, "{\"a\":1}");
+
+            // Hold an exclusive lock so File.ReadAllText inside TryReadValidated throws IOException.
+            using var exclusive = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+            var found = AtomicFile.TryReadValidated(path, out var contents);
+
+            Assert.False(found);
+            Assert.Null(contents);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 }
