@@ -105,6 +105,87 @@ public class OperationPlanTests
     }
 
     [Fact]
+    public void Create_ThrowsWhenLastStepDoesNotTargetTheRecoveryTargetsFinalRawPath()
+    {
+        var steps = new OperationExecutionStep[]
+        {
+            new(0, "mod-a", "Weapons/WrongPath", OperationStepKind.FinalMove, 0), // doesn't match target's FinalRawPath below
+        };
+        var targets = new OperationRecoveryTarget[] { new("mod-a", "Gear/A", "Weapons/A", "A") };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            OperationPlan.Create(OperationType.Apply, steps, targets));
+    }
+
+    [Fact]
+    public void Create_ThrowsWhenARecoveryTargetsIdentifierMapsToNoGroup()
+    {
+        // "mod-b" has a recovery target but never appears in any execution step, so it maps to zero
+        // GroupIds rather than exactly one - invariant 10, checked explicitly and independently of
+        // the "identifier appears in two groups" check (invariant 9), which never even sees it.
+        var steps = new OperationExecutionStep[]
+        {
+            new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0),
+        };
+        var targets = new OperationRecoveryTarget[]
+        {
+            new("mod-a", "Gear/A", "Weapons/A", "A"),
+            new("mod-b", "Gear/B", "Weapons/B", "B"),
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            OperationPlan.Create(OperationType.Apply, steps, targets));
+    }
+
+    [Fact]
+    public void Create_ThrowsWhenACycleBreakingTemporaryStepAndItsFinalStepHaveDifferentGroupIds()
+    {
+        // Deliberately malformed input: ApplyPlanner would never emit this itself, but OperationPlan.Create
+        // takes raw lists and must defend against a malformed caller. X's temp hop is in group 0 while its
+        // final move ends up in group 1 - invariant 11, checked explicitly.
+        var steps = new OperationExecutionStep[]
+        {
+            new(0, "X", "TEMP", OperationStepKind.CycleBreakingTemporaryMove, 0),
+            new(1, "Y", "P0", OperationStepKind.FinalMove, 1),
+            new(2, "X", "P2", OperationStepKind.FinalMove, 1),
+        };
+        var targets = new OperationRecoveryTarget[]
+        {
+            new("X", "P0", "P2", "X"),
+            new("Y", "P2", "P0", "Y"),
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            OperationPlan.Create(OperationType.Apply, steps, targets));
+    }
+
+    [Fact]
+    public void Create_ThrowsWhenFirstStepHasNegativeGroupId()
+    {
+        var steps = new OperationExecutionStep[]
+        {
+            new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, -1),
+        };
+        var targets = new OperationRecoveryTarget[] { new("mod-a", "Gear/A", "Weapons/A", "A") };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            OperationPlan.Create(OperationType.Apply, steps, targets));
+    }
+
+    [Fact]
+    public void Create_ThrowsWhenFirstStepHasNonZeroGroupId()
+    {
+        var steps = new OperationExecutionStep[]
+        {
+            new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 1),
+        };
+        var targets = new OperationRecoveryTarget[] { new("mod-a", "Gear/A", "Weapons/A", "A") };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            OperationPlan.Create(OperationType.Apply, steps, targets));
+    }
+
+    [Fact]
     public void Create_ThrowsWhenAStepHasNoRecoveryTarget()
     {
         var steps = new OperationExecutionStep[]

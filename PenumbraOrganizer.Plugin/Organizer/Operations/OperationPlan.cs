@@ -36,7 +36,7 @@ public sealed record OperationPlan(
         IReadOnlyList<OperationExecutionStep> executionSteps,
         IReadOnlyList<OperationRecoveryTarget> recoveryTargets)
     {
-        Validate(type, executionSteps, recoveryTargets);
+        Validate(executionSteps, recoveryTargets);
         return new OperationPlan(
             CurrentSchemaVersion, Guid.NewGuid(), type, DateTimeOffset.UtcNow,
             executionSteps, recoveryTargets, ComputeIntegrityHash(type, executionSteps, recoveryTargets));
@@ -47,7 +47,6 @@ public sealed record OperationPlan(
     // Throws InvalidOperationException on any structural violation - a plan must never be persisted
     // in a state it would reject on reload. See design doc section 3 for the full invariant list.
     private static void Validate(
-        OperationType type,
         IReadOnlyList<OperationExecutionStep> steps,
         IReadOnlyList<OperationRecoveryTarget> targets)
     {
@@ -102,6 +101,38 @@ public sealed record OperationPlan(
             lastStepByIdentifier[s.Identifier] = s; // index-ordered, so the final write is the highest-index step
         }
 
+        // Invariant 10 (explicit, defense-in-depth): every recovery target's identifier maps to exactly
+        // one GroupId. This is recomputed independently from `steps` directly (not via groupByIdentifier
+        // above) so it still catches a regression even if the "one identifier per group" check above is
+        // ever refactored away.
+        foreach (var t in targets)
+        {
+            var distinctGroupsForIdentifier = steps
+                .Where(s => s.Identifier == t.Identifier)
+                .Select(s => s.GroupId)
+                .Distinct()
+                .ToList();
+            if (distinctGroupsForIdentifier.Count != 1)
+                throw new InvalidOperationException(
+                    $"Recovery target '{t.Identifier}' must map to exactly one GroupId; found {distinctGroupsForIdentifier.Count}.");
+        }
+
+        // Invariant 11 (explicit, defense-in-depth): a cycle-breaking temporary step and its identifier's
+        // corresponding final step must share the same GroupId. Compared directly against
+        // lastStepByIdentifier rather than relying on the per-step throw above.
+        foreach (var s in steps)
+        {
+            if (s.Kind != OperationStepKind.CycleBreakingTemporaryMove)
+                continue;
+            if (!lastStepByIdentifier.TryGetValue(s.Identifier, out var finalStep))
+                continue; // no execution step / no target for this identifier - caught elsewhere
+
+            if (finalStep.GroupId != s.GroupId)
+                throw new InvalidOperationException(
+                    $"Identifier '{s.Identifier}' has a cycle-breaking temporary step in GroupId {s.GroupId} " +
+                    $"but its final step is in GroupId {finalStep.GroupId}.");
+        }
+
         foreach (var t in targets)
         {
             if (!lastStepByIdentifier.TryGetValue(t.Identifier, out var last))
@@ -129,7 +160,7 @@ public sealed record OperationPlan(
 
         void Field(string value)
         {
-            sb.Append(Encoding.UTF8.GetByteCount(value)).Append(':').Append(value);
+            sb.Append(Encoding.UTF8.GetByteCount(value).ToString(CultureInfo.InvariantCulture)).Append(':').Append(value);
         }
 
         Field(CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
