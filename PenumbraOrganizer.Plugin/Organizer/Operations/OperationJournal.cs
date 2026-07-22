@@ -14,17 +14,24 @@ public enum OperationStage
     CompletedWithItemFailures,
     FailedBeforeMutation,
     FailedPartiallyApplied,
-    AcceptedCurrentState,
+    Cancelled,
 }
 
+// A later human/system decision applied on top of a frozen execution Stage. Kept separate so a
+// superseded journal can keep an honest historical Stage while still being terminal (design doc §4).
+public enum OperationResolution { None, AcceptedCurrentState, ContinuedByNewOperation, RestoredByNewOperation }
+
 public sealed record OperationJournal(
+    int SchemaVersion,
     Guid OperationId,
     OperationType Type,
-    int SchemaVersion,
-    OperationStage Status,
+    OperationStage Stage,
+    OperationResolution Resolution,
+    Guid? SuccessorOperationId,
+    bool CancellationRequested,
     DateTimeOffset StartedAt,
-    int TotalItems,
-    int CompletedItems,
+    int TotalSteps,
+    int ProcessedStepCount,
     string? LastCompletedIdentifier,
     Guid SnapshotId,
     Guid PlanId,
@@ -32,7 +39,7 @@ public sealed record OperationJournal(
     Guid? RecoveryOfOperationId,
     DateTimeOffset UpdatedAt)
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private static readonly HashSet<OperationStage> TerminalStages =
     [
@@ -40,10 +47,12 @@ public sealed record OperationJournal(
         OperationStage.CompletedWithItemFailures,
         OperationStage.FailedBeforeMutation,
         OperationStage.FailedPartiallyApplied,
-        OperationStage.AcceptedCurrentState,
+        OperationStage.Cancelled,
     ];
 
-    public bool IsTerminal => TerminalStages.Contains(Status);
+    // Terminal by either axis, independently: a later resolution, or an execution Stage that
+    // itself concluded. See design doc section 4.
+    public bool IsTerminal => Resolution != OperationResolution.None || TerminalStages.Contains(Stage);
 }
 
 public static class OperationJournalCodec

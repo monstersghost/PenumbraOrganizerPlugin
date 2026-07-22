@@ -4,14 +4,19 @@ namespace PenumbraOrganizer.Plugin.Tests.Organizer.Operations;
 
 public class OperationJournalTests
 {
-    private static OperationJournal SampleJournal(OperationStage status = OperationStage.Mutating) => new(
+    private static OperationJournal Sample(
+        OperationStage stage = OperationStage.Mutating,
+        OperationResolution resolution = OperationResolution.None) => new(
+        SchemaVersion: OperationJournal.CurrentSchemaVersion,
         OperationId: Guid.NewGuid(),
         Type: OperationType.Apply,
-        SchemaVersion: OperationJournal.CurrentSchemaVersion,
-        Status: status,
+        Stage: stage,
+        Resolution: resolution,
+        SuccessorOperationId: null,
+        CancellationRequested: false,
         StartedAt: DateTimeOffset.UtcNow,
-        TotalItems: 401,
-        CompletedItems: 173,
+        TotalSteps: 401,
+        ProcessedStepCount: 173,
         LastCompletedIdentifier: "mod-173",
         SnapshotId: Guid.NewGuid(),
         PlanId: Guid.NewGuid(),
@@ -29,12 +34,18 @@ public class OperationJournalTests
     [InlineData(OperationStage.CompletedWithItemFailures, true)]
     [InlineData(OperationStage.FailedBeforeMutation, true)]
     [InlineData(OperationStage.FailedPartiallyApplied, true)]
-    [InlineData(OperationStage.AcceptedCurrentState, true)]
-    public void IsTerminal_MatchesDesignedTerminalSet(OperationStage status, bool expectedTerminal)
+    [InlineData(OperationStage.Cancelled, true)]
+    public void IsTerminal_FollowsTheStageTerminalSetWhenResolutionIsNone(OperationStage stage, bool expected)
     {
-        var journal = SampleJournal(status);
+        Assert.Equal(expected, Sample(stage).IsTerminal);
+    }
 
-        Assert.Equal(expectedTerminal, journal.IsTerminal);
+    [Fact]
+    public void IsTerminal_TrueWhenResolutionIsSetEvenIfStageIsNonTerminal()
+    {
+        // A superseded journal keeps an honest frozen Stage (e.g. Mutating) but is terminal via Resolution.
+        var journal = Sample(OperationStage.Mutating, OperationResolution.ContinuedByNewOperation);
+        Assert.True(journal.IsTerminal);
     }
 
     [Fact]
@@ -44,7 +55,7 @@ public class OperationJournalTests
         try
         {
             var path = Path.Combine(dir.FullName, "journal.json");
-            var journal = SampleJournal();
+            var journal = Sample();
 
             OperationJournalCodec.Save(path, journal);
             var loaded = OperationJournalCodec.TryLoad(path, out var result);
@@ -59,13 +70,31 @@ public class OperationJournalTests
     }
 
     [Fact]
+    public void Save_WritesStageAsAString()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(dir.FullName, "journal.json");
+            OperationJournalCodec.Save(path, Sample(OperationStage.Mutating));
+
+            var json = File.ReadAllText(path);
+            Assert.Contains("\"Mutating\"", json);
+            Assert.DoesNotContain("\"Stage\":2", json);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void TryLoad_ReturnsFalseWhenFileMissing()
     {
         var dir = Directory.CreateTempSubdirectory();
         try
         {
             var loaded = OperationJournalCodec.TryLoad(Path.Combine(dir.FullName, "missing.json"), out var result);
-
             Assert.False(loaded);
             Assert.Null(result);
         }
@@ -76,44 +105,19 @@ public class OperationJournalTests
     }
 
     [Fact]
-    public void TryLoad_ReturnsFalseWhenSchemaVersionMismatched()
+    public void TryLoad_ReturnsFalseWhenSchemaVersionIsNotCurrent()
     {
         var dir = Directory.CreateTempSubdirectory();
         try
         {
             var path = Path.Combine(dir.FullName, "journal.json");
-            var journal = SampleJournal();
-            OperationJournalCodec.Save(path, journal);
+            OperationJournalCodec.Save(path, Sample());
 
-            var tamperedJson = File.ReadAllText(path)
-                .Replace("\"SchemaVersion\":1", "\"SchemaVersion\":999");
-            File.WriteAllText(path, tamperedJson);
+            File.WriteAllText(path, File.ReadAllText(path).Replace("\"SchemaVersion\":2", "\"SchemaVersion\":1"));
 
             var loaded = OperationJournalCodec.TryLoad(path, out var result);
-
             Assert.False(loaded);
             Assert.Null(result);
-        }
-        finally
-        {
-            dir.Delete(recursive: true);
-        }
-    }
-
-    [Fact]
-    public void Save_WritesEnumsAsStringsNotNumbers()
-    {
-        var dir = Directory.CreateTempSubdirectory();
-        try
-        {
-            var path = Path.Combine(dir.FullName, "journal.json");
-            var journal = SampleJournal(OperationStage.Mutating);
-
-            OperationJournalCodec.Save(path, journal);
-            var rawJson = File.ReadAllText(path);
-
-            Assert.Contains("\"Status\":\"Mutating\"", rawJson);
-            Assert.DoesNotContain("\"Status\":2", rawJson);
         }
         finally
         {
