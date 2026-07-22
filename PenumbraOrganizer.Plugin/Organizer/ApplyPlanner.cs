@@ -6,7 +6,7 @@ public sealed record ApplyResult(string Identifier, bool Success, string? Failur
 
 public sealed record ModMove(string Identifier, string CurrentPath, string TargetPath);
 
-public sealed record ApplyStep(string Identifier, string TargetPath);
+public sealed record ApplyStep(string Identifier, string TargetPath, bool IsTemporary, int GroupId);
 
 public static class ApplyPlanner
 {
@@ -72,6 +72,7 @@ public static class ApplyPlanner
         var byCurrentPath = moves.ToDictionary(m => m.CurrentPath, StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var steps = new List<ApplyStep>();
+        var groupId = 0;
 
         foreach (var start in moves.OrderBy(m => m.Identifier, StringComparer.Ordinal))
         {
@@ -86,21 +87,27 @@ public static class ApplyPlanner
                 byCurrentPath.TryGetValue(cursor.TargetPath, out cursor);
             }
 
+            // Each emitted component appends its steps as one contiguous block, then bumps groupId -
+            // so GroupIds are 0-based and every group occupies a contiguous StepIndex range once these
+            // steps are numbered by OperationPlan (design doc section 3).
+            //
             // `cursor` is non-null only if it looped back into an already-visited path. Given the
             // uniqueness guarantees above, that path can only be this chain's own start (no other
             // chain's target can coincide with it) - so a non-null cursor here always means a cycle.
             if (cursor is null)
             {
                 for (var i = chain.Count - 1; i >= 0; i--)
-                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath));
+                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath, IsTemporary: false, GroupId: groupId));
             }
             else
             {
-                steps.Add(new ApplyStep(chain[0].Identifier, temporaryPathFactory(chain[0])));
+                steps.Add(new ApplyStep(chain[0].Identifier, temporaryPathFactory(chain[0]), IsTemporary: true, GroupId: groupId));
                 for (var i = chain.Count - 1; i >= 1; i--)
-                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath));
-                steps.Add(new ApplyStep(chain[0].Identifier, chain[0].TargetPath));
+                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath, IsTemporary: false, GroupId: groupId));
+                steps.Add(new ApplyStep(chain[0].Identifier, chain[0].TargetPath, IsTemporary: false, GroupId: groupId));
             }
+
+            groupId++;
         }
 
         return steps;

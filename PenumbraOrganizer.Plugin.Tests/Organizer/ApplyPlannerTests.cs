@@ -213,25 +213,28 @@ public class ApplyPlannerTests
 
         var result = ApplyPlanner.OrderMovesForApply([move]);
 
-        Assert.Equal([new ApplyStep("Foo", "Gear/Foo (2)")], result);
+        Assert.Equal([new ApplyStep("Foo", "Gear/Foo (2)", IsTemporary: false, GroupId: 0)], result);
     }
 
     [Fact]
     public void OrderMovesForApply_ChainEndingAtFreePath_ProcessesInReverseSoTargetsAreVacatedFirst()
     {
-        // A wants B's current slot; B wants a fresh, unoccupied path. B must move first.
         var a = new ModMove("A", "P1", "P2");
         var b = new ModMove("B", "P2", "P3");
 
         var result = ApplyPlanner.OrderMovesForApply([a, b]);
 
-        Assert.Equal([new ApplyStep("B", "P3"), new ApplyStep("A", "P2")], result);
+        Assert.Equal(
+            [
+                new ApplyStep("B", "P3", IsTemporary: false, GroupId: 0),
+                new ApplyStep("A", "P2", IsTemporary: false, GroupId: 0),
+            ],
+            result);
     }
 
     [Fact]
     public void OrderMovesForApply_TwoWaySwap_BreaksCycleWithTemporaryPath()
     {
-        // X and Y each want the other's current slot - a direct swap deadlocks in a single pass.
         var x = new ModMove("X", "P0", "P2");
         var y = new ModMove("Y", "P2", "P0");
 
@@ -239,9 +242,9 @@ public class ApplyPlannerTests
 
         Assert.Equal(
             [
-                new ApplyStep("X", "TEMP"),
-                new ApplyStep("Y", "P0"),
-                new ApplyStep("X", "P2"),
+                new ApplyStep("X", "TEMP", IsTemporary: true, GroupId: 0),
+                new ApplyStep("Y", "P0", IsTemporary: false, GroupId: 0),
+                new ApplyStep("X", "P2", IsTemporary: false, GroupId: 0),
             ],
             result);
     }
@@ -249,7 +252,6 @@ public class ApplyPlannerTests
     [Fact]
     public void OrderMovesForApply_ThreeWayRotation_BreaksCycleAndDrainsRemainderInReverse()
     {
-        // Reproduces the real "When that face..." failure: X->Y->Z->X.
         var x = new ModMove("X", "P0", "P2");
         var y = new ModMove("Y", "P2", "P3");
         var z = new ModMove("Z", "P3", "P0");
@@ -258,16 +260,16 @@ public class ApplyPlannerTests
 
         Assert.Equal(
             [
-                new ApplyStep("X", "TEMP"),
-                new ApplyStep("Z", "P0"),
-                new ApplyStep("Y", "P3"),
-                new ApplyStep("X", "P2"),
+                new ApplyStep("X", "TEMP", IsTemporary: true, GroupId: 0),
+                new ApplyStep("Z", "P0", IsTemporary: false, GroupId: 0),
+                new ApplyStep("Y", "P3", IsTemporary: false, GroupId: 0),
+                new ApplyStep("X", "P2", IsTemporary: false, GroupId: 0),
             ],
             result);
     }
 
     [Fact]
-    public void OrderMovesForApply_IndependentGroups_EachResolvedWithoutCrossInterference()
+    public void OrderMovesForApply_IndependentGroups_GetDistinctContiguousGroupIds()
     {
         var freeChainA = new ModMove("A", "P1", "P2");
         var freeChainB = new ModMove("B", "P2", "P3");
@@ -276,16 +278,22 @@ public class ApplyPlannerTests
 
         var result = ApplyPlanner.OrderMovesForApply([freeChainA, freeChainB, swapX, swapY], _ => "TEMP");
 
-        Assert.Equal(5, result.Count);
-        Assert.Contains(new ApplyStep("B", "P3"), result);
-        Assert.Contains(new ApplyStep("A", "P2"), result);
-        Assert.Contains(new ApplyStep("X", "TEMP"), result);
-        Assert.Contains(new ApplyStep("Y", "Q0"), result);
-        Assert.Contains(new ApplyStep("X", "Q1"), result);
+        // Group 0 is the A/B chain (emitted first because A sorts before X); group 1 is the X/Y swap.
+        Assert.Equal(
+            [
+                new ApplyStep("B", "P3", IsTemporary: false, GroupId: 0),
+                new ApplyStep("A", "P2", IsTemporary: false, GroupId: 0),
+                new ApplyStep("X", "TEMP", IsTemporary: true, GroupId: 1),
+                new ApplyStep("Y", "Q0", IsTemporary: false, GroupId: 1),
+                new ApplyStep("X", "Q1", IsTemporary: false, GroupId: 1),
+            ],
+            result);
+        // Each group's steps form one contiguous block, in 0-based emission order.
+        Assert.Equal([0, 0, 1, 1, 1], result.Select(s => s.GroupId));
     }
 
     [Fact]
-    public void OrderMovesForApply_DefaultTemporaryPathFactory_ProducesPathDistinctFromEveryRealPath()
+    public void OrderMovesForApply_DefaultTemporaryPathFactory_ProducesTemporaryStepFlaggedAndDistinct()
     {
         var x = new ModMove("X", "P0", "P2");
         var y = new ModMove("Y", "P2", "P0");
@@ -293,7 +301,9 @@ public class ApplyPlannerTests
         var result = ApplyPlanner.OrderMovesForApply([x, y]);
 
         var realPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "P0", "P2" };
-        var tempStep = Assert.Single(result, s => s.Identifier == "X" && !realPaths.Contains(s.TargetPath));
+        var tempStep = Assert.Single(result, s => s.IsTemporary);
+        Assert.Equal("X", tempStep.Identifier);
+        Assert.False(realPaths.Contains(tempStep.TargetPath));
         Assert.False(string.IsNullOrWhiteSpace(tempStep.TargetPath));
     }
 }
