@@ -497,10 +497,15 @@ internal sealed record RefreshResult(RefreshStatus Status);
 RefreshResult RequestPostMutationRefresh();
 ```
 
-Called **once** after `Mutating` concludes (whether by completion, item-failure exhaustion, an
-operation-integrity stop, or user cancellation — `Refreshing` always runs if any mutation was
-attempted, so the subsequent `Verifying` stage has a chance at accurate live state). Measured with
-the same slow-call instrumentation as every other adapter call (§5's `SlowCallThreshold`).
+Called **once** after `Mutating` concludes (whether by completion, item-failure exhaustion, or
+user cancellation — `Refreshing` always runs if any mutation was attempted, so the subsequent
+`Verifying` stage has a chance at accurate live state), with one deliberate exception: an
+operation-integrity stop caused by `ProviderUnavailable` settles directly without ever entering
+`Refreshing` — the adapter itself is judged unusable, so attempting a refresh call against it
+would very likely also fail, stranding the operation in a recovery-required state for no benefit
+instead of a clean, immediately-retryable terminal outcome. Every other operation-integrity stop
+(e.g. an unexpected exception) still runs `Refreshing` once before settling. Measured with the
+same slow-call instrumentation as every other adapter call (§5's `SlowCallThreshold`).
 
 | Result | Action |
 |---|---|

@@ -124,7 +124,7 @@ public class PathMutationOperationTests
 
             Assert.Equal(MutationAdvanceStatus.MutationFinished, result.Status);
             Assert.Equal(4, result.Journal.ProcessedStepCount); // cascaded past the whole group 0 range, then processed group 1
-            Assert.Equal(TargetMutationStatus.FinalStepFailed, op.MutationStatusByIdentifier["X"]);
+            Assert.Equal(TargetMutationStatus.SkippedAfterEarlierFailure, op.MutationStatusByIdentifier["X"]);
             Assert.Equal(TargetMutationStatus.SkippedAfterEarlierFailure, op.MutationStatusByIdentifier["Y"]);
             Assert.Equal(TargetMutationStatus.FinalStepSucceeded, op.MutationStatusByIdentifier["mod-c"]);
 
@@ -138,6 +138,39 @@ public class PathMutationOperationTests
             // Only TWO SetModPath calls were ever made - steps 1 and 2 (the rest of the cascaded
             // group) were never attempted, proving the cascade skips rather than tries-then-discards.
             Assert.Equal(2, adapter.SetModPathCalls.Count);
+        }
+        finally
+        {
+            dirInfo.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MutationStatusByIdentifier_TempHopSucceededButFinalMoveCascadeSkipped_ReportsSkippedNotSucceeded()
+    {
+        // Regression test: X's temp hop succeeds (step 0), but Y's final move (step 1, same
+        // group) fails, cascading a skip onto X's own final move (step 2) - X's actual LAST step
+        // is the skip, not the earlier successful temp hop. FindLastExecutedStatus must report
+        // X's true last step's disposition (SkippedAfterEarlierFailure), not incorrectly unwind
+        // past the skip to X's earlier (now-stale) successful temp hop.
+        var steps = new[]
+        {
+            Step(0, "X", "TEMP", OperationStepKind.CycleBreakingTemporaryMove, 0),
+            Step(1, "Y", "P0", OperationStepKind.FinalMove, 0),
+            Step(2, "X", "P2", OperationStepKind.FinalMove, 0),
+        };
+        var targets = new[] { Target("X", "P0", "P2"), Target("Y", "P2", "P0") };
+        var plan = OperationPlan.Create(OperationType.Apply, steps, targets);
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(Success); // X's temp hop succeeds
+        adapter.EnqueueSetModPathResult(PathRenameFailed); // Y's final move fails, cascades a skip onto X's final move
+        var dir = TempResultsDir(out var dirInfo);
+        try
+        {
+            var op = new PathMutationOperation(plan, adapter, new FakeClock(), new NoOpDiagnosticsSink(), dir);
+            op.Advance(NewJournal(plan), TimeSpan.FromSeconds(1), stopRequested: false, checkpointIfDue: _ => { });
+
+            Assert.Equal(TargetMutationStatus.SkippedAfterEarlierFailure, op.MutationStatusByIdentifier["X"]);
         }
         finally
         {
