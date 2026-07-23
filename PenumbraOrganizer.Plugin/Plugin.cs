@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
 
     private const string CommandName = "/porganizer";
 
@@ -30,6 +31,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal readonly Penumbra.Api.IpcSubscribers.GetModListAdapter GetModListAdapterIpc;
     internal readonly Penumbra.Api.IpcSubscribers.SetModPath SetModPathIpc;
+    internal readonly Organizer.Operations.OperationController OperationController;
     public readonly Organizer.OrganizerState OrganizerState = new();
     public LibrarySearch.ChangedItemIndex? LibraryIndex { get; private set; }
     public string? LibraryIndexError { get; private set; }
@@ -54,6 +56,12 @@ public sealed class Plugin : IDalamudPlugin
         Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         GetModListAdapterIpc = new Penumbra.Api.IpcSubscribers.GetModListAdapter(PluginInterface);
         SetModPathIpc = new Penumbra.Api.IpcSubscribers.SetModPath(PluginInterface);
+        var operationsAdapter = new Organizer.Operations.PenumbraOperationsAdapter(PluginInterface);
+        var operationsDiagnosticsSink = new Organizer.Operations.FileDiagnosticsSink(
+            Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(OperationsRoot));
+        OperationController = new Organizer.Operations.OperationController(
+            operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2));
         _workbookService = new WorkbookWorkflowService(
             new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookWorkflowService>(Log));
         _npcHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -67,6 +75,8 @@ public sealed class Plugin : IDalamudPlugin
         _modDeleted = ModDeleted.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod deleted: {dir}"));
         _modMoved = ModMoved.Subscriber(PluginInterface,
             (oldDir, newDir) => _mainWindow.LogEvent($"Mod moved: {oldDir} -> {newDir}"));
+
+        Framework.Update += OnFrameworkUpdate;
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -86,6 +96,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
+        Framework.Update -= OnFrameworkUpdate;
 
         _modAdded.Dispose();
         _modDeleted.Dispose();
@@ -101,6 +112,13 @@ public sealed class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args) => ToggleMainUi();
 
     private void ToggleMainUi() => _mainWindow.Toggle();
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        OperationController.Update();
+        if (_operationInProgress && OperationController.State.CanStartApply)
+            _operationInProgress = false; // the async Apply operation just reached a terminal stage
+    }
 
     public void RunScan()
     {
@@ -315,6 +333,8 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private string HistoryFilePath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-history.json");
+
+    private string OperationsRoot => Path.Combine(PluginInterface.ConfigDirectory.FullName, "operations");
 
     // Penumbra's config dir is a sibling of this plugin's own under Dalamud's pluginConfigs
     // folder — no IPC exposes it (confirmed against the full Penumbra.Api 5.15.1 surface; see
