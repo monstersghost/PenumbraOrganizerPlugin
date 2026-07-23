@@ -30,6 +30,7 @@ public sealed class MainWindow : Window, IDisposable
     private int _workbookStrategyIndex = 2; // "By Type Then Creator" default
     private Organizer.WorkbookImportResultView? _lastWorkbookImportResult;
     private IReadOnlyList<Organizer.ApplyResult>? _lastApplyResults;
+    private bool _applyOperationActive;
     private string _createBackupLabelInput = string.Empty;
     private IReadOnlyList<Organizer.RestoreResult>? _lastRestoreResults;
     private Guid? _pendingRestoreSnapshotId;
@@ -478,7 +479,15 @@ public sealed class MainWindow : Window, IDisposable
         var touchedCount = _plugin.OrganizerState.Mods
             .Count(m => !m.Protected && !string.Equals(m.ProposedPath, m.CurrentPath, StringComparison.OrdinalIgnoreCase));
 
-        ImGui.BeginDisabled(result.HasIssues);
+        var operationState = _plugin.OperationController.State;
+        if (_applyOperationActive && operationState.CanStartApply)
+        {
+            _applyOperationActive = false;
+            _historyCache = null; // StartApplyOperation() also captures a pre-apply snapshot - history changed
+            RefreshOrphanedFolders(); // the completed Apply moved mods - occupancy changed
+        }
+
+        ImGui.BeginDisabled(result.HasIssues || !operationState.CanStartApply);
         var applyClicked = ImGui.Button("Apply");
         ImGui.EndDisabled();
         if (applyClicked)
@@ -498,13 +507,16 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
-        if (_lastApplyResults is not null)
+        // Deliberately minimal - the real progress UI and recovery dialog are Plan E's job. This
+        // just keeps Apply usable and observable in-game now that it spans multiple frames.
+        if (operationState.Stage is not null)
         {
-            var succeeded = _lastApplyResults.Count(r => r.Success);
-            var failed = _lastApplyResults.Count - succeeded;
-            ImGui.TextUnformatted($"Apply: {succeeded} succeeded, {failed} failed.");
-            foreach (var failure in _lastApplyResults.Where(r => !r.Success))
-                ImGui.TextColored(PluginTheme.CollisionBad, $"  {failure.Identifier}: {failure.FailureReason}");
+            if (!operationState.CanStartApply)
+                ImGui.TextUnformatted($"Applying... {operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage}).");
+            else if (operationState.RequiresRecovery)
+                ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
+            else
+                ImGui.TextUnformatted($"Last Apply: {operationState.Stage} ({operationState.SuccessfulTargets}/{operationState.TotalTargets} succeeded).");
         }
 
         ImGui.Spacing();
@@ -1065,21 +1077,15 @@ public sealed class MainWindow : Window, IDisposable
     {
         try
         {
-            _lastApplyResults = _plugin.ApplyChanges();
+            _plugin.StartApplyOperation();
             _lastError = null;
-            var succeeded = _lastApplyResults.Count(r => r.Success);
-            Plugin.Log.Information($"Apply completed: {succeeded} succeeded, {_lastApplyResults.Count - succeeded} failed.");
-            foreach (var failure in _lastApplyResults.Where(r => !r.Success))
-                Plugin.Log.Warning($"Apply failure: {failure.Identifier}: {failure.FailureReason}");
+            _applyOperationActive = true;
         }
         catch (Exception ex)
         {
             _lastError = $"Apply failed: {ex.Message}";
             Plugin.Log.Error(ex, "Apply failed.");
         }
-
-        _historyCache = null; // ApplyChanges() also captures a pre-apply snapshot — history changed
-        RefreshOrphanedFolders(); // ApplyChanges() ran RunScan() internally — occupancy changed
     }
 
     private void OpenConfigFile() => OpenContainingFolder(Plugin.PluginInterface.ConfigFile.FullName);
