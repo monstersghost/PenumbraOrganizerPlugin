@@ -26,11 +26,7 @@ public sealed record VerificationResult(
 /// </summary>
 public sealed class VerificationSettlement
 {
-    private int _attemptsUsed;
-    private long _lastAttemptTimestamp;
-    private const int MaxAttempts = 10; // "attempts", not "retries" - avoids an off-by-one
-    private static readonly TimeSpan RetryInterval = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan SlowCallThreshold = TimeSpan.FromMilliseconds(50);
+    private readonly BoundedRetryGate _gate = new();
 
     public VerificationResult Advance(
         IPenumbraOperations adapter, IElapsedTimeSource clock,
@@ -41,23 +37,20 @@ public sealed class VerificationSettlement
         if (targets.Any(t => !mutationStatuses.ContainsKey(t.Identifier)))
             return new VerificationResult(VerificationStatus.RecoveryRequired, [], RecoveryRequiredReason.InvalidData);
 
-        if (_attemptsUsed > 0 && clock.GetElapsedTime(_lastAttemptTimestamp) < RetryInterval)
+        if (!_gate.TryBeginAttempt(clock))
             return new VerificationResult(VerificationStatus.Waiting, [], null);
-
-        _lastAttemptTimestamp = clock.GetTimestamp();
-        _attemptsUsed++;
 
         var readStart = clock.GetTimestamp();
         var read = adapter.GetLiveMods();
         var readDuration = clock.GetElapsedTime(readStart);
-        if (readDuration >= SlowCallThreshold) diagnostics.RecordSlowLiveSnapshot(operationId, readDuration);
+        if (readDuration >= BoundedRetryGate.SlowCallThreshold) diagnostics.RecordSlowLiveSnapshot(operationId, readDuration);
 
         if (read.Status == LiveModReadStatus.ProviderUnavailable)
             return new VerificationResult(VerificationStatus.RecoveryRequired, [], RecoveryRequiredReason.ProviderUnavailable);
         if (read.Status == LiveModReadStatus.InvalidData)
             return new VerificationResult(VerificationStatus.RecoveryRequired, [], RecoveryRequiredReason.InvalidData);
         if (read.Status == LiveModReadStatus.TemporarilyUnavailable)
-            return _attemptsUsed >= MaxAttempts
+            return _gate.IsExhausted
                 ? new VerificationResult(VerificationStatus.RecoveryRequired, [], RecoveryRequiredReason.TransientReadExhausted)
                 : new VerificationResult(VerificationStatus.Waiting, [], null);
         if (read.Snapshot is null)
@@ -69,7 +62,7 @@ public sealed class VerificationSettlement
         var unsettled = expected.Where(t => !IsSettled(t, read.Snapshot)).Select(t => t.Identifier).ToList();
 
         if (unsettled.Count == 0) return new VerificationResult(VerificationStatus.Settled, [], null);
-        return _attemptsUsed >= MaxAttempts
+        return _gate.IsExhausted
             ? new VerificationResult(VerificationStatus.TimedOut, unsettled, null)
             : new VerificationResult(VerificationStatus.Waiting, [], null);
     }

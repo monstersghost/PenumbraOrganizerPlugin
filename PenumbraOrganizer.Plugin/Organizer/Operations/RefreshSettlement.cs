@@ -12,30 +12,23 @@ public sealed record RefreshSettlementResult(RefreshSettlementStatus Status);
 /// </summary>
 public sealed class RefreshSettlement
 {
-    private int _attemptsUsed;
-    private long _lastAttemptTimestamp;
-    private const int MaxAttempts = 10;
-    private static readonly TimeSpan RetryInterval = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan SlowCallThreshold = TimeSpan.FromMilliseconds(50);
+    private readonly BoundedRetryGate _gate = new();
 
     public RefreshSettlementResult Advance(
         IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink diagnostics, Guid operationId)
     {
-        if (_attemptsUsed > 0 && clock.GetElapsedTime(_lastAttemptTimestamp) < RetryInterval)
+        if (!_gate.TryBeginAttempt(clock))
             return new RefreshSettlementResult(RefreshSettlementStatus.Waiting);
-
-        _lastAttemptTimestamp = clock.GetTimestamp();
-        _attemptsUsed++;
 
         var callStart = clock.GetTimestamp();
         var refresh = adapter.RequestPostMutationRefresh();
         var duration = clock.GetElapsedTime(callStart);
-        if (duration >= SlowCallThreshold) diagnostics.RecordSlowRefresh(operationId, duration);
+        if (duration >= BoundedRetryGate.SlowCallThreshold) diagnostics.RecordSlowRefresh(operationId, duration);
 
         return refresh.Status switch
         {
             RefreshStatus.Success => new RefreshSettlementResult(RefreshSettlementStatus.Settled),
-            RefreshStatus.TemporarilyUnavailable => _attemptsUsed >= MaxAttempts
+            RefreshStatus.TemporarilyUnavailable => _gate.IsExhausted
                 ? new RefreshSettlementResult(RefreshSettlementStatus.RecoveryRequired)
                 : new RefreshSettlementResult(RefreshSettlementStatus.Waiting),
             _ => new RefreshSettlementResult(RefreshSettlementStatus.RecoveryRequired), // ProviderUnavailable, InvalidState
