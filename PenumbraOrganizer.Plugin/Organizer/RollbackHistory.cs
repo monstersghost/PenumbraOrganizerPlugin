@@ -5,35 +5,7 @@ public sealed record RollbackSnapshot(
     DateTimeOffset CreatedAt,
     string? Label,
     string AutoDescription,
-    IReadOnlyDictionary<string, string> ModPaths)
-{
-    public bool Equals(RollbackSnapshot? other)
-    {
-        if (other is null) return false;
-        return Id == other.Id
-            && CreatedAt == other.CreatedAt
-            && Label == other.Label
-            && AutoDescription == other.AutoDescription
-            && ModPaths.SequenceEqual(other.ModPaths);
-    }
-
-    public override int GetHashCode()
-    {
-        unchecked
-        {
-            var hash = Id.GetHashCode();
-            hash = hash * 31 + CreatedAt.GetHashCode();
-            hash = hash * 31 + (Label?.GetHashCode() ?? 0);
-            hash = hash * 31 + AutoDescription.GetHashCode();
-            foreach (var kvp in ModPaths)
-            {
-                hash = hash * 31 + kvp.Key.GetHashCode();
-                hash = hash * 31 + kvp.Value.GetHashCode();
-            }
-            return hash;
-        }
-    }
-}
+    IReadOnlyDictionary<string, string> ModPaths);
 
 public sealed record LiveMod(string Identifier, string Name, string FullPath, bool HeliosphereManaged);
 

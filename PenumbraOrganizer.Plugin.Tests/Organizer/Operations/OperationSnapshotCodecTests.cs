@@ -22,7 +22,12 @@ public class OperationSnapshotCodecTests
             var loaded = OperationSnapshotCodec.TryLoad(path, out var result);
 
             Assert.True(loaded);
-            Assert.Equal(snapshot, result);
+            Assert.NotNull(result);
+            Assert.Equal(snapshot.Id, result!.Id);
+            Assert.Equal(snapshot.CreatedAt, result.CreatedAt);
+            Assert.Equal(snapshot.Label, result.Label);
+            Assert.Equal(snapshot.AutoDescription, result.AutoDescription);
+            Assert.Equal(snapshot.ModPaths, result.ModPaths);
         }
         finally
         {
