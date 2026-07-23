@@ -364,6 +364,36 @@ public class PathMutationOperationTests
     }
 
     [Fact]
+    public void MutationStatusByIdentifier_TargetNeverAttempted_ReportsNotAttemptedNotFalselySucceeded()
+    {
+        // Regression test: OperationStepDisposition.Succeeded is the enum's default value (0),
+        // so a naive dictionary lookup for a step that was never reached would silently return
+        // Succeeded instead of "no entry". mod-b's step is never attempted because mod-a's step
+        // returns ProviderUnavailable and Advance stops immediately without cascading.
+        var steps = new[]
+        {
+            Step(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0),
+            Step(1, "mod-b", "Weapons/B", OperationStepKind.FinalMove, 1),
+        };
+        var targets = new[] { Target("mod-a", "Gear/A", "Weapons/A"), Target("mod-b", "Gear/B", "Weapons/B") };
+        var plan = OperationPlan.Create(OperationType.Apply, steps, targets);
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(ProviderUnavailable);
+        var dir = TempResultsDir(out var dirInfo);
+        try
+        {
+            var op = new PathMutationOperation(plan, adapter, new FakeClock(), new NoOpDiagnosticsSink(), dir);
+            op.Advance(NewJournal(plan), TimeSpan.FromSeconds(1), stopRequested: false, checkpointIfDue: _ => { });
+
+            Assert.Equal(TargetMutationStatus.NotAttempted, op.MutationStatusByIdentifier["mod-b"]);
+        }
+        finally
+        {
+            dirInfo.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Advance_UnexpectedExceptionFromAdapter_ReturnsIntegrityFailureRatherThanThrowing()
     {
         var steps = new[] { Step(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0) };

@@ -52,7 +52,10 @@ public sealed class PathMutationOperation
 
     private TargetMutationStatus FindLastExecutedStatus(string identifier)
     {
-        // Find the last EXECUTED (not skipped) step for this identifier
+        // Find the last EXECUTED (not skipped) step for this identifier. A step index with no
+        // entry in _stepDispositions was never attempted - TryGetValue (not GetValueOrDefault)
+        // is essential here, since OperationStepDisposition.Succeeded is the enum's default (0)
+        // value and GetValueOrDefault would silently misreport an unattempted step as succeeded.
         OperationStepDisposition? lastSkippedDisposition = null;
 
         for (var i = _plan.ExecutionSteps.Count - 1; i >= 0; i--)
@@ -61,7 +64,8 @@ public sealed class PathMutationOperation
                 continue;
 
             var stepIndex = _plan.ExecutionSteps[i].StepIndex;
-            var disposition = _stepDispositions.GetValueOrDefault(stepIndex);
+            if (!_stepDispositions.TryGetValue(stepIndex, out var disposition))
+                continue; // not yet attempted - keep scanning earlier steps for this identifier
 
             // Remember the last skipped disposition as a fallback
             if ((disposition == OperationStepDisposition.SkippedAfterEarlierFailure ||
@@ -84,7 +88,7 @@ public sealed class PathMutationOperation
         if (lastSkippedDisposition.HasValue)
             return ToTargetStatus(lastSkippedDisposition.Value);
 
-        // No steps at all, return NotAttempted
+        // No recorded step at all, return NotAttempted
         return TargetMutationStatus.NotAttempted;
     }
 
