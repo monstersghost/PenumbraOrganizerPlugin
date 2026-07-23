@@ -422,6 +422,43 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    internal void StartApplyOperation()
+    {
+        if (_operationInProgress)
+            throw new InvalidOperationException("Another organizer operation is already in progress.");
+
+        var validation = OrganizerState.Validate();
+        if (validation.HasIssues)
+            throw new InvalidOperationException("Cannot Apply while Validate() reports issues.");
+
+        // Equivalence, not raw string equality - a path differing only by a transient " (N)"
+        // duplicate marker (or Penumbra's own name-trimming) is the same persisted location -
+        // moving it would be a no-op write that Penumbra reshuffles on the next reload anyway.
+        var touchedRows = OrganizerState.Mods
+            .Where(m => !m.Protected && !Organizer.PenumbraPathSemantics.AreEquivalent(m.CurrentPath, m.ProposedPath, m.Name))
+            .ToList();
+
+        var folderCollisions = Organizer.ApplyPlanner.FolderPathCollisions(touchedRows, ReadExistingOrganizationFolderPaths());
+        if (folderCollisions.Count > 0)
+            throw new InvalidOperationException(
+                "Cannot Apply: the proposed path for the following mods matches an existing (likely orphaned) " +
+                "folder entry in Penumbra's organization.json, which Penumbra's own SetModPath will reject: " +
+                $"{string.Join(", ", folderCollisions)}. Run Folder Cleanup on the Review Changes tab to prune " +
+                "orphaned folders, then try Apply again.");
+
+        var currentMods = ReadCurrentMods();
+        var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label: null, $"{touchedRows.Count} mods moved");
+        Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
+
+        var plan = Organizer.Operations.OperationPlanBuilder.BuildApplyPlan(touchedRows);
+        var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
+        Organizer.Operations.OperationPlanCodec.Save(Organizer.Operations.OperationBundlePaths.PlanPath(bundleDirectory), plan);
+        Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), snapshot);
+
+        _operationInProgress = true;
+        OperationController.StartApply(plan, snapshot.Id, bundleDirectory);
+    }
+
     internal IReadOnlyList<Organizer.RestoreResult> Restore(Guid snapshotId)
     {
         if (_operationInProgress)
