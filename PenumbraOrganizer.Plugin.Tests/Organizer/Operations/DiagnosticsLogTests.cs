@@ -6,7 +6,8 @@ public class DiagnosticsLogTests
 {
     private static DiagnosticEvent SlowCallEvent(Guid? operationId = null) => new(
         operationId, DiagnosticEventKind.SlowCall, DateTimeOffset.UtcNow,
-        DurationMilliseconds: 75, ExceptionTypeName: null, ExceptionMessage: null, TruncatedStackTrace: null);
+        DurationMilliseconds: 75, ExceptionTypeName: null, ExceptionMessage: null, TruncatedStackTrace: null,
+        Identifier: "mod-a");
 
     [Fact]
     public void ReadAll_FileDoesNotExist_ReturnsEmpty()
@@ -71,7 +72,7 @@ public class DiagnosticsLogTests
             var longTrace = new string('x', 5000);
             var evt = new DiagnosticEvent(
                 null, DiagnosticEventKind.Exception, DateTimeOffset.UtcNow,
-                null, "System.InvalidOperationException", "boom", longTrace);
+                null, "System.InvalidOperationException", "boom", longTrace, null);
 
             DiagnosticsLog.Append(path, evt);
             var single = Assert.Single(DiagnosticsLog.ReadAll(path));

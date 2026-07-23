@@ -3,10 +3,12 @@ using System.Text.Json.Serialization;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 
-public enum DiagnosticEventKind { SlowCall, SlowLiveSnapshot, Exception }
+public enum DiagnosticEventKind { SlowCall, SlowLiveSnapshot, SlowRefresh, Exception }
 
 /// <summary> One diagnostic event. OperationId is null for events outside any active operation.
-/// Exception* fields are populated only for Kind == Exception. Design doc section 10. </summary>
+/// Identifier is populated for SlowCall (which mod the call was for) and null for event kinds with
+/// no single associated mod. Exception* fields are populated only for Kind == Exception. Design doc
+/// section 10. </summary>
 public sealed record DiagnosticEvent(
     Guid? OperationId,
     DiagnosticEventKind Kind,
@@ -14,7 +16,8 @@ public sealed record DiagnosticEvent(
     long? DurationMilliseconds,
     string? ExceptionTypeName,
     string? ExceptionMessage,
-    string? TruncatedStackTrace);
+    string? TruncatedStackTrace,
+    string? Identifier);
 
 /// <summary>
 /// Global (not per-operation) append-only diagnostics.jsonl - the durable source a future
