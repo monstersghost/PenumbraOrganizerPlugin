@@ -511,7 +511,7 @@ public sealed class MainWindow : Window, IDisposable
         // just keeps Apply usable and observable in-game now that it spans multiple frames.
         if (operationState.Stage is not null)
         {
-            if (!operationState.CanStartApply)
+            if (!operationState.CanStartApply && !operationState.RequiresRecovery)
                 ImGui.TextUnformatted($"Applying... {operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage}).");
             else if (operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
