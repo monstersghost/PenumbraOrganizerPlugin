@@ -3,7 +3,7 @@ using Penumbra.Api.Enums;
 namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 
 /// <summary>
-/// Pure translation from the raw Penumbra.Api.Enums.PenumbraApiEc (23 members, no per-member XML
+/// Pure translation from the raw Penumbra.Api.Enums.PenumbraApiEc (24 members, no per-member XML
 /// docs in the shipped package - see this plan's Global Constraints for the authoritative mapping
 /// table, confirmed against Penumbra.Api 5.15.1's metadata directly) into the plugin's own
 /// SetModPathStatus. Kept as its own pure static class - unlike PenumbraOperationsAdapter, which
