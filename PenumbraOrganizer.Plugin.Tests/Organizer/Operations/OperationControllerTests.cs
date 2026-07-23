@@ -173,20 +173,60 @@ public class OperationControllerTests
     }
 
     [Fact]
-    public void Update_UnexpectedExceptionFromAdapter_FailsSafelyAndFreesTheSlot()
+    public void Update_UnexpectedExceptionFromAdapter_RoutesThroughRefreshingThenSettlesAsFailed()
     {
+        // UnexpectedFatalException (unlike ProviderUnavailable) doesn't prove the adapter itself
+        // is unusable, so it still routes through Refreshing/Verifying before settling - carrying
+        // the eventual Failed* disposition forward rather than settling immediately.
         var adapter = new FakePenumbraOperations();
         adapter.EnqueueSetModPathException(new InvalidOperationException("simulated"));
+        adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.Success));
+        adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([])));
         var dir = Directory.CreateTempSubdirectory();
         try
         {
             var controller = NewController(adapter, new FakeClock());
             controller.StartApply(SinglePlan(), Guid.NewGuid(), dir.FullName);
 
-            var exception = Record.Exception(controller.Update);
+            controller.Update(); // Mutating -> IntegrityFailure -> Refreshing (pending Failed* disposition carried forward)
+            Assert.Equal(OperationStage.Refreshing, controller.State.Stage);
+
+            controller.Update(); // Refreshing -> Verifying
+            Assert.Equal(OperationStage.Verifying, controller.State.Stage);
+
+            var exception = Record.Exception(() => controller.Update()); // Verifying -> settles as Failed*, not Completed
 
             Assert.Null(exception);
             Assert.Equal(OperationStage.FailedBeforeMutation, controller.State.Stage);
+            Assert.False(controller.State.RequiresRecovery);
+            Assert.True(controller.State.CanStartApply);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_ProviderUnavailableDuringMutation_SettlesImmediatelyWithoutAttemptingRefresh()
+    {
+        // ProviderUnavailable means the adapter itself is judged unusable - unlike
+        // UnexpectedFatalException, this settles directly without ever entering Refreshing. No
+        // RefreshResult is queued on the adapter; if Refreshing were incorrectly attempted,
+        // FakePenumbraOperations would throw on the missing queued result and fail this test.
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(new SetModPathResult(SetModPathStatus.ProviderUnavailable, "SystemDisposed", "unavailable"));
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewController(adapter, new FakeClock());
+            controller.StartApply(SinglePlan(), Guid.NewGuid(), dir.FullName);
+
+            var exception = Record.Exception(() => controller.Update());
+
+            Assert.Null(exception);
+            Assert.Equal(OperationStage.FailedBeforeMutation, controller.State.Stage);
+            Assert.False(controller.State.RequiresRecovery);
             Assert.True(controller.State.CanStartApply);
         }
         finally

@@ -60,6 +60,7 @@ public sealed class OperationController
         public RefreshSettlement? Refresh { get; set; }
         public VerificationSettlement? Verification { get; set; }
         public bool RequiresRecovery { get; set; }
+        public OperationStage? PendingTerminalStage { get; set; }
     }
 
     private readonly IPenumbraOperations _adapter;
@@ -188,10 +189,33 @@ public sealed class OperationController
                     active.Checkpointer.CheckpointIfDue(active.Journal, force: true);
                     break;
                 case MutationAdvanceStatus.IntegrityFailure:
-                    var stage = active.Journal.ProcessedStepCount > 0 ? OperationStage.FailedPartiallyApplied : OperationStage.FailedBeforeMutation;
-                    active.Journal = active.Journal with { Stage = stage, UpdatedAt = DateTimeOffset.UtcNow };
-                    active.Checkpointer.CheckpointIfDue(active.Journal, force: true);
+                {
+                    var failStage = active.Journal.ProcessedStepCount > 0 ? OperationStage.FailedPartiallyApplied : OperationStage.FailedBeforeMutation;
+                    if (result.StopReason == MutationStopReason.ProviderUnavailable)
+                    {
+                        // ProviderUnavailable means the adapter itself is judged unusable -
+                        // attempting a refresh call against the same broken adapter would very
+                        // likely also just fail, trading a clean, immediately-retryable terminal
+                        // outcome for one stuck in RequiresRecovery for no benefit. This is the
+                        // one deliberate exception to "Refreshing always runs exactly once":
+                        // settle directly without ever entering Refreshing, and do not set
+                        // RequiresRecovery merely because refresh was skipped.
+                        active.Journal = active.Journal with { Stage = failStage, UpdatedAt = DateTimeOffset.UtcNow };
+                        active.Checkpointer.CheckpointIfDue(active.Journal, force: true);
+                    }
+                    else
+                    {
+                        // An unmodeled exception (UnexpectedFatalException) doesn't prove the
+                        // provider is unusable, and the operation's actual post-failure state may
+                        // be uncertain - still attempt the bounded refresh before settling,
+                        // carrying the eventual Failed* disposition forward through
+                        // Refreshing/Verifying rather than discarding it.
+                        active.PendingTerminalStage = failStage;
+                        active.Journal = active.Journal with { Stage = OperationStage.Refreshing, UpdatedAt = DateTimeOffset.UtcNow };
+                        active.Checkpointer.CheckpointIfDue(active.Journal, force: true);
+                    }
                     break;
+                }
                 // Working: nothing more to do this tick.
             }
 
@@ -231,10 +255,18 @@ public sealed class OperationController
             if (result.Status == VerificationStatus.Waiting)
                 return;
 
-            // Settled or TimedOut both conclude the operation. A cancelled outcome is only
-            // asserted here, once verification proved trustworthy - design section 5a's
-            // precedence rule (this is the ONLY place Cancelled is ever set).
-            if (active.Journal.CancellationRequested)
+            // Settled or TimedOut both conclude the operation. A pending Failed* disposition
+            // (carried forward from an UnexpectedFatalException during Mutating) takes
+            // precedence over both a clean completion and a cancelled outcome - the operation
+            // already failed, refresh/verify only ran to establish authoritative post-failure
+            // state, not to redeem the outcome. A cancelled outcome is asserted only once
+            // verification proved trustworthy and no such pending failure exists - design
+            // section 5a's precedence rule (this is the ONLY place Cancelled is ever set).
+            if (active.PendingTerminalStage is { } pendingStage)
+            {
+                active.Journal = active.Journal with { Stage = pendingStage, UpdatedAt = DateTimeOffset.UtcNow };
+            }
+            else if (active.Journal.CancellationRequested)
             {
                 active.Journal = active.Journal with { Stage = OperationStage.Cancelled, UpdatedAt = DateTimeOffset.UtcNow };
             }
