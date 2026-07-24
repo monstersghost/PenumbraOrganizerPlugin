@@ -98,7 +98,7 @@ public class RecoveryClassifierTests
         var mods = new[] { new LiveMod("mod-a", "mod-a", "Weapons/A", false) };
         var liveWithDuplicates = new LiveModSnapshot(
             new Dictionary<string, LiveMod> { ["mod-a"] = mods[0] },
-            new HashSet<string> { "some-other-id" });
+            new HashSet<string> { "mod-a" });
 
         var result = RecoveryClassifier.Classify(plan, liveWithDuplicates);
 

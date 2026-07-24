@@ -123,7 +123,7 @@ public sealed class OperationController
     {
         if (plan.Type != expectedType)
             throw new ArgumentException($"This entry point requires a {expectedType}-type plan; got {plan.Type}.", nameof(plan));
-        if (_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery))
+        if ((_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery)) || _pendingRecovery is not null || _blockedMultiRootGraph is not null)
             throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
 
         var checkpointer = new OperationCheckpointer(_clock, bundleDirectory);
@@ -278,8 +278,24 @@ public sealed class OperationController
         var unresolved = new List<Guid>();
         foreach (var operationId in graph.AllOperationIds)
         {
-            var bundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, operationId);
-            if (!OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(bundleDirectory), out var journal) || journal is null)
+            var activeBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, operationId);
+            if (!Directory.Exists(activeBundleDirectory))
+            {
+                // Not present under active/ - either already resolved and relocated by a prior
+                // partial attempt (retry case), or never existed. Verify which, rather than assuming
+                // absence means success: a retry must not silently skip a genuinely-missing journal.
+                var completedBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: false, operationId);
+                var alreadyResolved = OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var existing)
+                    && existing is not null
+                    && existing.OperationId == operationId
+                    && existing.IsTerminal
+                    && existing.Resolution == OperationResolution.AcceptedCurrentState;
+                if (!alreadyResolved)
+                    unresolved.Add(operationId);
+                continue;
+            }
+
+            if (!OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(activeBundleDirectory), out var journal) || journal is null)
             {
                 unresolved.Add(operationId);
                 continue;
@@ -288,7 +304,7 @@ public sealed class OperationController
             var resolvedJournal = journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
             try
             {
-                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDirectory), resolvedJournal);
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), resolvedJournal);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -297,7 +313,7 @@ public sealed class OperationController
                 continue;
             }
 
-            TryRelocateToCompleted(bundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
+            TryRelocateToCompleted(activeBundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
         }
 
         if (unresolved.Count > 0)

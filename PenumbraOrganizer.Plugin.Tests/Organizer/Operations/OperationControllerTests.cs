@@ -1,4 +1,4 @@
-﻿using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Operations;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer.Operations;
@@ -64,6 +64,28 @@ public class OperationControllerTests
             controller.StartApply(SinglePlan(), Guid.NewGuid(), dir.FullName); // now Mutating, non-terminal
 
             Assert.Throws<InvalidOperationException>(() => controller.StartApply(SinglePlan("mod-b"), Guid.NewGuid(), dir.FullName));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StartApply_WhilePendingRecoveryIsSet_Throws()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var id = Guid.NewGuid();
+            var controller = NewController(new FakePenumbraOperations(), new FakeClock(), operationsRoot: dir.FullName);
+            var discovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [id], [id]),
+                new Dictionary<Guid, OperationJournal> { [id] = InterruptedJournal(id) });
+            controller.RegisterDiscoveredRecovery(discovery); // sets _pendingRecovery, not _active
+
+            Assert.Throws<InvalidOperationException>(() => controller.StartApply(SinglePlan(), Guid.NewGuid(), dir.FullName));
+            Assert.Throws<InvalidOperationException>(() => controller.StartRestore(SinglePlan(type: OperationType.Restore), Guid.NewGuid(), dir.FullName));
         }
         finally
         {
@@ -1117,6 +1139,68 @@ public class OperationControllerTests
             Assert.True(controller.IsBlockedByMultipleRoots); // partial success does not unblock
             Assert.True(controller.State.RequiresRecovery);
             Assert.False(controller.State.CanStartApply);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AcceptAllAndCloseInterruptedOperations_RetryAfterPartialFailure_DoesNotResurrectTheAlreadyResolvedJournal()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            var bundleDirA = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idA);
+            var bundleDirB = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idB);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDirA), InterruptedJournal(idA));
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDirB), InterruptedJournal(idB));
+
+            // Force idB's save to fail while idA's succeeds: AtomicFile.CreateOrReplace first does
+            // "if (File.Exists(tempPath)) File.Delete(tempPath);" before writing "{path}.tmp" - so
+            // holding an exclusive lock (FileShare.None) open on that temp path makes the File.Delete
+            // call itself throw IOException, without needing to touch the journal file being saved.
+            var journalPathB = OperationBundlePaths.JournalPath(bundleDirB);
+            var tempPathB = journalPathB + ".tmp";
+            var lockOnTempFile = new FileStream(tempPathB, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+
+            IReadOnlyList<Guid> firstPass;
+            try
+            {
+                firstPass = controller.AcceptAllAndCloseInterruptedOperations();
+            }
+            finally
+            {
+                lockOnTempFile.Dispose();
+            }
+
+            Assert.Equal([idB], firstPass); // idA resolved+relocated; idB failed to save
+            Assert.True(controller.IsBlockedByMultipleRoots);
+            Assert.False(Directory.Exists(bundleDirA)); // moved out of active/ already
+            Assert.True(Directory.Exists(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, idA)));
+
+            // "Fix" whatever caused idB's save to fail (release the lock, above), clean up the
+            // leftover temp file, then retry.
+            File.Delete(tempPathB);
+
+            var secondPass = controller.AcceptAllAndCloseInterruptedOperations();
+
+            // Bug being guarded against: idA (already resolved and relocated to completed/ by the
+            // first pass) must NOT be re-added to unresolved just because active/{idA} no longer
+            // exists on this second attempt.
+            Assert.Empty(secondPass);
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.True(controller.State.CanStartApply);
+            foreach (var id in new[] { idA, idB })
+            {
+                var completedDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, id);
+                Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedDir), out var resolved));
+                Assert.Equal(OperationResolution.AcceptedCurrentState, resolved!.Resolution);
+            }
         }
         finally
         {
