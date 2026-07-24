@@ -489,6 +489,13 @@ public sealed class MainWindow : Window, IDisposable
             // internally calls RefreshOrphanedFolders() itself, matching the same
             // scan-after-mutation pattern Restore() already relies on.
             RunScan();
+
+            // Penumbra doesn't always flush organization.json to disk immediately after SetModPath,
+            // so a freshly-emptied folder can still look occupied to Folder Cleanup (and still show
+            // in Penumbra's own tree) until the user triggers Rediscover Mods themselves - real
+            // in-game report, 2026-07-24. Only worth mentioning if the Apply actually moved something.
+            if (operationState.SuccessfulTargets > 0)
+                ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
         }
 
         ImGui.BeginDisabled(result.HasIssues || !operationState.CanStartApply);
@@ -507,6 +514,21 @@ public sealed class MainWindow : Window, IDisposable
             }
             ImGui.SameLine();
             if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+
+        if (ImGui.BeginPopupModal("Apply complete - Rediscover Mods reminder"))
+        {
+            ImGui.TextUnformatted("Apply complete.");
+            ImGui.TextWrapped(
+                "Penumbra doesn't always write organization.json to disk immediately, so any folders "
+                + "that are now empty may not be detected here yet, and may still show in Penumbra's own mod tree.");
+            ImGui.TextWrapped(
+                "Open Penumbra's Settings tab and click Rediscover Mods - this flushes the change to disk "
+                + "and removes any stray empty folders from Penumbra's tree. Then Folder Cleanup below will "
+                + "detect them accurately.");
+            if (ImGui.Button("Understood"))
                 ImGui.CloseCurrentPopup();
             ImGui.EndPopup();
         }
