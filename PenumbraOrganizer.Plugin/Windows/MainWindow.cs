@@ -31,6 +31,7 @@ public sealed class MainWindow : Window, IDisposable
     private Organizer.WorkbookImportResultView? _lastWorkbookImportResult;
     private IReadOnlyList<Organizer.ApplyResult>? _lastApplyResults;
     private bool _applyOperationActive;
+    private bool _restoreOperationActive;
     private string _createBackupLabelInput = string.Empty;
     private IReadOnlyList<Organizer.RestoreResult>? _lastRestoreResults;
     private Guid? _pendingRestoreSnapshotId;
@@ -558,8 +559,11 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         // Deliberately minimal - the real progress UI and recovery dialog are Plan E's job. This
-        // just keeps Apply usable and observable in-game now that it spans multiple frames.
-        if (operationState.Stage is not null)
+        // just keeps Apply usable and observable in-game now that it spans multiple frames. Gated on
+        // Kind == Apply so an in-progress or just-completed Restore (sharing the same
+        // OperationController) never renders here - CanStartApply/CanStartRestore are the same value
+        // today, so Kind is the only field that actually distinguishes the two operations.
+        if (operationState.Stage is not null && operationState.Kind == Organizer.Operations.OperationType.Apply)
         {
             if (!operationState.CanStartApply && !operationState.RequiresRecovery)
                 ImGui.TextUnformatted($"Applying... {operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage}).");
@@ -579,6 +583,14 @@ public sealed class MainWindow : Window, IDisposable
         using var tab = ImRaii.TabItem("History");
         if (!tab)
             return;
+
+        var operationState = _plugin.OperationController.State;
+        if (_restoreOperationActive && operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.CanStartRestore)
+        {
+            _restoreOperationActive = false;
+            _historyCache = null;
+            RunScan();
+        }
 
         ImGui.InputText("Label (optional)", ref _createBackupLabelInput, 200);
         ImGui.SameLine();
@@ -696,6 +708,14 @@ public sealed class MainWindow : Window, IDisposable
                 $"{failed} failed.");
             foreach (var failure in _lastRestoreResults.Where(r => r.Outcome == Organizer.RestoreOutcome.Failed))
                 ImGui.TextColored(PluginTheme.CollisionBad, $"  {failure.Identifier}: {failure.FailureReason}");
+        }
+
+        if (_restoreOperationActive)
+        {
+            if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
+                ImGui.TextUnformatted($"Restoring... {operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage}).");
+            else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
+                ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
         }
     }
 
@@ -864,22 +884,20 @@ public sealed class MainWindow : Window, IDisposable
     {
         try
         {
-            _lastRestoreResults = _plugin.Restore(snapshotId);
+            _plugin.StartRestoreOperation(snapshotId);
             _lastError = null;
-            var byOutcome = _lastRestoreResults.GroupBy(r => r.Outcome).ToDictionary(g => g.Key, g => g.Count());
-            Plugin.Log.Information(
-                "Restore completed: " + string.Join(", ", byOutcome.Select(kv => $"{kv.Value} {kv.Key}")));
-            foreach (var failure in _lastRestoreResults.Where(r => r.Outcome == Organizer.RestoreOutcome.Failed))
-                Plugin.Log.Warning($"Restore failure: {failure.Identifier}: {failure.FailureReason}");
+            // Cleared immediately, not left to display a previous restore's results while this one
+            // is in flight - Config.LastRestore/a displayed RestoreResult list are Plan E's job to
+            // populate from the new async path; this plan's job is only making sure the tab doesn't
+            // show stale, misattributed data in the meantime.
+            _lastRestoreResults = null;
+            _restoreOperationActive = true;
         }
         catch (Exception ex)
         {
             _lastError = $"Restore failed: {ex.Message}";
             Plugin.Log.Error(ex, "Restore failed.");
         }
-
-        _historyCache = null; // Restore() also captures a pre-restore snapshot — history changed
-        RefreshOrphanedFolders(); // Restore() ran RunScan() internally — occupancy changed
     }
 
     private void CreateBackup(string? label)
