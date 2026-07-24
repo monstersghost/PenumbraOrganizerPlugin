@@ -216,6 +216,63 @@ found genuinely blocked on a data-source gap, not just unscoped:
   Mount/Minion/Emote names), so a keyword heuristic isn't locale-invariant and is guessing, which
   conflicts with every other part of this classifier's "never guess" principle.
 
+## Auto mod tagging (parking lot)
+
+**Status: researched, not designed, not scheduled.** Raised 2026-07-24 via a support-Discord idea
+(relayed secondhand, not a recurring community ask — "testing the waters," one person's suggestion):
+automatically detect a gear mod's body-base compatibility (G3, B+, YAB, Rue, etc.) by reading its
+files, then assign the result as one of Penumbra's own "Predefined Tags" so Penumbra's native
+tag-based search picks it up everywhere, not just inside this plugin. Investigated for feasibility
+before any design work, per this project's established pattern (see Detailed gear-slot sorting
+above for the precedent) — found genuinely mixed, not a clean yes or no:
+
+**Reading existing tags is already free.** `Penumbra.Api.Helpers.ModWrapper` — the per-mod object
+returned by `GetModListAdapter`, the exact IPC call this plugin already invokes on every scan —
+already carries both `ModTags` (`IReadOnlyList<string>`) and `LocalTags` (`IReadOnlyList<string>`)
+fields (confirmed via reflection against the actual `Penumbra.Api` 5.15.1 assembly this project
+references, cross-checked against `Penumbra.Api.Enums.ModProperty`'s `ModTags`/`LocalTags` members
+in the same package). This plugin just isn't mapping those two fields into `OrganizerModRow` yet —
+doing so would need zero new IPC surface and zero new risk.
+
+**Writing splits into two very different stories**, traced through Penumbra's actual source
+(`xivdev/Penumbra`, not guessed):
+- **`ModTags`** (the global, shareable "Predefined Tags" toggles shown in Arae's screenshot) are
+  persisted by `ModDataEditor.ChangeTag` → `saveService.QueueSave(new ModMeta(saveService, mod))` —
+  each mod's own `meta.json`, sitting inside that mod's own folder on disk, not a single shared
+  file. Theoretically writable (same *category* of move as Folder Cleanup's `organization.json`
+  edits — direct file I/O, no IPC writer exists for this), but the blast radius is fundamentally
+  different: potentially thousands of individual per-mod files instead of one shared file, each a
+  real risk of corrupting that mod's own metadata if a write goes wrong. Would also need
+  `ReloadMod(modDirectory, modName)` (confirmed to exist, single-mod scope only) after every write
+  to make Penumbra pick up the change — no bulk-reload IPC exists, same limitation Folder Cleanup
+  already documented for `organization.json`.
+- **`LocalTags`** (private, free-text tags) are persisted by `database.UpsertTags(mod)` — an
+  internal database (`mod_data.db` in Penumbra's own config directory, confirmed present as a
+  binary/structured file, not JSON, on a local Penumbra install), undocumented schema, no IPC
+  writer. **Off the table entirely** — no safe external write path exists.
+- `predefined_tags.json` itself (`PredefinedTagManager.cs`) is neither of the above — it's only the
+  shared *registry* of tag names available to toggle, not where any mod's actual tag assignment
+  lives. Appending a brand-new tag name there would be low-risk (simple JSON array), but doesn't by
+  itself tag anything.
+
+**The detection problem is entirely separate and still unsolved.** Even with a safe write path,
+there is no IPC or file signal anywhere for "this mod fits body base X" — unlike Gear/Body/NPC
+classification, which is grounded in Penumbra's own structured `GetChangedItems` data. Body-base
+compatibility would have to come from fuzzy heuristics on mod/file/material names, needing a
+user-configurable matching-phrase system (per Arae's own framing) — a real, separate design problem
+with no reliable, locale-invariant signal like the ones every other classifier in this codebase
+insists on (see Detailed gear-slot sorting's "never guess" note above — the same principle applies
+here).
+
+**Why this is parked rather than designed:** the write side (per-mod `meta.json` edits) is a
+materially larger, riskier surface than any existing write feature in this plugin, and the
+detection side has no known reliable signal yet. Revisit if either (a) multiple independent users
+ask for this, not just one idea being tested, or (b) someone identifies a concrete, reliable
+detection signal worth designing around. If picked up, treat it as two separate decisions requiring
+their own explicit scope confirmation (matching the pattern Apply/Folder Cleanup already
+established): read-only tag surfacing (safe, cheap, useful on its own) is a much smaller ask than
+auto-detect-and-write (real corruption risk, unsolved detection problem).
+
 ## Cosmetic / non-blocking
 
 - **Custom font** to better match the standalone app's Segoe UI look, via Dalamud's font-atlas API.
