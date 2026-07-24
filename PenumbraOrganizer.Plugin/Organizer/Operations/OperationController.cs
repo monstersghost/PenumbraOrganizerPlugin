@@ -191,6 +191,57 @@ public sealed class OperationController
 
     public bool IsBlockedByMultipleRoots => _blockedMultiRootGraph is not null;
 
+    public enum KeepCurrentResolutionResult { ResolvedAndArchived, ResolvedArchiveDeferred }
+
+    // Once a resolved (terminal) journal is durably saved, the caller must return success and clear
+    // the recovery lock even if relocation fails - the persisted journal alone is authoritative, and
+    // OperationBundleDiscovery's own startup relocation pass will finish moving any terminal journal
+    // it later finds still sitting under active/.
+    private KeepCurrentResolutionResult TryRelocateToCompleted(string activeBundleDirectory, OperationJournal resolvedJournal)
+    {
+        var completedBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: false, resolvedJournal.OperationId);
+        try
+        {
+            if (Directory.Exists(completedBundleDirectory))
+            {
+                var matches = OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var existing)
+                    && existing is not null
+                    && existing.OperationId == resolvedJournal.OperationId
+                    && existing.IsTerminal
+                    && existing.Resolution == resolvedJournal.Resolution;
+                if (matches)
+                    return KeepCurrentResolutionResult.ResolvedAndArchived;
+
+                Plugin.Log?.Warning($"Keep Current: completed bundle directory for {resolvedJournal.OperationId} exists but doesn't match the resolved journal - leaving both copies in place.");
+                return KeepCurrentResolutionResult.ResolvedArchiveDeferred;
+            }
+
+            Directory.CreateDirectory(OperationBundlePaths.CompletedDirectory(_operationsRoot));
+            Directory.Move(activeBundleDirectory, completedBundleDirectory);
+            return KeepCurrentResolutionResult.ResolvedAndArchived;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Plugin.Log?.Warning(ex, $"Keep Current: journal resolved but bundle relocation failed for {resolvedJournal.OperationId}.");
+            return KeepCurrentResolutionResult.ResolvedArchiveDeferred;
+        }
+    }
+
+    public KeepCurrentResolutionResult ResolveKeepCurrent()
+    {
+        if (_pendingRecovery is not { } pending)
+            throw new InvalidOperationException("No pending recovery to resolve.");
+
+        var resolvedJournal = pending.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
+        OperationJournalCodec.Save(OperationBundlePaths.JournalPath(pending.BundleDirectory), resolvedJournal);
+        pending.Journal = resolvedJournal; // commit point - everything below is best-effort
+
+        var result = TryRelocateToCompleted(pending.BundleDirectory, resolvedJournal);
+        _pendingRecovery = null;
+        PublishState();
+        return result;
+    }
+
     public void RequestCancellation()
     {
         if (_active is null || _active.Journal.Stage != OperationStage.Mutating)

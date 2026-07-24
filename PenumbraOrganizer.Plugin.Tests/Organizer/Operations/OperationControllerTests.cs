@@ -1,4 +1,4 @@
-using PenumbraOrganizer.Plugin.Organizer;
+﻿using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Operations;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer.Operations;
@@ -903,6 +903,108 @@ public class OperationControllerTests
 
             Assert.True(controller.State.RequiresRecovery);
             Assert.Equal(OperationStage.Refreshing, controller.State.Stage); // last in-memory value before the failed write, not the failure stage
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveKeepCurrent_NoPendingRecovery_Throws()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Throws<InvalidOperationException>(() => controller.ResolveKeepCurrent());
+    }
+
+    [Fact]
+    public void ResolveKeepCurrent_HappyPath_ResolvesRelocatesAndUnblocks()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewControllerWithPendingRecovery(new FakePenumbraOperations(), new FakeClock(), dir.FullName, out var journalId);
+            var activeBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), InterruptedJournal(journalId));
+
+            var result = controller.ResolveKeepCurrent();
+
+            Assert.Equal(OperationController.KeepCurrentResolutionResult.ResolvedAndArchived, result);
+            Assert.True(controller.State.CanStartApply);
+            Assert.True(controller.State.CanStartRestore);
+            Assert.False(controller.State.RequiresRecovery);
+            Assert.False(Directory.Exists(activeBundleDirectory));
+            var completedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, journalId);
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var resolved));
+            Assert.True(resolved!.IsTerminal);
+            Assert.Equal(OperationResolution.AcceptedCurrentState, resolved.Resolution);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveKeepCurrent_CalledAgainAfterAMatchingPriorSuccess_IsIdempotent()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewControllerWithPendingRecovery(new FakePenumbraOperations(), new FakeClock(), dir.FullName, out var journalId);
+            var activeBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), InterruptedJournal(journalId));
+            controller.ResolveKeepCurrent(); // first call relocates active/ -> completed/
+
+            // Simulate a retry: re-register the same journal as pending (as if a second discovery
+            // pass found it again before the first resolution's relocation was known to have
+            // succeeded) and resolve it again.
+            Directory.CreateDirectory(activeBundleDirectory);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), InterruptedJournal(journalId));
+            var discovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [journalId], [journalId]),
+                new Dictionary<Guid, OperationJournal> { [journalId] = InterruptedJournal(journalId) });
+            controller.RegisterDiscoveredRecovery(discovery);
+
+            var result = controller.ResolveKeepCurrent();
+
+            // The completed/ destination from the first call already exists, matches (same
+            // OperationId, terminal, same Resolution), so this exercises the "already relocated"
+            // branch specifically, not a fresh move.
+            Assert.Equal(OperationController.KeepCurrentResolutionResult.ResolvedAndArchived, result);
+            Assert.False(controller.State.RequiresRecovery);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveKeepCurrent_ExistingDestinationDoesNotMatch_ReturnsDeferredButStillUnblocks()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewControllerWithPendingRecovery(new FakePenumbraOperations(), new FakeClock(), dir.FullName, out var journalId);
+            var activeBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), InterruptedJournal(journalId));
+
+            // Simulate an anomalous pre-existing completed/ directory for the same OperationId that
+            // does NOT match what this resolution is about to produce (still non-terminal here,
+            // unlike the journal ResolveKeepCurrent is about to save) - the collision check must not
+            // treat this as "already relocated."
+            var completedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, journalId);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(completedBundleDirectory), InterruptedJournal(journalId));
+
+            var result = controller.ResolveKeepCurrent();
+
+            Assert.Equal(OperationController.KeepCurrentResolutionResult.ResolvedArchiveDeferred, result);
+            Assert.False(controller.State.RequiresRecovery); // commit-point rule: the journal save already succeeded
+            Assert.True(Directory.Exists(activeBundleDirectory)); // left untouched, not moved or deleted
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(activeBundleDirectory), out var activeJournal));
+            Assert.Equal(OperationResolution.AcceptedCurrentState, activeJournal!.Resolution); // the save itself still happened
         }
         finally
         {
