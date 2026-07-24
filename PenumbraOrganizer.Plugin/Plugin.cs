@@ -117,7 +117,12 @@ public sealed class Plugin : IDalamudPlugin
     {
         OperationController.Update();
         if (_operationInProgress && OperationController.State.CanStartApply)
-            _operationInProgress = false; // the async Apply operation just reached a terminal stage
+            _operationInProgress = false; // any async organizer operation (Apply or Restore) just reached
+                                           // a terminal, non-recovery stage - CanStartApply/CanStartRestore
+                                           // are guaranteed equal today (PublishState derives both from one
+                                           // shared canStartNew), so checking either detects completion of
+                                           // either operation type. If a future plan ever splits them apart
+                                           // per-type, this check must be revisited.
     }
 
     public void RunScan()
@@ -456,7 +461,71 @@ public sealed class Plugin : IDalamudPlugin
         Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), snapshot);
 
         _operationInProgress = true;
-        OperationController.StartApply(plan, snapshot.Id, bundleDirectory);
+        try
+        {
+            OperationController.StartApply(plan, snapshot.Id, bundleDirectory);
+        }
+        catch
+        {
+            _operationInProgress = false;
+            throw;
+        }
+    }
+
+    internal void StartRestoreOperation(Guid snapshotId)
+    {
+        if (_operationInProgress)
+            throw new InvalidOperationException("Another organizer operation is already in progress.");
+        // Defense-in-depth alongside _operationInProgress, not a replacement for it: reads the
+        // controller's own authoritative state before any side effect below runs. A narrow TOCTOU gap
+        // remains between this check and OperationController.StartRestore's own admission guard,
+        // accepted rather than closed with a reservation API - both entry points only ever fire from
+        // a button click on the single UI thread, so the gap has no live trigger today.
+        if (!OperationController.State.CanStartRestore)
+            throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
+
+        var history = Organizer.RollbackHistory.Load(HistoryFilePath);
+        var target = history.FirstOrDefault(s => s.Id == snapshotId)
+            ?? throw new InvalidOperationException("Snapshot not found.");
+
+        var currentMods = ReadCurrentMods();
+
+        // Current protection state is deliberately never passed to BuildRestorePlan - unchanged
+        // reasoning from the synchronous Restore() path (tester report, Bug 3).
+        var restorePlan = Organizer.RollbackHistory.BuildRestorePlan(target, currentMods);
+        var namedMoves = Organizer.Operations.OperationPlanBuilder.BuildNamedMoves(restorePlan.Moves, currentMods);
+        var plan = Organizer.Operations.OperationPlanBuilder.BuildRestoreOperationPlan(namedMoves);
+
+        var preRestoreLabel = target.Label ?? target.CreatedAt.ToString("u");
+        var preRestoreSnapshot = Organizer.RollbackHistory.CaptureSnapshot(
+            currentMods, label: null, autoDescription: $"Snapshot before restoring to \"{preRestoreLabel}\"");
+
+        var resultSeed = new Organizer.Operations.RestoreResultSeed(
+            target, restorePlan.UnchangedIdentifiers, restorePlan.SkippedUninstalledIdentifiers, restorePlan.RootRelocatedIdentifiers);
+
+        var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
+        Organizer.Operations.OperationPlanCodec.Save(Organizer.Operations.OperationBundlePaths.PlanPath(bundleDirectory), plan);
+        Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), preRestoreSnapshot);
+        Organizer.Operations.OperationRestoreResultSeedCodec.Save(
+            Organizer.Operations.OperationBundlePaths.RestoreResultSeedPath(bundleDirectory), resultSeed);
+
+        // Everything above is pure computation or a bundle-local write; only after all of it succeeds
+        // does the operation become visible in the user-facing history file. This bounds the failure
+        // window that can leave a "Snapshot before restoring..." entry with no accompanying restore
+        // to failures below this line - a failure above can still leave partial bundle-local files
+        // with no history entry and no active operation, which is accepted residue (see Task 1).
+        Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, preRestoreSnapshot);
+
+        _operationInProgress = true;
+        try
+        {
+            OperationController.StartRestore(plan, preRestoreSnapshot.Id, bundleDirectory);
+        }
+        catch
+        {
+            _operationInProgress = false;
+            throw;
+        }
     }
 
     internal IReadOnlyList<Organizer.RestoreResult> Restore(Guid snapshotId)
