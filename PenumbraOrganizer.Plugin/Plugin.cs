@@ -62,6 +62,8 @@ public sealed class Plugin : IDalamudPlugin
         OperationController = new Organizer.Operations.OperationController(
             operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
             operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot);
+        var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
+        OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
         _workbookService = new WorkbookWorkflowService(
             new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookWorkflowService>(Log));
         _npcHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -527,6 +529,18 @@ public sealed class Plugin : IDalamudPlugin
             _operationInProgress = false;
             throw;
         }
+    }
+
+    internal void ResolveKeepCurrent()
+    {
+        OperationController.ResolveKeepCurrent();
+        RunScan();
+    }
+
+    internal void AcceptAllAndCloseInterruptedOperations()
+    {
+        OperationController.AcceptAllAndCloseInterruptedOperations();
+        RunScan();
     }
 
     [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
