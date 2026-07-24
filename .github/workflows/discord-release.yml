@@ -1,0 +1,58 @@
+name: Announce release to Discord
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Discord release announcement
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            TITLE="🧪 New Pre-release: ${RELEASE_NAME:-$RELEASE_TAG}"
+          else
+            TITLE="🚀 New Release: ${RELEASE_NAME:-$RELEASE_TAG}"
+          fi
+
+          BODY=$(printf "%s" "$RELEASE_BODY" | head -c 3900)
+          ROLE_ID="1524370428196552765"
+
+          jq -n \
+            --arg role_id "$ROLE_ID" \
+            --arg title "$TITLE" \
+            --arg url "$RELEASE_URL" \
+            --arg body "$BODY" \
+            --arg tag "$RELEASE_TAG" \
+            '{
+              content: "<@&\($role_id)>",
+              allowed_mentions: {
+                roles: [$role_id]
+              },
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $body,
+                fields: [
+                  {
+                    name: "Version",
+                    value: $tag,
+                    inline: true
+                  }
+                ]
+              }]
+            }' > payload.json
+
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d @payload.json \
+               "$DISCORD_WEBHOOK"

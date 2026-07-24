@@ -70,7 +70,7 @@ public sealed class MainWindow : Window, IDisposable
     ];
 
     private static readonly string PluginVersion =
-        typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+        typeof(MainWindow).Assembly.GetName().Version?.ToString(4) ?? "unknown";
 
     public MainWindow(Plugin plugin)
         : base($"Penumbra Organizer v{PluginVersion}###PenumbraOrganizerPluginMain")
