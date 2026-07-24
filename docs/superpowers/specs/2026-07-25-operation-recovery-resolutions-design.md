@@ -1,7 +1,9 @@
 # Operation Recovery Resolutions: Continue and Restore Previous State (Plan D2)
 
 Date: 2026-07-25
-Status: Design draft, not yet reviewed
+Status: Revised after first review round (architecture and option 1 approved; §5's resolution methods
+rebuilt around a failure-atomic successor-start path and a fresh-read-per-resolution model per that
+review). Awaiting re-review before implementation planning.
 Builds on: `docs/superpowers/specs/2026-07-22-operation-controller-design.md` (§8a/§9/§9a — Continue
 and Restore Previous State's original design), `docs/superpowers/specs/2026-07-24-operation-recovery-classification-design.md`
 (Plan D1, shipped `main` at `59ba3c2`), and Plan C
@@ -68,7 +70,118 @@ Restore Previous State actually needs that plan — because the live-mods read i
 
 This document proceeds with **option 1** as its working assumption (matching the original design's
 intent precisely, and it's a small, well-contained change), but this is flagged explicitly for review
-rather than silently decided — see §4 for the exact revision.
+rather than silently decided — see below for the exact revision.
+
+**Revised after review: a second, independent status is needed, not a nullable field bolted onto
+`ClassificationStatus`.** `ClassificationStatus`'s three states
+(`WaitingForProvider`/`Classified`/`ClassificationUnavailable`) were built assuming plan validity gates
+the entire read. Once decoupled, the live read needs its own state machine — Continue and Restore
+Previous State can now settle independently (a corrupt plan freezes `ClassificationStatus` at
+`ClassificationUnavailable` forever, but the live read backing Restore Previous State must keep being
+attempted). New enum:
+
+```csharp
+public enum RecoveryLiveReadStatus { WaitingForProvider, Available, Unavailable }
+```
+
+`PendingRecoveryContext` gains `LiveModSnapshot? LiveSnapshot` and
+`RecoveryLiveReadStatus LiveReadStatus { get; set; } = RecoveryLiveReadStatus.WaitingForProvider`.
+
+**A bug found while actually drafting the decoupling (not flagged by the review, but a direct
+consequence of doing it correctly): `Update()`'s outer gate must change too.** Today it's `if
+(_pendingRecovery is { ClassificationStatus: RecoveryClassificationStatus.WaitingForProvider } pending)`
+— once `ClassificationStatus` settles to `ClassificationUnavailable` (plan invalid), this gate would
+never fire again, so `TryAdvanceClassification` would never run again, so the live read that Restore
+Previous State depends on would never be attempted past that first call. The gate must become:
+
+```csharp
+if (_pendingRecovery is { } pending &&
+    (pending.ClassificationStatus == RecoveryClassificationStatus.WaitingForProvider ||
+     pending.LiveReadStatus == RecoveryLiveReadStatus.WaitingForProvider))
+```
+
+so the two settle independently and the method keeps getting called until both have.
+
+**`TryAdvanceClassification`'s revised body** (verified against the real current method,
+`OperationController.cs:398-452`, not the original draft):
+
+```csharp
+private void TryAdvanceClassification(PendingRecoveryContext pending)
+{
+    var stateChanged = false;
+
+    if (pending.PlanCheckStatus == ArtifactCheckStatus.Unchecked)
+    {
+        (pending.PlanCheckStatus, pending.Plan) = ArtifactStatusChecker.CheckPlan(pending.BundleDirectory);
+        stateChanged = true;
+    }
+    if (pending.SnapshotCheckStatus == ArtifactCheckStatus.Unchecked)
+    {
+        (pending.SnapshotCheckStatus, pending.Snapshot) = ArtifactStatusChecker.CheckSnapshot(pending.BundleDirectory);
+        stateChanged = true;
+    }
+
+    if (pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
+        pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+
+    // The live read backs both Continue's classification and Restore Previous State's own
+    // availability - attempt it whenever either resolution could still use it. If neither artifact
+    // is valid, no resolution is reachable and the read would be wasted IPC traffic (review point 11).
+    var liveReadNeeded = pending.LiveReadStatus == RecoveryLiveReadStatus.WaitingForProvider &&
+        (pending.PlanCheckStatus == ArtifactCheckStatus.Valid || pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid);
+
+    if (!liveReadNeeded)
+    {
+        if (stateChanged)
+            PublishState();
+        return;
+    }
+
+    if (pending.LastClassificationAttemptTimestamp is { } last && _clock.GetElapsedTime(last) < ClassificationRetryInterval)
+    {
+        if (stateChanged)
+            PublishState();
+        return;
+    }
+
+    pending.LastClassificationAttemptTimestamp = _clock.GetTimestamp();
+    var liveResult = _adapter.GetLiveMods();
+
+    switch (liveResult.Status)
+    {
+        case LiveModReadStatus.Success when liveResult.Snapshot is not null:
+            pending.LiveSnapshot = liveResult.Snapshot;
+            pending.LiveReadStatus = RecoveryLiveReadStatus.Available;
+            if (pending.PlanCheckStatus == ArtifactCheckStatus.Valid)
+            {
+                pending.Assessment = RecoveryAssessmentBuilder.Build(pending.Plan!, liveResult.Snapshot);
+                pending.ClassificationStatus = RecoveryClassificationStatus.Classified;
+            }
+            break;
+
+        case LiveModReadStatus.TemporarilyUnavailable:
+        case LiveModReadStatus.ProviderUnavailable:
+            break; // retry later - both statuses already WaitingForProvider
+
+        case LiveModReadStatus.InvalidData:
+        default:
+            pending.LiveReadStatus = RecoveryLiveReadStatus.Unavailable;
+            if (pending.PlanCheckStatus == ArtifactCheckStatus.Valid)
+                pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+            break;
+    }
+
+    RecomputeResolutionAvailability(pending); // section 5 - cached once here, not per PublishState() call
+    PublishState();
+}
+```
+
+**Important: this cached `LiveSnapshot`/`Assessment` is now advisory only, for UI availability.** Per
+the review's point 4 and 11: the actual resolution methods (§5) never consume these cached fields for
+planning — they take their own fresh read at the moment the user confirms. A pending recovery can sit
+unresolved for minutes; reusing a read that old to actually build moves and capture a snapshot would
+resolve against state that's no longer true. The cached fields only drive whether the buttons are
+enabled.
 
 ## 3. `ContinuationPlanner`: residual-move computation for Continue
 
@@ -95,18 +208,34 @@ mode an inconsistent `AtKnownIntermediate` reading would produce (two mods that 
 what was meant to be one mod's temporary hop path). The replan attempt is wrapped in a try/catch; a
 thrown exception means Continue is blocked, matching "otherwise treated as blocking."
 
+**Revised after review (point 5): the original sketch threw `ArgumentException`/`KeyNotFoundException`
+for malformed input via `.ToDictionary`/indexers, which is not acceptable for a `Try...`-named method —
+especially now that §5 calls it from a fresh, re-derived `RecoveryAssessment` on every resolution
+attempt rather than only once from a value D1 already validated. In today's shipped code, a
+successfully-loaded `OperationPlan` can't actually contain duplicate `RecoveryTargets` identifiers
+(`Verify()`'s integrity hash would have to be hand-recomputed to match a tampered file, and
+`OperationPlan.Create` itself already rejects duplicates), so these paths are effectively unreachable
+today — but making the method total is cheap, and it removes a plan-json-format assumption from a path
+that's about to run more often than it did in D1.**
+
 ```csharp
 namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 
 public enum ContinuationPlanStatus { Ready, Blocked }
 
-public sealed record ContinuationPlanResult(ContinuationPlanStatus Status, IReadOnlyList<NamedModMove> ResidualMoves);
+public enum ContinuationBlockReason { None, BlockingClassificationPresent, InconsistentRecoveryTargets, ReplanFailed }
+
+public sealed record ContinuationPlanResult(
+    ContinuationPlanStatus Status, IReadOnlyList<NamedModMove> ResidualMoves,
+    ContinuationBlockReason Reason = ContinuationBlockReason.None);
 
 /// <summary>
 /// Design doc section 8a/9: computes the residual move set for Continue from an already-built
-/// RecoveryAssessment - never re-classifies, never re-reads live state. AtKnownIntermediate's
-/// validity is proven by attempting ApplyPlanner.OrderMovesForApply on the full candidate set, the
-/// exact operation Continue would actually perform - not by hand-enumerated consistency rules.
+/// RecoveryAssessment - never re-classifies, never re-reads live state itself (the caller supplies
+/// whichever assessment it wants evaluated - D1's cached one for availability, a fresh one at
+/// resolution time). AtKnownIntermediate's validity is proven by attempting
+/// ApplyPlanner.OrderMovesForApply on the full candidate set, the exact operation Continue would
+/// actually perform - not by hand-enumerated consistency rules. Never throws for malformed input.
 /// </summary>
 public static class ContinuationPlanner
 {
@@ -115,17 +244,25 @@ public static class ContinuationPlanner
         var hasBlockingClassification = assessment.Classifications.Any(c =>
             c.State is ItemRecoveryState.AtNeither or ItemRecoveryState.MissingLive);
         if (hasBlockingClassification)
-            return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, []);
+            return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.BlockingClassificationPresent);
 
-        var targetByIdentifier = interruptedPlan.RecoveryTargets.ToDictionary(t => t.Identifier, StringComparer.Ordinal);
+        var targetByIdentifier = new Dictionary<string, OperationRecoveryTarget>(StringComparer.Ordinal);
+        foreach (var target in interruptedPlan.RecoveryTargets)
+        {
+            if (!targetByIdentifier.TryAdd(target.Identifier, target))
+                return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.InconsistentRecoveryTargets);
+        }
+
         var candidateMoves = new List<NamedModMove>();
         foreach (var classification in assessment.Classifications)
         {
             if (classification.State is not (ItemRecoveryState.AtSnapshot or ItemRecoveryState.AtKnownIntermediate))
                 continue; // AtIntended/AtBoth: already at the final target, nothing to queue
 
-            var target = targetByIdentifier[classification.Identifier]; // guaranteed present - Classify iterates interruptedPlan.RecoveryTargets itself
-            var live = assessment.LiveSnapshot.Mods[classification.Identifier]; // guaranteed present - MissingLive already excluded above
+            if (!targetByIdentifier.TryGetValue(classification.Identifier, out var target) ||
+                !assessment.LiveSnapshot.Mods.TryGetValue(classification.Identifier, out var live))
+                return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.InconsistentRecoveryTargets);
+
             candidateMoves.Add(new NamedModMove(classification.Identifier, target.ModName, live.FullPath, target.FinalRawPath));
         }
 
@@ -141,7 +278,7 @@ public static class ContinuationPlanner
         }
         catch (ArgumentException)
         {
-            return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, []);
+            return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.ReplanFailed);
         }
 
         return new ContinuationPlanResult(ContinuationPlanStatus.Ready, candidateMoves);
@@ -200,129 +337,181 @@ explicit argument, no behavior change. Every existing test named `BuildRestoreOp
 
 ## 5. `OperationController`: `ResolveContinue`, `ResolveRestorePreviousState`
 
-Both follow the original design's identical 8-step durable ordering (§9), reusing D1's
-`PendingRecoveryContext` fields directly (never re-classifying, never re-reading live state
-independently) and Plan C's `StartApply`/`StartRestore` unchanged:
+**Substantially revised after review.** The original draft cleared `_pendingRecovery` before calling
+`StartApply`/`StartRestore` so their admission guard would let the successor start, then persisted the
+parent's resolution afterward. The review's point 1 is right that this is unsafe: if `StartApply`/
+`StartRestore` throws *after* `_pendingRecovery = null`, the recovery context is gone from memory while
+the interrupted journal on disk is still unresolved — exactly the masking condition D1's admission
+guard exists to prevent, reintroduced by the resolution path meant to close it. And point 4 is right
+that reusing D1's classification-time `LiveSnapshot`/`Assessment` to actually build moves and capture a
+snapshot resolves against state that could be minutes stale by the time the user clicks a button.
 
-1. Use the already-built `RecoveryAssessment` (D1) — never re-read live state.
-2. Capture a **new** `RollbackSnapshot` from that same live-state generation (`RollbackHistory.CaptureSnapshot`
-   on the identical `LiveSnapshot.Mods.Values` already read for classification — no new IPC call).
-3. Build and validate the continuation/restore `OperationPlan` (new `OperationId` via `OperationPlan.Create`,
-   fresh `ExecutionSteps`/`RecoveryTargets`).
-4. Persist the new plan.
-5. Persist the new snapshot.
-6. Persist the new non-terminal journal via `StartApply`/`StartRestore` itself, with
-   `RecoveryOfOperationId` pointing at the interrupted operation.
-7. Only now, mark the *original* journal `Resolution = ContinuedByNewOperation`/`RestoredByNewOperation`,
-   `SuccessorOperationId = <new operation's id>`.
-8. The new operation is already active as of step 6 — nothing further to activate.
+Both problems are fixed together: a dedicated, failure-atomic successor-start path that only clears
+`_pendingRecovery` after the successor is confirmed durably active, and a fresh `GetLiveMods()` read
+taken at the moment of resolution rather than reused from classification time. The 8-step durable
+ordering (design doc §9) is unchanged in shape; what changes is exactly *when* `_pendingRecovery` gets
+cleared and *which* live read feeds steps 1-2.
 
-**A crash between steps 6 and 7 leaves both journals non-terminal simultaneously** — already tolerated
-by the existing `OperationRecoveryGraph.Analyze` (a child's `RecoveryOfOperationId` makes it
-authoritative within its component regardless of whether the parent's own resolution write landed;
-`OperationBundleRetention`'s transitive-closure retention already accounts for this same relationship).
-No new discovery/retention logic needed — D1/A2's existing machinery already handles this shape.
-
-**Availability, replacing D1's placeholder single `CanResolveRecovery` boolean** (D1's own design doc
-explicitly flagged this: "D1 temporarily defines this single boolean as 'Keep Current is available' -
-D2 will need to split this... since those three have genuinely different availability rules"). New
-`OperationStateSnapshot` fields:
+**`StartOperation`'s admission guard gets a private bypass, not a public one.** Verified against
+`OperationController.cs:106-126`: `StartApply`/`StartRestore` are thin wrappers passing `OperationType.
+Apply`/`.Restore` as `expectedType` to a shared private `StartOperation`, whose guard is `(_active is
+not null && !CanStartNext(...)) || _pendingRecovery is not null || _blockedMultiRootGraph is not null`.
+Recovery-successor start needs to bypass only the `_pendingRecovery` half of that guard, and only via a
+path `ResolveContinue`/`ResolveRestorePreviousState` reach internally — never through the public
+`StartApply`/`StartRestore` surface, which must keep rejecting while a recovery is pending:
 
 ```csharp
-bool CanContinueRecovery,
-bool CanRestorePreviousState,
+public void StartApply(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
+    StartOperation(plan, snapshotId, bundleDirectory, OperationType.Apply);
+
+public void StartRestore(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
+    StartOperation(plan, snapshotId, bundleDirectory, OperationType.Restore);
+
+private void StartRecoverySuccessor(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
+    StartOperation(plan, snapshotId, bundleDirectory, plan.Type, bypassRecoveryLockout: true);
+
+private void StartOperation(
+    OperationPlan plan, Guid snapshotId, string bundleDirectory, OperationType expectedType,
+    bool bypassRecoveryLockout = false)
+{
+    if (plan.Type != expectedType)
+        throw new ArgumentException($"Expected a {expectedType} plan but received {plan.Type}.", nameof(plan));
+
+    var recoveryLocked = !bypassRecoveryLockout && (_pendingRecovery is not null || _blockedMultiRootGraph is not null);
+    if ((_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery)) || recoveryLocked)
+        throw new InvalidOperationException("Cannot start a new operation while another is active or pending recovery.");
+
+    // ... unchanged body: build ActiveOperationContext, persist Prepared then Mutating checkpoints
+    // (force: true, both - verified they run before this method returns), set _active.
+}
 ```
 
-(`CanResolveRecovery` stays as the "Keep Current is available" boolean D1 already defined — Keep
-Current's own availability doesn't change in this plan.) Computed in the `_pendingRecovery`-populated
-branch of `PublishState()`:
+**The failure-atomic transaction wrapper**, used by both resolution methods:
 
 ```csharp
-CanContinueRecovery = pending.ClassificationStatus == RecoveryClassificationStatus.Classified
-    && pending.Assessment is not null
-    && ContinuationPlanner.TryBuildResidualMoves(pending.Plan!, pending.Assessment).Status == ContinuationPlanStatus.Ready,
-CanRestorePreviousState = pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid
-    && pending.LiveSnapshot is not null, // section 2's decoupling - see below
+private void StartRecoverySuccessorOrThrow(
+    PendingRecoveryContext expectedPending, OperationPlan newPlan, RollbackSnapshot newSnapshot,
+    OperationResolution parentResolution)
+{
+    // Defends the invariant, not a currently-reachable race: OperationController has no concurrent
+    // entry points (same single-threaded Dalamud Update()/UI-callback model every other method here
+    // already assumes). This guards a future refactor that introduces reentrancy, not a bug that
+    // exists today.
+    if (!ReferenceEquals(_pendingRecovery, expectedPending))
+        throw new InvalidOperationException("The pending recovery changed before this resolution could start.");
+
+    var newBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, newPlan.OperationId);
+    try
+    {
+        OperationPlanCodec.Save(OperationBundlePaths.PlanPath(newBundleDirectory), newPlan);
+        OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(newBundleDirectory), newSnapshot);
+        StartRecoverySuccessor(newPlan, newSnapshot.Id, newBundleDirectory);
+    }
+    catch
+    {
+        TryDeleteBundleDirectory(newBundleDirectory);
+        throw; // _pendingRecovery untouched - a failed attempt leaves recovery exactly as it was
+    }
+
+    // Reached only once the successor is durably active (StartOperation persisted Prepared and
+    // Mutating checkpoints, force: true, before returning - verified against OperationController.cs,
+    // not assumed). Only now does clearing _pendingRecovery become safe.
+    var interruptedJournal = expectedPending.Journal;
+    var interruptedBundleDirectory = expectedPending.BundleDirectory;
+    _pendingRecovery = null;
+
+    try
+    {
+        var resolvedInterruptedJournal = interruptedJournal with
+        {
+            Resolution = parentResolution,
+            SuccessorOperationId = newPlan.OperationId,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
+        TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal);
+    }
+    catch (Exception)
+    {
+        // The successor is already durably running - the user's Continue/Restore request already
+        // succeeded. Failing to decorate the parent journal is a housekeeping gap, not a resolution
+        // failure (review point 2): on next startup the successor's own RecoveryOfOperationId makes
+        // it, not the stale parent, authoritative in OperationRecoveryGraph.Analyze regardless of
+        // whether this write landed - nothing is silently lost, just not yet tidied up. Must not
+        // rethrow: that would report "Continue failed" for a Continue that actually started. Not
+        // adding a same-session "reject or adopt an existing successor" check on top of this: once
+        // _pendingRecovery only clears after success, a same-session retry has nothing left to act on
+        // (there's no pending recovery to resolve again), so that failure mode isn't reachable here.
+    }
+}
+
+private static void TryDeleteBundleDirectory(string bundleDirectory)
+{
+    try
+    {
+        if (Directory.Exists(bundleDirectory))
+            Directory.Delete(bundleDirectory, recursive: true);
+    }
+    catch (Exception)
+    {
+        // Best-effort. Verified against OperationBundleDiscovery.LoadNonTerminalActiveJournals (both
+        // call sites, OperationBundleDiscovery.cs:32,61): a bundle whose journal.json is missing or
+        // fails to load is skipped outright, never treated as an interrupted operation needing
+        // recovery. A leftover journal-less bundle is inert disk clutter, not a correctness risk.
+    }
+}
 ```
 
-Both are `false` in the `_blockedMultiRootGraph` branch and the ordinary `Idle` branch (matching
-`CanResolveRecovery`'s existing pattern in both).
-
-**Section 2's decoupling, applied**: `PendingRecoveryContext` gains a new field,
-`public LiveModSnapshot? LiveSnapshot { get; set; }`, populated by `TryAdvanceClassification`
-independently of plan validity. The method's structure changes from "check plan valid, else
-permanently unavailable, else attempt IPC" to: always attempt the (already-throttled) IPC read once
-artifact checks complete, regardless of plan validity; store the raw snapshot unconditionally on
-success; only additionally compute `Assessment`/`Classifications` when `pending.Plan is not null`.
-`ClassificationStatus` semantics are otherwise unchanged (`WaitingForProvider`/`Classified`/
-`ClassificationUnavailable` still exist, still gate `RecoveryClassificationPending` the same way) — this
-is additive, not a rewrite of D1's state machine.
-
-**A real ordering dependency, resolved before writing the code below (not left implicit)**:
-`StartApply`/`StartRestore`'s existing admission guard (`OperationController.cs:126`) throws if
-`_pendingRecovery is not null` — added during D1's final review specifically to close a masking hole.
-This means `ResolveContinue`/`ResolveRestorePreviousState` cannot call `StartApply`/`StartRestore`
-while `_pendingRecovery` is still set, but per the 8-step ordering, the *original* journal's resolution
-(step 7) must be persisted *after* the new operation is already active (step 6). So `_pendingRecovery`
-must be cleared *before* calling `StartApply`/`StartRestore`, with the original journal's resolution
-write happening afterward as its own explicit step — captured in local variables first so clearing
-`_pendingRecovery` doesn't lose access to the interrupted journal/bundle directory:
+**`ResolveContinue`** — takes its own fresh live read, re-derives the assessment from it, and rejects
+duplicates before building anything:
 
 ```csharp
 public void ResolveContinue()
 {
-    if (_pendingRecovery is not { Assessment: { } assessment, Plan: { } plan } pending)
-        throw new InvalidOperationException("No pending recovery with a valid classification to continue.");
+    if (_pendingRecovery is not { Plan: { } plan } pending || pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
+        throw new InvalidOperationException("No pending recovery with a valid plan to continue.");
 
-    var result = ContinuationPlanner.TryBuildResidualMoves(plan, assessment);
+    var freshSnapshot = ReadFreshLiveModsOrThrow();
+    if (freshSnapshot.DuplicateIdentifiers.Count > 0)
+        throw new InvalidOperationException("Continue is not available - live state has duplicate identifiers.");
+
+    var freshAssessment = RecoveryAssessmentBuilder.Build(plan, freshSnapshot);
+    var result = ContinuationPlanner.TryBuildResidualMoves(plan, freshAssessment);
     if (result.Status != ContinuationPlanStatus.Ready)
-        throw new InvalidOperationException("Continue is not available for the current recovery state.");
+        throw new InvalidOperationException("Continue is not available for the current live state.");
 
     var newPlan = OperationPlanBuilder.BuildOperationPlan(plan.Type, result.ResidualMoves);
     var newSnapshot = RollbackHistory.CaptureSnapshot(
-        assessment.LiveSnapshot.Mods.Values.ToList(), label: null,
+        freshSnapshot.Mods.Values.ToList(), label: null,
         autoDescription: $"Snapshot before continuing interrupted operation {pending.Journal.OperationId}");
 
-    var newBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, newPlan.OperationId);
-    OperationPlanCodec.Save(OperationBundlePaths.PlanPath(newBundleDirectory), newPlan);
-    OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(newBundleDirectory), newSnapshot);
+    StartRecoverySuccessorOrThrow(pending, newPlan, newSnapshot, OperationResolution.ContinuedByNewOperation);
+}
 
-    var interruptedJournal = pending.Journal;
-    var interruptedBundleDirectory = pending.BundleDirectory;
-    _pendingRecovery = null; // clear before StartApply/StartRestore - their admission guard requires this
-
-    if (plan.Type == OperationType.Apply)
-        StartApply(newPlan, newSnapshot.Id, newBundleDirectory);
-    else
-        StartRestore(newPlan, newSnapshot.Id, newBundleDirectory);
-
-    // Step 7: only now, after the new operation is durably active (StartApply/StartRestore already
-    // persisted Prepared and Mutating checkpoints before returning), mark the interrupted journal
-    // resolved. A crash here leaves both non-terminal - tolerated, see this section's own note above.
-    var resolvedInterruptedJournal = interruptedJournal with
-    {
-        Resolution = OperationResolution.ContinuedByNewOperation,
-        SuccessorOperationId = newPlan.OperationId,
-        UpdatedAt = DateTimeOffset.UtcNow,
-    };
-    OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
-    TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal); // best-effort, same rule as Keep Current
+private LiveModSnapshot ReadFreshLiveModsOrThrow()
+{
+    var result = _adapter.GetLiveMods();
+    if (result.Status != LiveModReadStatus.Success || result.Snapshot is null)
+        throw new InvalidOperationException("Live mod state is not currently available; try again shortly.");
+    return result.Snapshot;
 }
 ```
 
-`ResolveRestorePreviousState()` mirrors this exactly, with two differences: it doesn't need
-`ContinuationPlanner`/`pending.Plan` at all (confirmed §1's reuse finding), and it always produces a
-`Restore`-type plan regardless of the interrupted operation's own type (Restore Previous State means
-"go back to the snapshot," independent of whether the interrupted operation was itself an Apply or a
-Restore):
+**`ResolveRestorePreviousState`** mirrors this — it never needs `ContinuationPlanner`/`pending.Plan` at
+all (confirmed §1's reuse finding), and always produces a `Restore`-type plan regardless of the
+interrupted operation's own type:
 
 ```csharp
 public void ResolveRestorePreviousState()
 {
-    if (_pendingRecovery is not { LiveSnapshot: { } liveSnapshot, Snapshot: { } targetSnapshot } pending)
+    if (_pendingRecovery is not { Snapshot: { } targetSnapshot } pending || pending.SnapshotCheckStatus != ArtifactCheckStatus.Valid)
         throw new InvalidOperationException("No pending recovery with a valid snapshot to restore.");
 
-    var currentMods = liveSnapshot.Mods.Values.ToList();
+    var freshSnapshot = ReadFreshLiveModsOrThrow();
+    if (freshSnapshot.DuplicateIdentifiers.Count > 0)
+        throw new InvalidOperationException("Restore Previous State is not available - live state has duplicate identifiers.");
+
+    var currentMods = freshSnapshot.Mods.Values.ToList();
     var restorePlan = RollbackHistory.BuildRestorePlan(targetSnapshot, currentMods);
     var namedMoves = OperationPlanBuilder.BuildNamedMoves(restorePlan.Moves, currentMods);
     var newPlan = OperationPlanBuilder.BuildOperationPlan(OperationType.Restore, namedMoves);
@@ -330,33 +519,69 @@ public void ResolveRestorePreviousState()
         currentMods, label: null,
         autoDescription: $"Snapshot before restoring interrupted operation {pending.Journal.OperationId} to its prior state");
 
-    var newBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, newPlan.OperationId);
-    OperationPlanCodec.Save(OperationBundlePaths.PlanPath(newBundleDirectory), newPlan);
-    OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(newBundleDirectory), newSnapshot);
-
-    var interruptedJournal = pending.Journal;
-    var interruptedBundleDirectory = pending.BundleDirectory;
-    _pendingRecovery = null;
-
-    StartRestore(newPlan, newSnapshot.Id, newBundleDirectory);
-
-    var resolvedInterruptedJournal = interruptedJournal with
-    {
-        Resolution = OperationResolution.RestoredByNewOperation,
-        SuccessorOperationId = newPlan.OperationId,
-        UpdatedAt = DateTimeOffset.UtcNow,
-    };
-    OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
-    TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal);
+    StartRecoverySuccessorOrThrow(pending, newPlan, newSnapshot, OperationResolution.RestoredByNewOperation);
 }
 ```
 
-**Duplicate live identifiers**: per §9a, both Continue and Restore Previous State should be `Disabled`
-when `assessment.LiveSnapshot.DuplicateIdentifiers` is non-empty (only Keep Current tolerates this,
-per D1). `CanContinueRecovery`/`CanRestorePreviousState`'s computed expressions above need this check
-added explicitly — `pending.LiveSnapshot.DuplicateIdentifiers.Count == 0` as an additional conjunct on
-both. Not shown in the sketches above to keep them focused on the primary logic; called out here so it
-isn't silently dropped when this becomes the actual implementation.
+**Verified, not assumed (review point 7): `RollbackHistory.BuildRestorePlan` already has well-defined
+missing-identifier semantics.** `RestorePlan` (`RollbackHistory.cs:16-20`) already separates
+`SkippedUninstalledIdentifiers` (present in the target snapshot, absent from live — not silently
+dropped) and `RootRelocatedIdentifiers` (present live, absent from the target — relocated to the
+Penumbra root, not silently ignored) from `Moves`/`UnchangedIdentifiers`. This is the same machinery
+Plan C's ordinary History-tab Restore already ships with. Restore Previous State inherits these exact
+properties — no new completeness gate, no new result-surfacing (still deferred to Plan E, same boundary
+Plan C already drew). §8 adds a test asserting this inheritance explicitly rather than leaving it
+implicit.
+
+**Verified, not assumed (review point 8): an empty Continue already has a proven terminal path.** Plan
+C's own controller-level test confirmed a zero-step `OperationPlan` reaches terminal correctly through
+the real engine (`RefreshResult.Success` + an empty `LiveModReadResult`, three `Update()` calls). Continue
+producing zero residual moves needs no special-casing — `StartRecoverySuccessorOrThrow` with an
+empty-steps plan follows the identical path. §8 adds a Continue-specific test confirming this wiring,
+since Continue's own plumbing is new even though the underlying zero-step behavior isn't.
+
+**Availability, replacing D1's placeholder single `CanResolveRecovery` boolean.** New
+`OperationStateSnapshot` fields (`CanResolveRecovery` is unchanged — still "Keep Current is available"):
+
+```csharp
+bool CanContinueRecovery,
+bool CanRestorePreviousState,
+```
+
+**Revised after review (point 10 and 11): computed once when classification/live-read settle, cached on
+`PendingRecoveryContext`, read as-is in `PublishState()` — not recomputed on every publish.**
+`PendingRecoveryContext` gains:
+
+```csharp
+public bool CanContinueRecovery { get; set; }
+public bool CanRestorePreviousState { get; set; }
+```
+
+Recomputed at the end of `TryAdvanceClassification` (§2), right after `LiveSnapshot`/`Assessment`/
+`ClassificationStatus`/`LiveReadStatus` are updated:
+
+```csharp
+private static void RecomputeResolutionAvailability(PendingRecoveryContext pending)
+{
+    pending.CanContinueRecovery = pending.ClassificationStatus == RecoveryClassificationStatus.Classified
+        && pending.Assessment is not null
+        && pending.LiveSnapshot!.DuplicateIdentifiers.Count == 0
+        && ContinuationPlanner.TryBuildResidualMoves(pending.Plan!, pending.Assessment).Status == ContinuationPlanStatus.Ready;
+
+    pending.CanRestorePreviousState = pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid
+        && pending.LiveReadStatus == RecoveryLiveReadStatus.Available
+        && pending.LiveSnapshot!.DuplicateIdentifiers.Count == 0;
+}
+```
+
+`PublishState()`'s `_pendingRecovery`-populated branch reads `pending.CanContinueRecovery`/
+`pending.CanRestorePreviousState` directly. Both default `false` and stay `false` in the
+`_blockedMultiRootGraph` branch and the ordinary `Idle` branch, matching `CanResolveRecovery`'s existing
+pattern in both. **These cached booleans are advisory (button-enablement) only** — per §2, the actual
+resolution methods above always take their own fresh read and re-derive everything from it; a button
+being enabled is a hint, not a precondition the resolution methods trust blindly. `ResolveContinue`/
+`ResolveRestorePreviousState` re-check duplicate identifiers against the *fresh* read even though the
+cached booleans already checked them against the *cached* one, because those two reads can disagree.
 
 ## 6. `Plugin.cs` and `MainWindow`: wiring
 
@@ -390,14 +615,18 @@ if (operationState.CanRestorePreviousState && ImGui.Button("Restore Previous Sta
 // ...popup calls _plugin.ResolveRestorePreviousState()...
 ```
 
-Since Continue/Restore Previous State both start a **new async operation** rather than resolving
-synchronously (unlike Keep Current), the panel needs its own completion-detection block — matching the
-exact `Kind`-gated pattern Plan C's MainWindow work established for Apply/Restore's own tabs, since a
-Continue/Restore-Previous-State operation is otherwise indistinguishable in `OperationController.State`
-from an ordinary user-initiated Apply/Restore. This plan's crude panel does not attempt a polished
-progress display (that's Plan E's job, same deferral as everywhere else) — just enough to avoid the
-panel silently vanishing mid-operation with no feedback, then reappearing confusingly if the new
-operation itself hits `RequiresRecovery`.
+**Revised after review (point 12): no new completion observer needed.** The original draft argued the
+crude panel needed its own `Kind`-gated completion-detection block since a Continue/Restore-Previous-
+State successor is "otherwise indistinguishable from an ordinary user-initiated Apply/Restore." That's
+true, but it's not a problem — the successor genuinely *is* an Apply or Restore operation from the
+engine's perspective (`Kind` is one of exactly those two values, never a third). Plan C's existing
+`Kind`-gated completion-detection blocks on the Apply and Restore tabs already observe it correctly,
+the same way they'd observe any other Apply/Restore. Adding a second observer in the recovery panel
+would just be a redundant poll of the same state. Once Continue/Restore Previous State starts the
+successor, the crude panel's only remaining job is to stop showing the now-resolved recovery UI (which
+it already does — `_pendingRecovery` is cleared, so `PublishState()` no longer reports a pending
+recovery at all) and let the existing Apply/Restore tab pick up the successor's progress like any other
+operation of that type.
 
 ## 7. What D2 does not cover
 
@@ -413,24 +642,72 @@ operation itself hits `RequiresRecovery`.
 Pure/xUnit-testable:
 - `ContinuationPlanner.TryBuildResidualMoves`: one test per classification's residual action
   (`AtIntended`/`AtBoth` produce no move; `AtSnapshot`/`AtKnownIntermediate` produce a move from live
-  path to `FinalRawPath`; `AtNeither`/`MissingLive` present anywhere blocks the whole result); a
-  genuine `AtKnownIntermediate` collision (two residual moves computed to the same `CurrentPath`)
-  produces `Blocked`, not a thrown exception escaping the method; an all-`AtIntended`/`AtBoth` plan
-  produces `Ready` with an empty move list (a valid, no-op Continue).
+  path to `FinalRawPath`; `AtNeither`/`MissingLive` present anywhere blocks the whole result with
+  `Reason == BlockingClassificationPresent`); a genuine `AtKnownIntermediate` collision (two residual
+  moves computed to the same `CurrentPath`) produces `Blocked`/`ReplanFailed`, not a thrown exception
+  escaping the method; an all-`AtIntended`/`AtBoth` plan produces `Ready` with an empty move list (a
+  valid, no-op Continue); a classification whose identifier has no matching `RecoveryTarget` (or whose
+  `LiveSnapshot` is missing the identifier despite a non-`MissingLive` state) produces
+  `Blocked`/`InconsistentRecoveryTargets` rather than throwing — proves the method is total even though
+  this input shape isn't reachable from a correctly-constructed `RecoveryAssessment` today.
 - `OperationPlanBuilder.BuildOperationPlan`: existing `BuildRestoreOperationPlan_*` tests renamed and
   updated to pass `OperationType.Restore` explicitly, same assertions; one new test passing
   `OperationType.Apply` to confirm the type parameter is honored, not hardcoded.
+- `TryAdvanceClassification`'s revised structure (section 2): a plan-invalid, snapshot-valid pending
+  recovery still populates `LiveSnapshot`/`LiveReadStatus.Available` once IPC succeeds, `Assessment`
+  stays null, `CanRestorePreviousState` becomes true while `CanContinueRecovery` stays false; a
+  plan-invalid pending recovery keeps attempting the live read on subsequent `Update()` calls even
+  after `ClassificationStatus` settles to `ClassificationUnavailable` (proves the revised outer gate in
+  `Update()` doesn't stop polling once only one of the two statuses has settled); a pending recovery
+  where *both* `PlanCheckStatus` and `SnapshotCheckStatus` are invalid never calls `GetLiveMods()` at
+  all (proves the "don't read when nothing could use it" optimization).
 - `OperationController.ResolveContinue`/`ResolveRestorePreviousState`, using the existing
   `FakePenumbraOperations`/`FakeClock` test doubles and the D1-established `NewControllerWithPendingRecovery`
-  helper: happy path for each (new operation starts, correct `OperationType`, interrupted journal
-  resolved with the right `Resolution`/`SuccessorOperationId`, best-effort relocated); Continue blocked
-  when classification shows a blocking state (throws, `_pendingRecovery` untouched); Restore Previous
-  State available even when `PlanCheckStatus` is `Invalid` but `SnapshotCheckStatus` is `Valid` (proves
-  section 2's decoupling); both disabled when `DuplicateIdentifiers` is non-empty; calling either with
-  no pending recovery throws.
-- `TryAdvanceClassification`'s revised structure (section 2): a plan-invalid, snapshot-valid pending
-  recovery still populates `LiveSnapshot` once IPC succeeds, `Assessment` stays null,
-  `CanRestorePreviousState` becomes true while `CanContinueRecovery` stays false.
+  helper:
+  - Happy path for each: new operation starts, correct `OperationType`, interrupted journal resolved
+    with the right `Resolution`/`SuccessorOperationId`, best-effort relocated.
+  - Each takes its own fresh `GetLiveMods()` read distinct from whatever `FakePenumbraOperations` was
+    configured to return during D1's own classification pass — configure the fake to return a
+    *different* live snapshot for the resolution-time call than the classification-time call, and
+    assert the resolved plan/snapshot reflect the fresh one, not the cached one (proves point 4's fix).
+  - `GetLiveMods()` returning `ProviderUnavailable`/`InvalidData` at resolution time throws, and
+    `_pendingRecovery` is untouched (the cached `LiveSnapshot` being `Available` earlier doesn't
+    guarantee it still is now).
+  - Continue blocked when a fresh classification shows a blocking state even though the *cached*
+    `CanContinueRecovery` was `true` (proves the fresh re-derivation, not the cached one, gates the
+    actual resolution).
+  - Restore Previous State available even when `PlanCheckStatus` is `Invalid` but `SnapshotCheckStatus`
+    is `Valid` (proves section 2's decoupling).
+  - Both throw when the fresh read's `DuplicateIdentifiers` is non-empty, even when the cached
+    `CanContinueRecovery`/`CanRestorePreviousState` was `true` at the time classification last ran
+    (proves the fresh duplicate check, not just the cached one).
+  - Calling either with no pending recovery throws.
+  - `StartOperation`/`StartApply`/`StartRestore` failing after plan/snapshot files are written (inject
+    via a plan that fails `CanStartNext`, or an `_active` already populated) leaves `_pendingRecovery`
+    unchanged and deletes the partially-written bundle directory (proves point 1 and point 3's fixes
+    together); a forced `Directory.Delete` failure (e.g. a locked file) during that cleanup does not
+    propagate — the original exception from `StartOperation` still surfaces, not the cleanup failure.
+  - The parent-journal-resolution write throwing (simulate via an unwritable `interruptedBundleDirectory`)
+    does not propagate out of `ResolveContinue`/`ResolveRestorePreviousState` — the successor is
+    already active and the call returns normally (proves point 2's fix); a subsequent
+    `OperationBundleDiscovery.RunStartupDiscovery` over that same on-disk state (both journals
+    non-terminal) surfaces the successor, not the parent, as authoritative — reusing D1's own graph
+    test fixtures rather than re-deriving `OperationRecoveryGraph`'s behavior here.
+  - An interrupted Apply's Continue produces an Apply-type successor; an interrupted Restore's Continue
+    produces a Restore-type successor; Restore Previous State always produces a Restore-type successor
+    regardless of the interrupted operation's own type.
+  - Continue with zero residual moves (every classification `AtIntended`/`AtBoth`) starts a zero-step
+    successor and that successor reaches terminal correctly, using the same driving sequence
+    (`RefreshResult.Success` + empty `LiveModReadResult`, three `Update()` calls) Plan C's own zero-step
+    test already established — proves point 8's finding for this specific new call path.
+  - Restore Previous State against a target snapshot containing an identifier absent from the fresh
+    live read, and a fresh live read containing an identifier absent from the target snapshot, both
+    complete successfully and route through `SkippedUninstalledIdentifiers`/`RootRelocatedIdentifiers`
+    respectively (not silently dropped) — proves point 7's finding holds through this new call path,
+    not just through `RollbackHistory`'s own existing unit tests.
+  - `OperationType` values other than `Apply`/`Restore` reaching `OperationPlanBuilder.BuildOperationPlan`
+    are rejected (existing `OperationPlan.Create`/`ApplyPlanner` validation, not new code — a
+    regression guard, not new behavior).
 
 Not automatable: `Plugin.cs`/`MainWindow.cs` wiring — same documented Dalamud-coupled limitation as
 every prior plan.
