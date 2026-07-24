@@ -1012,6 +1012,39 @@ public class OperationControllerTests
         }
     }
 
+    [Fact]
+    public void ResolveKeepCurrent_ActiveOperationRequiresRecovery_ResolvesAndUnblocks()
+    {
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(Success);
+        adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.ProviderUnavailable));
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewController(adapter, new FakeClock(), operationsRoot: dir.FullName);
+            var plan = SinglePlan();
+            controller.StartApply(plan, Guid.NewGuid(), OperationBundlePaths.BundleDirectory(dir.FullName, active: true, plan.OperationId));
+            controller.Update(); // Mutating -> Refreshing
+            controller.Update(); // Refreshing -> RecoveryRequired (_active.RequiresRecovery = true)
+            Assert.True(controller.State.RequiresRecovery);
+            Assert.True(controller.State.CanResolveRecovery);
+
+            var result = controller.ResolveKeepCurrent();
+
+            Assert.Equal(OperationController.KeepCurrentResolutionResult.ResolvedAndArchived, result);
+            Assert.False(controller.State.RequiresRecovery);
+            Assert.True(controller.State.CanStartApply);
+            Assert.True(controller.State.CanStartRestore);
+            var completedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, plan.OperationId);
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var resolved));
+            Assert.Equal(OperationResolution.AcceptedCurrentState, resolved!.Resolution);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     private static OperationController NewControllerWithBlockedMultiRoot(
         FakePenumbraOperations adapter, FakeClock clock, string operationsRoot, IReadOnlyList<Guid> ids)
     {

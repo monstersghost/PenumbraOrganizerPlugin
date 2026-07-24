@@ -57,6 +57,7 @@ public sealed class OperationController
         public required OperationPlan Plan { get; init; }
         public required PathMutationOperation Mutation { get; init; }
         public required OperationCheckpointer Checkpointer { get; init; }
+        public required string BundleDirectory { get; init; }
         public RefreshSettlement? Refresh { get; set; }
         public VerificationSettlement? Verification { get; set; }
         public bool RequiresRecovery { get; set; }
@@ -148,6 +149,7 @@ public sealed class OperationController
             Plan = plan,
             Mutation = new PathMutationOperation(plan, _adapter, _clock, _diagnostics, bundleDirectory),
             Checkpointer = checkpointer,
+            BundleDirectory = bundleDirectory,
         };
         _stopRequested = false;
 
@@ -229,17 +231,39 @@ public sealed class OperationController
 
     public KeepCurrentResolutionResult ResolveKeepCurrent()
     {
-        if (_pendingRecovery is not { } pending)
-            throw new InvalidOperationException("No pending recovery to resolve.");
+        if (_pendingRecovery is { } pending)
+        {
+            var resolvedJournal = pending.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(pending.BundleDirectory), resolvedJournal);
+            pending.Journal = resolvedJournal; // commit point - everything below is best-effort
 
-        var resolvedJournal = pending.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
-        OperationJournalCodec.Save(OperationBundlePaths.JournalPath(pending.BundleDirectory), resolvedJournal);
-        pending.Journal = resolvedJournal; // commit point - everything below is best-effort
+            var result = TryRelocateToCompleted(pending.BundleDirectory, resolvedJournal);
+            _pendingRecovery = null;
+            PublishState();
+            return result;
+        }
 
-        var result = TryRelocateToCompleted(pending.BundleDirectory, resolvedJournal);
-        _pendingRecovery = null;
-        PublishState();
-        return result;
+        // Live, in-session checkpoint-write failure on an Apply/Restore currently in progress
+        // (RequestCancellation, Update's catch block, AdvanceActiveOperation's Refreshing/Verifying
+        // branches all set this) - independent from the startup-discovered _pendingRecovery case
+        // above, but resolved the same way: commit the resolution to the journal, then best-effort
+        // relocate. Clearing _active afterward is deliberate - the operation is being abandoned, not
+        // continued, so there is nothing left to advance, and PublishState() should fall through to
+        // ordinary Idle (or whatever _pendingRecovery/_blockedMultiRootGraph state remains) rather
+        // than keeping a resolved-but-still-RequiresRecovery-looking context around.
+        if (_active is { RequiresRecovery: true } active)
+        {
+            var resolvedJournal = active.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(active.BundleDirectory), resolvedJournal);
+            active.Journal = resolvedJournal; // commit point - everything below is best-effort
+
+            var result = TryRelocateToCompleted(active.BundleDirectory, resolvedJournal);
+            _active = null;
+            PublishState();
+            return result;
+        }
+
+        throw new InvalidOperationException("No pending recovery to resolve.");
     }
 
     // Resolves every journal in the blocked graph, not only the "authoritative" leaves - an
