@@ -255,23 +255,42 @@ doing so would need zero new IPC surface and zero new risk.
   lives. Appending a brand-new tag name there would be low-risk (simple JSON array), but doesn't by
   itself tag anything.
 
-**The detection problem is entirely separate and still unsolved.** Even with a safe write path,
-there is no IPC or file signal anywhere for "this mod fits body base X" — unlike Gear/Body/NPC
-classification, which is grounded in Penumbra's own structured `GetChangedItems` data. Body-base
-compatibility would have to come from fuzzy heuristics on mod/file/material names, needing a
-user-configurable matching-phrase system (per Arae's own framing) — a real, separate design problem
-with no reliable, locale-invariant signal like the ones every other classifier in this codebase
-insists on (see Detailed gear-slot sorting's "never guess" note above — the same principle applies
-here).
+**The detection problem is more tractable than an earlier draft of this section claimed, for coarse
+body-base detection specifically.** `ModEquipmentFileReader` (built for gear-slot classification,
+`PenumbraOrganizer.Plugin/Organizer/Classification/ModEquipmentFileReader.cs`) already reads each
+mod's `meta.json`/`group_*.json` `Files` dictionary off disk. Its keys are internal FFXIV game paths
+(used today for slot detection) and its **values are the mod's own local file paths, chosen by the
+mod author**, not generated or translated by the game. Those local paths commonly reference the
+body base by name (`bibo`, `gen3`, etc., per real-world convention in the modding community) since
+that is how authors signal compatibility to users. Matching known literal brand strings against
+author-chosen file paths is the same category of signal this codebase already relies on
+successfully elsewhere: the NPC name matcher and the `KnownEquipmentPlaceholders` table (Body
+classification's Smallclothes/"Emperor's New..." detection) both match curated literal strings
+against author/game-data text, not translated UI. This is not the same rejected category as the
+gear-slot English-keyword heuristic above, which was rejected specifically because in-game item
+display names are translated, locale-dependent payload text; mod authors' own file/folder naming is
+neither.
 
-**Why this is parked rather than designed:** the write side (per-mod `meta.json` edits) is a
-materially larger, riskier surface than any existing write feature in this plugin, and the
-detection side has no known reliable signal yet. Revisit if either (a) multiple independent users
-ask for this, not just one idea being tested, or (b) someone identifies a concrete, reliable
-detection signal worth designing around. If picked up, treat it as two separate decisions requiring
-their own explicit scope confirmation (matching the pattern Apply/Folder Cleanup already
-established): read-only tag surfacing (safe, cheap, useful on its own) is a much smaller ask than
-auto-detect-and-write (real corruption risk, unsolved detection problem).
+**Detailed size variants (chest size, leg size, etc.) are a separate, harder problem**, not covered
+by the above. A single mod commonly offers multiple sizes as option-group choices within one mod
+(e.g. a "Chest Size" group with Small/Medium/Large/Flat suboptions), not one fixed value per mod, so
+detecting size would mean parsing option-group structure and per-option file names, a materially
+bigger surface than the flat "does this mod's file paths mention a known body-base brand" check.
+Not yet investigated in that depth.
+
+**Why this is still parked, not designed:** the detection signal for coarse body-base compatibility
+is genuinely more promising than first assessed, but two things still block a design: (1) the write
+side (per-mod `meta.json` edits, no IPC writer, thousands of individual per-mod files instead of one
+shared file) remains a materially larger, riskier surface than any existing write feature in this
+plugin, and (2) no one has yet built or validated a real curated brand-string list against a real
+mod library the way the NPC name list was validated before it shipped. Revisit if either (a)
+multiple independent users ask for this, not just one idea being tested, or (b) someone puts in the
+same kind of real-library validation work the NPC name matcher and gear-slot classifier both went
+through before shipping. If picked up, treat it as two separate decisions requiring their own
+explicit scope confirmation (matching the pattern Apply/Folder Cleanup already established):
+read-only tag surfacing (safe, cheap, useful on its own) is a much smaller ask than
+auto-detect-and-write (real corruption risk, and the write side stays hard regardless of how good
+detection gets).
 
 ## Cosmetic / non-blocking
 
