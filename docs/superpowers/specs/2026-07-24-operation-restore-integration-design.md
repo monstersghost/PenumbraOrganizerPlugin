@@ -528,11 +528,18 @@ than differentiating by outcome:
   `RequiresRecovery == true`** (the guard fix in §3 — this is the most important new test in this
   plan, proving the controller's own admission rule matches its own `PublishState` derivation).
 - **A genuinely empty `ExecutionSteps`/`RecoveryTargets` plan started via `StartRestore` reaches a
-  terminal, UI-consumable state on the first `Update` tick, asserted in full**: `Kind ==
+  terminal, UI-consumable state after the usual three `Update` calls, asserted in full**: `Kind ==
   OperationType.Restore`, `CanStartRestore == true`, `RequiresRecovery == false`, `ProcessedSteps ==
-  0`, `TotalSteps == 0`. This single test both covers the zero-step gap identified in §5 *and* proves
-  the terminal-retention claim in §9 (`Kind` surviving into a terminal, UI-consumed snapshot) with a
-  real assertion rather than an inference from a doc comment.
+  0`, `TotalSteps == 0`. Verified empirically while writing the implementation plan, correcting an
+  earlier assumption in this document: `Update()` advances at most one stage per call (each stage is
+  its own early-return branch in `AdvanceActiveOperation`), so a zero-step plan needs the same three
+  calls as any other plan (Mutating→Refreshing→Verifying→Completed) - it just has nothing to do
+  during the first one. Refreshing/Verifying still call into the adapter even with zero recovery
+  targets (confirmed by running the test with no adapter responses enqueued: it settles as
+  `FailedBeforeMutation`, not `Completed`), so the test still needs a `RefreshResult.Success` and an
+  empty `LiveModReadResult` enqueued. This single test both covers the zero-step gap identified in §5
+  *and* proves the terminal-retention claim in §9 (`Kind` surviving into a terminal, UI-consumed
+  snapshot) with a real assertion rather than an inference from a doc comment.
 - `OperationPlanBuilder.BuildNamedMoves`: happy path resolves names correctly; throws naming the
   offending identifiers when `currentMods` contains a duplicate identifier; throws with a named
   identifier when a move's identifier isn't found in `currentMods`.
