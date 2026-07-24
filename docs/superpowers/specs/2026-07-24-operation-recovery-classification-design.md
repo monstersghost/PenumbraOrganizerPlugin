@@ -13,12 +13,17 @@ Plan D was split in two, given its combined scope (classification, startup wirin
 recovery resolutions) is comparable to prior split plans (A1/A2, B1/B2):
 
 - **Plan D1 (this plan):** `RecoveryClassifier`, `RecoveryAssessment`, startup discovery wiring into
-  `Plugin.cs`, the **Keep Current** resolution end-to-end, and — added in this revision — **a crude,
-  minimal `MainWindow` recovery panel**. D1 cannot safely wire startup enforcement (disabling every
-  organizer action whenever an interrupted operation is found) without giving the user *some* way to
-  resolve it; shipping only the backend and leaving the lockout live with no UI anywhere to call it
-  would be a real regression, not a deferral. This matches the same precedent every prior plan already
-  set (B2/C both shipped a crude UI stub alongside their backend, never backend-only).
+  `Plugin.cs`, the **Keep Current** resolution end-to-end, a bulk **"Accept Current State and Close
+  All Interrupted Operations"** fallback for the `MultipleDisconnectedRoots`/`CycleDetected` case, and
+  **a crude, minimal `MainWindow` recovery panel** exposing both. D1 cannot safely wire startup
+  enforcement (disabling every organizer action whenever an interrupted operation is found) without
+  giving the user *some* way to resolve it, for *every* case discovery can produce — not just the
+  common single-authoritative one. An explanatory message with no action for the multi-root/cycle case
+  is still a permanent, unrecoverable lockout with no escape hatch short of manual filesystem surgery;
+  that's not an acceptable interim state even for a "crude" plan. This matches the same precedent
+  every prior plan already set (B2/C both shipped a crude UI stub alongside their backend, never
+  backend-only) — extended here to mean *every* state the backend can reach needs *some* resolution,
+  not just the common one.
 - **Plan D2 (later):** Continue and Restore Previous State — both start a *new* operation from
   residual moves, reusing `OperationController.StartApply`/`StartRestore` (Plan C) unchanged.
 
@@ -73,31 +78,36 @@ OperationController.RegisterDiscoveredRecovery(discovery)
     │    SingleAuthoritative → stores _pendingRecovery (journal + bundle dir), RequiresRecovery=true,
     │                          CanResolveRecovery=true immediately (Keep Current needs no classification)
     │    MultipleDisconnectedRoots / CycleDetected → stores _blockedMultiRootGraph,
-    │                          RequiresRecovery=true, CanResolveRecovery=false (no resolution exists yet)
+    │                          RequiresRecovery=true, CanResolveRecovery=true too (the bulk fallback
+    │                          below is a real resolution, just a blunter one than the single-journal case)
     ▼
 OperationController.Update() — called every Framework.Update tick, same as today
-    │  NEW: if _pendingRecovery has an unchecked artifact or unclassified assessment, and the
-    │  per-attempt throttle interval has elapsed, try to advance it one step (check plan, check
-    │  snapshot, or call GetLiveMods()) - each artifact is checked AT MOST ONCE per registration,
-    │  not every frame; IPC reads are throttled to at most once per second
+    │  NEW: if _pendingRecovery's ClassificationStatus is still WaitingForProvider, and the per-
+    │  attempt throttle interval has elapsed, try to advance it (check plan/snapshot artifacts once
+    │  ever, then call GetLiveMods() at most once per second); a permanently-invalid artifact or an
+    │  InvalidData IPC response moves it straight to ClassificationUnavailable, never retried again
     ▼
 MainWindow.Draw() — NEW, before the existing tab bar
     │  if RequiresRecovery: render a crude recovery panel (see §9) instead of/above normal tab content
-    │  if CanResolveRecovery: "Keep Current State" button → Plugin.ResolveKeepCurrent()
-    │  else (blocked multi-root): a plain message explaining this build can't resolve it yet
+    │  if IsBlockedByMultipleRoots: "Accept Current State and Close All Interrupted Operations" button
+    │                          → Plugin.AcceptAllAndCloseInterruptedOperations()
+    │  else: "Keep Current State" button → Plugin.ResolveKeepCurrent()
     ▼
-Plugin.ResolveKeepCurrent()
-    │  OperationController.ResolveKeepCurrent(): persists the resolved (terminal) journal FIRST -
-    │  that's the commit point - then best-effort relocates active/ → completed/ (idempotent-skip if
-    │  the destination already exists, matching OperationBundleDiscovery's own precedent), clears
-    │  _pendingRecovery regardless of whether relocation succeeded, since the persisted journal is
-    │  authoritative and a failed relocation self-heals on the next startup's discovery pass
+Plugin.ResolveKeepCurrent() / AcceptAllAndCloseInterruptedOperations()
+    │  Both share one commit-point rule (§7): persist each resolved (terminal) journal FIRST - that's
+    │  the commit point - then best-effort relocate active/ → completed/ via a shared, collision-
+    │  verifying helper (checks the existing destination's OperationId/terminality/Resolution actually
+    │  match before treating it as already-done, never just its existence). ResolveKeepCurrent always
+    │  clears its lock once the one journal is persisted, regardless of relocation outcome.
+    │  AcceptAllAndCloseInterruptedOperations resolves every journal in the blocked graph (not only the
+    │  authoritative leaves - an unresolved non-leaf ancestor would recreate the lockout at the next
+    │  startup) and only clears its lock once ALL of them persisted successfully.
     ▼
     RunScan() - controller has no OrganizerState access, stays a Plugin.cs/MainWindow responsibility
 
 (Plan D2: Continue / Restore Previous State - not in this plan, reuses StartApply/StartRestore
  unchanged per §2)
-(Plan E: the real recovery dialog UI, replacing this plan's crude panel - not in this plan)
+(Plan E: the real recovery dialog UI and root-selection - not in this plan)
 ```
 
 ## 4a. Fixing the Plan A2 bug: `OperationRecoveryGraphStatus` needs a fourth value
@@ -306,7 +316,33 @@ public static class RecoveryAssessmentBuilder
 }
 ```
 
-## 7. `OperationController`: `PendingRecoveryContext`, throttled classification, Keep Current
+**The fingerprint's contract, stated explicitly per review:** it hashes `PenumbraPathSemantics.Normalize`d
+paths, so it proves *semantic* live-state continuity (the same mods at the same semantically-equivalent
+locations), not raw byte-for-byte path identity — a purely cosmetic raw-path change (e.g. Penumbra's
+own `" (N)"` suffix reshuffling) will *not* change the fingerprint, by design. D2 must rely on this
+fingerprint only to prove "the same classified generation," never as evidence of exact raw-path
+continuity.
+
+## 7. `OperationController`: `PendingRecoveryContext`, status-aware throttled classification, Keep Current, close-all fallback
+
+**New: `RecoveryClassificationStatus`**, replacing the plain "is it pending" framing with one that
+distinguishes a transient wait from a permanent failure — per review, retrying `GetLiveMods()` forever
+for a response that will never succeed (`InvalidData`) is a real bug, not just an inefficiency, since
+it would permanently masquerade as "still pending" with no way to tell the two apart:
+
+```csharp
+public enum RecoveryClassificationStatus { WaitingForProvider, Classified, ClassificationUnavailable }
+```
+
+- `WaitingForProvider`: no attempt has succeeded yet, but the last attempt's status suggests trying
+  again might work (`TemporarilyUnavailable`, `ProviderUnavailable` at *startup* — unlike mid-operation,
+  where `ProviderUnavailable` means the adapter itself is judged unusable, this is being read at plugin
+  construction time before Penumbra may have finished loading, exactly the "waiting for Penumbra state
+  to become available" window design doc section 9 describes).
+- `Classified`: `GetLiveMods()` returned `Success`; `Assessment` is populated.
+- `ClassificationUnavailable`: either the plan artifact is permanently `Missing`/`Invalid` (§5), or
+  `GetLiveMods()` returned `InvalidData` (a response that parsed but doesn't make sense — retrying
+  won't change that). Terminal for this bundle's lifetime; no further attempts are made.
 
 New private state, parallel to `ActiveOperationContext` but structurally different (no `Mutation`,
 nothing advanced per-frame). `Journal` is settable (`{ get; set; }`), matching
@@ -323,7 +359,8 @@ private sealed class PendingRecoveryContext
     public OperationPlan? Plan { get; set; }
     public ArtifactCheckStatus SnapshotCheckStatus { get; set; } = ArtifactCheckStatus.Unchecked;
     public RollbackSnapshot? Snapshot { get; set; }
-    public RecoveryAssessment? Assessment { get; set; } // null until classification succeeds
+    public RecoveryClassificationStatus ClassificationStatus { get; set; } = RecoveryClassificationStatus.WaitingForProvider;
+    public RecoveryAssessment? Assessment { get; set; } // null unless ClassificationStatus == Classified
     public long? LastClassificationAttemptTimestamp { get; set; } // IElapsedTimeSource.GetTimestamp() ticks, null until the first attempt
 }
 
@@ -397,7 +434,7 @@ already works elsewhere in this same class):
 ```csharp
 public void Update()
 {
-    if (_pendingRecovery is { Assessment: null } pending)
+    if (_pendingRecovery is { ClassificationStatus: RecoveryClassificationStatus.WaitingForProvider } pending)
         TryAdvanceClassification(pending);
 
     if (_active is null || _active.RequiresRecovery)
@@ -425,9 +462,9 @@ private void TryAdvanceClassification(PendingRecoveryContext pending)
     // invalid Snapshot does not block classification (it blocks Restore Previous State, in D2).
     if (pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
     {
-        if (stateChanged)
-            PublishState();
-        return; // permanently blocked for this bundle - re-checked never again, see section 5
+        pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable; // permanent - never re-checked, see section 5
+        PublishState();
+        return;
     }
 
     if (pending.LastClassificationAttemptTimestamp is { } last && _clock.GetElapsedTime(last) < ClassificationRetryInterval)
@@ -439,14 +476,28 @@ private void TryAdvanceClassification(PendingRecoveryContext pending)
 
     pending.LastClassificationAttemptTimestamp = _clock.GetTimestamp(); // record this attempt regardless of outcome
     var liveResult = _adapter.GetLiveMods();
-    if (liveResult.Status != LiveModReadStatus.Success || liveResult.Snapshot is null)
+
+    switch (liveResult.Status)
     {
-        if (stateChanged)
-            PublishState(); // IPC not ready yet - retried after the throttle interval, no error surfaced
-        return;
+        case LiveModReadStatus.Success when liveResult.Snapshot is not null:
+            pending.Assessment = RecoveryAssessmentBuilder.Build(pending.Plan!, liveResult.Snapshot);
+            pending.ClassificationStatus = RecoveryClassificationStatus.Classified;
+            break;
+
+        case LiveModReadStatus.TemporarilyUnavailable:
+        case LiveModReadStatus.ProviderUnavailable:
+            // Retryable at startup specifically - Penumbra may simply not have finished loading yet.
+            // pending.ClassificationStatus already is WaitingForProvider; nothing to change.
+            break;
+
+        case LiveModReadStatus.InvalidData:
+        default:
+            // A response that parsed but doesn't make sense won't be fixed by asking again - stop
+            // retrying rather than let a permanent failure masquerade as "still pending" forever.
+            pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+            break;
     }
 
-    pending.Assessment = RecoveryAssessmentBuilder.Build(pending.Plan!, liveResult.Snapshot);
     PublishState();
 }
 ```
@@ -463,49 +514,75 @@ the throttle test (§11): call `Update()` repeatedly without advancing the clock
 should reach `GetLiveMods()`), then `Advance(TimeSpan.FromSeconds(1))` and call `Update()` again (should
 reach `GetLiveMods()` a second time).
 
-Keep Current — available as soon as there's a single authoritative pending recovery, independent of
-classification or artifact validity, per the review's resolution of the original open question:
+**Precise commit-point rule, stated explicitly per review:** once a resolved (terminal) journal is
+durably saved to disk, the resolving method must return success and clear the corresponding recovery
+lock, even if the subsequent best-effort bundle relocation fails. A relocation failure is logged, never
+rethrown, and never allowed to leave the resolution half-applied — the persisted journal alone is
+authoritative, and `OperationBundleDiscovery`'s own startup relocation pass will finish moving any
+terminal journal it later finds still sitting under `active/`. This rule governs both `ResolveKeepCurrent`
+below and the new bulk fallback that follows it.
+
+A shared helper implements the relocation, since both resolution paths need the identical
+collision-safe logic — **checking more than existence**, per review, before treating a pre-existing
+destination as already-handled:
 
 ```csharp
-public void ResolveKeepCurrent()
+public enum KeepCurrentResolutionResult { ResolvedAndArchived, ResolvedArchiveDeferred }
+
+private KeepCurrentResolutionResult TryRelocateToCompleted(string activeBundleDirectory, OperationJournal resolvedJournal)
+{
+    var completedBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: false, resolvedJournal.OperationId);
+    try
+    {
+        if (Directory.Exists(completedBundleDirectory))
+        {
+            // Blindly trusting "the GUID-named directory exists" as proof of a safe prior relocation
+            // is not enough - verify it actually is the same, already-resolved operation before
+            // treating the active copy as redundant. A mismatch here (same GUID directory present but
+            // not matching) is left entirely alone on both sides and reported as deferred, never
+            // deleted or overwritten - operation IDs are GUIDs, so a mismatch is not expected, but this
+            // method must not assume it never happens.
+            var matches = OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var existing)
+                && existing is not null
+                && existing.OperationId == resolvedJournal.OperationId
+                && existing.IsTerminal
+                && existing.Resolution == resolvedJournal.Resolution;
+            if (matches)
+                return KeepCurrentResolutionResult.ResolvedAndArchived; // already relocated by a prior attempt - nothing left to do
+
+            Plugin.Log.Warning($"Keep Current: completed bundle directory for {resolvedJournal.OperationId} exists but doesn't match the resolved journal - leaving both copies in place.");
+            return KeepCurrentResolutionResult.ResolvedArchiveDeferred;
+        }
+
+        Directory.CreateDirectory(OperationBundlePaths.CompletedDirectory(_operationsRoot));
+        Directory.Move(activeBundleDirectory, completedBundleDirectory);
+        return KeepCurrentResolutionResult.ResolvedAndArchived;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        Plugin.Log.Warning(ex, $"Keep Current: journal resolved but bundle relocation failed for {resolvedJournal.OperationId}.");
+        return KeepCurrentResolutionResult.ResolvedArchiveDeferred;
+    }
+}
+```
+
+Keep Current itself — available as soon as there's a single authoritative pending recovery, independent
+of classification or artifact validity, per the review's resolution of the original open question:
+
+```csharp
+public KeepCurrentResolutionResult ResolveKeepCurrent()
 {
     if (_pendingRecovery is not { } pending)
         throw new InvalidOperationException("No pending recovery to resolve.");
 
-    // The persisted journal is the commit point, not the directory relocation below. Once this
-    // write succeeds, the recovery decision is durable and authoritative regardless of what happens
-    // next - a failed relocation self-heals on the next startup's discovery pass (which already
-    // relocates any terminal journal it finds sitting under active/), so this method does not need
-    // to leave the user re-blocked over a filesystem-move failure it can't itself repair.
     var resolvedJournal = pending.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
     OperationJournalCodec.Save(OperationBundlePaths.JournalPath(pending.BundleDirectory), resolvedJournal);
-    pending.Journal = resolvedJournal;
+    pending.Journal = resolvedJournal; // commit point - everything below is best-effort, per this section's opening rule
 
-    var completedBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: false, resolvedJournal.OperationId);
-    try
-    {
-        // Idempotent-skip on an existing destination, matching OperationBundleDiscovery's own
-        // RelocateTerminalActiveBundles precedent ("already relocated by something else - don't
-        // clobber it") rather than throwing - operation IDs are GUIDs, so the only realistic way
-        // this destination already exists is a retry after this same relocation already succeeded
-        // once before (e.g. a prior call that failed after the journal save but before this method
-        // returned).
-        if (!Directory.Exists(completedBundleDirectory))
-        {
-            Directory.CreateDirectory(OperationBundlePaths.CompletedDirectory(_operationsRoot));
-            Directory.Move(pending.BundleDirectory, completedBundleDirectory);
-        }
-    }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-    {
-        // Relocation failure does not undo the resolution above - see this method's own comment.
-        // Surfaced to the ordinary Dalamud log; not rethrown, since the recovery decision itself
-        // already succeeded and durable-recovery discovery will finish the relocation on next startup.
-        Plugin.Log.Warning(ex, $"Keep Current: journal resolved but bundle relocation failed for {resolvedJournal.OperationId}.");
-    }
-
+    var result = TryRelocateToCompleted(pending.BundleDirectory, resolvedJournal);
     _pendingRecovery = null;
     PublishState();
+    return result;
 }
 ```
 
@@ -516,6 +593,65 @@ Dalamud logging). Whether this warning goes through `Plugin.Log` directly (a new
 this class doesn't have today) or through `IDiagnosticsSink` (already injected, but designed for
 structured per-operation events, not ad-hoc warnings) needs a decision at implementation time — not
 resolved here, flagged so it isn't silently guessed either way.
+
+**The `MultipleDisconnectedRoots`/`CycleDetected` fallback: "Accept Current State and Close All
+Interrupted Operations."** Root selection stays deferred to Plan E, but D1 must not ship a state with
+no escape hatch at all. This resolves *every* journal in the blocked graph, not only the "authoritative"
+leaves — resolving only the leaves would leave any non-terminal ancestor journal still sitting under
+`active/` (an ancestor only appears in this set at all when recovery from it was itself interrupted
+before completing, per `OperationRecoveryGraph`'s own doc comment), which the *next* startup's
+discovery pass would then treat as its own new leaf/root once its (now-terminal) child drops out of the
+non-terminal set — silently recreating the exact lockout this method exists to close. Only unblocks the
+organizer once every journal in the graph durably persists its resolution — a partial failure leaves the
+lockout in place rather than silently under-resolving it:
+
+```csharp
+public IReadOnlyList<Guid> AcceptAllAndCloseInterruptedOperations()
+{
+    if (_blockedMultiRootGraph is not { } graph)
+        throw new InvalidOperationException("No blocked multi-root recovery to resolve.");
+
+    var unresolved = new List<Guid>();
+    foreach (var operationId in graph.AllOperationIds)
+    {
+        var bundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, operationId);
+        if (!OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(bundleDirectory), out var journal) || journal is null)
+        {
+            unresolved.Add(operationId); // can't resolve what won't even load - leave it for a human
+            continue;
+        }
+
+        var resolvedJournal = journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
+        try
+        {
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDirectory), resolvedJournal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Plugin.Log.Warning(ex, $"Accept all: failed to persist resolution for {operationId}.");
+            unresolved.Add(operationId);
+            continue; // the journal write itself is this method's commit point per-operation - a failed
+                       // write here is a real unresolved failure, not deferred to relocation like above
+        }
+
+        TryRelocateToCompleted(bundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
+    }
+
+    if (unresolved.Count > 0)
+    {
+        PublishState(); // still blocked - not every journal could be durably resolved
+        return unresolved;
+    }
+
+    _blockedMultiRootGraph = null;
+    PublishState();
+    return [];
+}
+```
+
+Returns the list of operation IDs that could *not* be resolved (empty on full success) rather than a
+bare bool, so a future diagnostics surface can report exactly what's still stuck without the caller
+needing to re-derive it.
 
 `PublishState()` reads from `_pendingRecovery`/`_blockedMultiRootGraph` when `_active` is null:
 
@@ -533,8 +669,11 @@ private void PublishState()
         State = OperationStateSnapshot.Idle with
         {
             RequiresRecovery = true,
-            RecoveryClassificationPending = false, // nothing pending - blocked on a root choice D1 can't collect
-            CanResolveRecovery = false, // no resolution exists for this case yet
+            RecoveryClassificationPending = false, // nothing to classify per-item in this case - see section 4a/section 9
+            // CanResolveRecovery is true here too, now that AcceptAllAndCloseInterruptedOperations
+            // exists - MainWindow's panel (section 9) uses this exact field to decide which button to
+            // show, so it must reflect "some resolution exists," not "root selection is possible."
+            CanResolveRecovery = true,
             CanStartApply = false, CanStartRestore = false, CanScan = false, CanIndex = false,
             CanRunFolderCleanup = false, CanRunFolderCleanupRollback = false, CanCreateBackup = false,
         };
@@ -547,11 +686,10 @@ private void PublishState()
         State = OperationStateSnapshot.Idle with
         {
             RequiresRecovery = true,
-            // Reflects only whether IPC-backed classification has completed - purely informational
-            // in D1 (nothing yet reads it to gate Continue/Restore Previous State; that's D2). A
-            // permanently degraded artifact (Missing/Invalid) is NOT "pending" - it will never
-            // resolve on its own, which is exactly why this is false in that case, not true forever.
-            RecoveryClassificationPending = pending.PlanCheckStatus == ArtifactCheckStatus.Valid && pending.Assessment is null,
+            // True only while genuinely waiting on IPC to become ready - a permanently degraded
+            // artifact or an InvalidData response both move ClassificationStatus to
+            // ClassificationUnavailable, which is NOT "pending" (it will never resolve on its own).
+            RecoveryClassificationPending = pending.ClassificationStatus == RecoveryClassificationStatus.WaitingForProvider,
             // Keep Current needs neither classification nor a valid plan/snapshot - available the
             // moment a single authoritative interrupted journal is known. D1 temporarily defines
             // this single boolean as "Keep Current is available" - D2 will need to split this into
@@ -569,11 +707,21 @@ private void PublishState()
 }
 ```
 
-A small internal read method, so D1 is fully testable and Plan E doesn't need to reach into private
+`CanResolveRecovery` is now `true` in *both* the single-journal and blocked-multi-root branches, so
+`MainWindow` (§9) needs a way to tell them apart to render the right button — a new controller method,
+rather than another `OperationStateSnapshot` boolean for a distinction that's purely "which crude
+action to offer," not a capability check in its own right. Both this and `GetRecoveryAssessment` are
+small internal read methods so D1 is fully testable and Plan E doesn't need to reach into private
 state later, without locking in a final dialog DTO shape:
 
 ```csharp
 public RecoveryAssessment? GetRecoveryAssessment() => _pendingRecovery?.Assessment;
+
+// Distinguishes which of the two CanResolveRecovery=true cases the crude panel (section 9) is in -
+// a single recoverable journal (offer Keep Current) vs. a blocked multi-root/cycle graph (offer
+// Accept All). Not itself an OperationStateSnapshot field, since it's purely "which crude action to
+// render," not a capability distinct from CanResolveRecovery.
+public bool IsBlockedByMultipleRoots => _blockedMultiRootGraph is not null;
 ```
 
 ## 8. `Plugin.cs`: startup wiring
@@ -593,6 +741,12 @@ public Plugin()
 internal void ResolveKeepCurrent()
 {
     OperationController.ResolveKeepCurrent();
+    RunScan();
+}
+
+internal void AcceptAllAndCloseInterruptedOperations()
+{
+    OperationController.AcceptAllAndCloseInterruptedOperations();
     RunScan();
 }
 ```
@@ -618,13 +772,34 @@ private void DrawRecoveryPanelIfNeeded()
 
     ImGui.TextColored(PluginTheme.CollisionBad, "An interrupted organizer operation was found.");
 
-    if (!operationState.CanResolveRecovery)
+    if (_plugin.OperationController.IsBlockedByMultipleRoots)
     {
         ImGui.TextWrapped(
-            "Multiple interrupted operations were found and can't be automatically resolved in this " +
-            "version of the plugin - every organizer action is disabled until this is fixed in a " +
-            "future update. This is rare; if you need this unblocked sooner, check the plugin log for " +
-            "the operations folder path.");
+            "Multiple interrupted operations were found, and picking which one to recover isn't " +
+            "supported yet in this version. You can abandon all of them and accept whatever Penumbra " +
+            "currently has as correct - this does not undo or redo any moves for any of them, it only " +
+            "stops the plugin from blocking further actions. This is destructive: none of the " +
+            "interrupted operations can be revisited afterward.");
+
+        if (ImGui.Button("Accept Current State and Close All Interrupted Operations"))
+            ImGui.OpenPopup("Close all interrupted operations?");
+
+        if (ImGui.BeginPopupModal("Close all interrupted operations?"))
+        {
+            ImGui.TextColored(ImGuiColors.DalamudYellow,
+                "This abandons every interrupted operation the plugin found. None of them can be " +
+                "continued or rolled back after this - only Keep Current's outcome is possible for all of them.");
+            if (ImGui.Button("Yes, Close All"))
+            {
+                _plugin.AcceptAllAndCloseInterruptedOperations();
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+
         ImGui.Spacing();
         ImGui.Separator();
         return;
@@ -658,6 +833,12 @@ private void DrawRecoveryPanelIfNeeded()
 }
 ```
 
+`AcceptAllAndCloseInterruptedOperations`'s result (the unresolved-ID list) isn't surfaced in this crude
+panel beyond implicitly — if any journal couldn't be resolved, `RequiresRecovery`/
+`IsBlockedByMultipleRoots` both stay true and the same panel simply reappears next frame with nothing
+having visibly changed, which is honest (the operation genuinely didn't fully succeed) even though it
+isn't informative about *why*. A clearer partial-failure message is Plan E's job, not D1's.
+
 Called as the first line of `Draw()`'s body, before the existing tab bar (`ImGui.BeginTabBar`/
 whatever the current structure is — checked against the real file at implementation time). The rest
 of the window still renders below it, not hidden entirely — the existing `CanStartApply`/`CanScan`/etc.
@@ -667,21 +848,40 @@ pattern, so there is no need to duplicate that lockout by hiding the tabs outrig
 ## 10. What D1 does not cover
 
 - Continue and Restore Previous State — Plan D2, reusing `StartApply`/`StartRestore` unchanged per §2.
-- The real recovery dialog UI (per-mod classification detail) and the root-selection UI for
-  `MultipleDisconnectedRoots`/`CycleDetected` — Plan E. D1's crude panel explicitly cannot resolve the
-  multi-root case; it only reports it clearly and blocks the same as the single-root case would.
+- **Root selection** for `MultipleDisconnectedRoots`/`CycleDetected` — choosing to resolve one specific
+  interrupted lineage while continuing to investigate the others is Plan E's job. D1 only offers the
+  all-or-nothing fallback (§7's `AcceptAllAndCloseInterruptedOperations`): abandon every interrupted
+  operation in the graph at once. This is a real, if blunt, resolution — not a report-only lockout —
+  which is the change from the previous revision.
+- The real recovery dialog UI (per-mod classification detail) — Plan E.
 - `RecoveryDialogSnapshot` (the original design's §7b large/rare-read record for the eventual dialog)
-  — not built in this plan. `GetRecoveryAssessment()` (§7) is D1's only externally-queryable surface
-  beyond the existing boolean fields; Plan E will need to expand the controller's read API to build the
-  real dialog, and this document does not claim that surface already exists.
+  — not built in this plan. `GetRecoveryAssessment()`/`IsBlockedByMultipleRoots` (§7) are D1's only
+  externally-queryable surface beyond the existing boolean fields; Plan E will need to expand the
+  controller's read API to build the real dialog, and this document does not claim that surface
+  already exists.
 - Diagnostics dump changes (§10 of the original design) — unrelated to this plan's scope.
 - `CanContinueRecovery`/`CanRestorePreviousState`/`CanKeepCurrent` as separate fields — `CanResolveRecovery`
-  is temporarily defined as "Keep Current is available" for D1 only; D2 will need the real split.
+  is temporarily defined as "some crude resolution is available" for D1 only; D2 will need the real
+  split, since Continue/Restore Previous State's availability rules genuinely differ from Keep Current's.
 
 ## 11. Testing
 
 Pure/xUnit-testable:
-- `OperationRecoveryGraph.Analyze([])` → `NoRecoveryNeeded`, both ID lists empty (the §4a fix).
+
+**§4a fix, end-to-end, not just the direct graph method** (per review — the bug originated in the
+integration between discovery and graph analysis, not merely the enum calculation):
+- `OperationRecoveryGraph.Analyze([])` → `NoRecoveryNeeded`, both ID lists empty.
+- `OperationBundleDiscovery.RunStartupDiscovery` against an empty (or nonexistent) `active/` directory
+  → `NoRecoveryNeeded`.
+- `OperationBundleDiscovery.RunStartupDiscovery` against an `active/` directory containing only
+  already-terminal bundles → `NoRecoveryNeeded` (proves the relocation/exclusion pass and the graph fix
+  compose correctly, not just each in isolation).
+- `OperationController.RegisterDiscoveredRecovery` given a `NoRecoveryNeeded` discovery result → every
+  `OperationStateSnapshot` field matches `Idle` exactly, and `_blockedMultiRootGraph`/`_pendingRecovery`
+  are both never populated (assert via `IsBlockedByMultipleRoots`/`GetRecoveryAssessment()` both being
+  "nothing here," not just `RequiresRecovery == false`).
+
+**Classification and artifacts:**
 - `RecoveryClassifier.Classify`: one test per `ItemRecoveryState` outcome, plus a duplicate-identifiers
   case proving `Classify` itself doesn't special-case it.
 - `ArtifactStatusChecker`: missing file → `Missing`; corrupt file → `Invalid`; valid file → `Valid` with
@@ -690,44 +890,64 @@ Pure/xUnit-testable:
   `LiveStateFingerprint` is deterministic and order-independent; two reads differing only in
   `DuplicateIdentifiers` (same selected dictionary entries, different duplicate set) or only in
   `mod.Name` produce **different** fingerprints (the exact case the original draft's hash collapsed).
-- `OperationController.RegisterDiscoveredRecovery`/`Update`'s classification path/`ResolveKeepCurrent`,
-  using the existing `FakePenumbraOperations`/`FakeClock` test doubles:
-  - `NoRecoveryNeeded` discovery → stays Idle.
-  - A discovered journal with a valid plan and snapshot → `CanResolveRecovery` true immediately (even
-    before any `Update()` call), `RecoveryClassificationPending` true until `GetLiveMods()` succeeds,
-    then false with a populated `GetRecoveryAssessment()`.
-  - A discovered journal with a **missing/invalid plan** → `CanResolveRecovery` stays true throughout
-    (Keep Current unaffected), `RecoveryClassificationPending` stays permanently false (not "pending" -
-    it will never classify), `GetLiveMods()` is never called (assert via the fake adapter's call count).
-  - A discovered journal with a **missing/invalid snapshot but a valid plan** → classification still
-    succeeds (proves the snapshot-independence fix).
-  - `Update()` called many times in a row within the same simulated second → `GetLiveMods()` is called
-    at most once (proves the IPC throttle actually throttles, using `FakeClock.Advance` to control the
-    interval precisely).
-  - Artifact checks are attempted exactly once even across many `Update()` calls with a
-    permanently-missing file (proves the "checked once" fix, via a call-count assertion on a test
-    double around `File.Exists`/the codec, or by asserting `PlanCheckStatus` never flips back to
-    `Unchecked`).
-  - `ResolveKeepCurrent`: sets `Resolution`, relocates `active/` → `completed/`, `CanStartApply`/
-    `CanStartRestore` true afterward; calling it twice in a row (simulating a destination that already
-    exists) does not throw and still ends with `_pendingRecovery` cleared; calling it with no pending
-    recovery throws.
-  - `resolvedJournal.IsTerminal == true` after `Resolution = AcceptedCurrentState` — asserted directly
-    against the real `OperationJournal.IsTerminal` property, not inferred from the enum name (per
-    review: `IsTerminal => Resolution != OperationResolution.None || TerminalStages.Contains(Stage)`,
-    confirmed by reading the property's actual current definition; the `Resolution != None` branch
-    alone is sufficient regardless of `Stage`, so this genuinely already holds without further code
-    changes — this test exists to prove it, not to fix anything).
-  - `MultipleDisconnectedRoots`/`CycleDetected` registration: `RequiresRecovery` true,
-    `RecoveryClassificationPending` false, `CanResolveRecovery` false — permanently, proven by calling
-    `Update()` many times and asserting nothing changes.
+
+**`OperationController.RegisterDiscoveredRecovery`/`Update`'s classification path**, using the existing
+`FakePenumbraOperations`/`FakeClock` test doubles:
+- A discovered journal with a valid plan and snapshot → `CanResolveRecovery` true immediately (even
+  before any `Update()` call), `RecoveryClassificationPending` true until `GetLiveMods()` succeeds,
+  then false with a populated `GetRecoveryAssessment()` (`ClassificationStatus` transitions
+  `WaitingForProvider` → `Classified`).
+- A discovered journal with a **missing/invalid plan** → `CanResolveRecovery` stays true throughout
+  (Keep Current unaffected), `RecoveryClassificationPending` stays permanently false,
+  `ClassificationStatus` becomes `ClassificationUnavailable` on the first `Update()` call, `GetLiveMods()`
+  is never called (assert via the fake adapter's call count).
+- A discovered journal with a **missing/invalid snapshot but a valid plan** → classification still
+  succeeds (proves the snapshot-independence fix).
+- **Retryable vs. permanent `LiveModReadStatus` responses**: `TemporarilyUnavailable` and
+  `ProviderUnavailable` both leave `ClassificationStatus == WaitingForProvider` and are retried on the
+  next throttle-eligible `Update()` call; `InvalidData` moves `ClassificationStatus` to
+  `ClassificationUnavailable` on the very next call and `GetLiveMods()` is never called again afterward
+  (proves permanent failures stop retrying instead of masquerading as pending forever).
+- `Update()` called many times in a row within the same simulated second → `GetLiveMods()` is called
+  at most once (proves the IPC throttle, using `FakeClock.Advance` to control the interval precisely).
+- Artifact checks are attempted exactly once even across many `Update()` calls with a
+  permanently-missing file (proves the "checked once" fix — assert `PlanCheckStatus` never flips back
+  to `Unchecked`, and a call-count assertion on the codec/`File.Exists` path if a test seam allows one).
+
+**`ResolveKeepCurrent`/`TryRelocateToCompleted`:**
+- Sets `Resolution`, relocates `active/` → `completed/`, `CanStartApply`/`CanStartRestore` true
+  afterward, returns `ResolvedAndArchived`.
+- Calling it a second time after the first succeeded (simulating a retry where the destination now
+  genuinely matches — same `OperationId`, terminal, matching `Resolution`) does not throw, still ends
+  with `_pendingRecovery` cleared, returns `ResolvedAndArchived`.
+- A destination directory that exists but does **not** match (different/missing journal, or a matching
+  ID that isn't terminal) → returns `ResolvedArchiveDeferred`, the mismatched directory is left
+  untouched on both sides, `_pendingRecovery` is still cleared (the journal save is still the commit
+  point — this proves the collision-verification fix doesn't accidentally also break the commit-point
+  rule).
+- Calling it with no pending recovery throws.
+- `resolvedJournal.IsTerminal == true` after `Resolution = AcceptedCurrentState` — asserted directly
+  against the real `OperationJournal.IsTerminal` property (confirmed: `Resolution != None` alone is
+  sufficient regardless of `Stage`; this test exists to prove it holds, not to fix anything).
+
+**`AcceptAllAndCloseInterruptedOperations`:**
+- A blocked graph with 2+ journals, all loadable and writable → every journal gets
+  `Resolution = AcceptedCurrentState`, every bundle relocated, `_blockedMultiRootGraph` cleared,
+  `IsBlockedByMultipleRoots` false afterward, returns an empty list.
+- One journal in the graph fails to load (simulated via a corrupt/missing file for just that ID) →
+  that ID appears in the returned list, `_blockedMultiRootGraph` is **not** cleared, `RequiresRecovery`/
+  `IsBlockedByMultipleRoots` both stay true (proves partial success does not silently unblock).
+- Calling it with no blocked graph throws.
+- `MultipleDisconnectedRoots`/`CycleDetected` registration, before any resolution is attempted:
+  `RequiresRecovery` true, `RecoveryClassificationPending` false, `CanResolveRecovery` **true**
+  (updated from the previous revision — a resolution now exists), `IsBlockedByMultipleRoots` true.
 
 Not automatable: `Plugin.cs`'s constructor wiring and `MainWindow`'s new panel — same documented
 Dalamud-coupled limitation as every prior plan. Verified by build + a manual checklist (crash mid-
 Apply, restart, confirm the panel appears and Keep Current actually unblocks the plugin; a genuinely
-clean prior session doesn't trigger anything; the panel's blocked-multi-root message is distinguishable
-from the normal Keep Current panel — this needs deliberately constructing a multi-root scenario, likely
-by hand-editing bundle files, since it can't arise from ordinary use).
+clean prior session doesn't trigger anything; the panel's blocked-multi-root message and "Accept All"
+button are distinguishable from the normal single-journal panel — this needs deliberately constructing
+a multi-root scenario, likely by hand-editing bundle files, since it can't arise from ordinary use).
 
 ## 12. Global constraints for the implementation plan
 
