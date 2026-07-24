@@ -1011,4 +1011,83 @@ public class OperationControllerTests
             dir.Delete(recursive: true);
         }
     }
+
+    private static OperationController NewControllerWithBlockedMultiRoot(
+        FakePenumbraOperations adapter, FakeClock clock, string operationsRoot, IReadOnlyList<Guid> ids)
+    {
+        var controller = NewController(adapter, clock, operationsRoot: operationsRoot);
+        var journals = ids.ToDictionary(id => id, InterruptedJournal);
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, ids, ids),
+            journals);
+        controller.RegisterDiscoveredRecovery(discovery);
+        return controller;
+    }
+
+    [Fact]
+    public void AcceptAllAndCloseInterruptedOperations_NoBlockedGraph_Throws()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Throws<InvalidOperationException>(() => controller.AcceptAllAndCloseInterruptedOperations());
+    }
+
+    [Fact]
+    public void AcceptAllAndCloseInterruptedOperations_AllJournalsResolvable_ResolvesAllAndUnblocks()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            foreach (var id in new[] { idA, idB })
+            {
+                var bundleDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, id);
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDir), InterruptedJournal(id));
+            }
+
+            var unresolved = controller.AcceptAllAndCloseInterruptedOperations();
+
+            Assert.Empty(unresolved);
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.True(controller.State.CanStartApply);
+            foreach (var id in new[] { idA, idB })
+            {
+                var completedDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, id);
+                Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedDir), out var resolved));
+                Assert.Equal(OperationResolution.AcceptedCurrentState, resolved!.Resolution);
+            }
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AcceptAllAndCloseInterruptedOperations_OneJournalUnloadable_LeavesLockoutInPlace()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            // idA's bundle directory/journal is never written to disk - simulates an unloadable journal.
+            var bundleDirB = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idB);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDirB), InterruptedJournal(idB));
+
+            var unresolved = controller.AcceptAllAndCloseInterruptedOperations();
+
+            Assert.Equal([idA], unresolved);
+            Assert.True(controller.IsBlockedByMultipleRoots); // partial success does not unblock
+            Assert.True(controller.State.RequiresRecovery);
+            Assert.False(controller.State.CanStartApply);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 }

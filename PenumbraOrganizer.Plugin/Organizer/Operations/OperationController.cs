@@ -242,6 +242,51 @@ public sealed class OperationController
         return result;
     }
 
+    // Resolves every journal in the blocked graph, not only the "authoritative" leaves - an
+    // unresolved non-leaf ancestor journal would recreate this exact lockout at the next startup,
+    // once its (now-terminal) child drops out of the non-terminal set and the ancestor becomes its
+    // own new leaf/root. Only unblocks once every journal durably persisted its resolution.
+    public IReadOnlyList<Guid> AcceptAllAndCloseInterruptedOperations()
+    {
+        if (_blockedMultiRootGraph is not { } graph)
+            throw new InvalidOperationException("No blocked multi-root recovery to resolve.");
+
+        var unresolved = new List<Guid>();
+        foreach (var operationId in graph.AllOperationIds)
+        {
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, operationId);
+            if (!OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(bundleDirectory), out var journal) || journal is null)
+            {
+                unresolved.Add(operationId);
+                continue;
+            }
+
+            var resolvedJournal = journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
+            try
+            {
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDirectory), resolvedJournal);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Plugin.Log?.Warning(ex, $"Accept all: failed to persist resolution for {operationId}.");
+                unresolved.Add(operationId);
+                continue;
+            }
+
+            TryRelocateToCompleted(bundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
+        }
+
+        if (unresolved.Count > 0)
+        {
+            PublishState();
+            return unresolved;
+        }
+
+        _blockedMultiRootGraph = null;
+        PublishState();
+        return [];
+    }
+
     public void RequestCancellation()
     {
         if (_active is null || _active.Journal.Stage != OperationStage.Mutating)
