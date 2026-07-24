@@ -100,6 +100,8 @@ public sealed class MainWindow : Window, IDisposable
     {
         using var theme = PluginTheme.Push();
 
+        DrawRecoveryPanelIfNeeded();
+
         if (_lastError != null)
             ImGui.TextColored(PluginTheme.CollisionBad, _lastError);
 
@@ -117,6 +119,74 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         _fileDialogManager.Draw();
+    }
+
+    private void DrawRecoveryPanelIfNeeded()
+    {
+        var operationState = _plugin.OperationController.State;
+        if (!operationState.RequiresRecovery)
+            return;
+
+        ImGui.TextColored(PluginTheme.CollisionBad, "An interrupted organizer operation was found.");
+
+        if (_plugin.OperationController.IsBlockedByMultipleRoots)
+        {
+            ImGui.TextWrapped(
+                "Multiple interrupted operations were found, and picking which one to recover isn't " +
+                "supported yet in this version. You can abandon all of them and accept whatever Penumbra " +
+                "currently has as correct - this does not undo or redo any moves for any of them, it only " +
+                "stops the plugin from blocking further actions. This is destructive: none of the " +
+                "interrupted operations can be revisited afterward.");
+
+            if (ImGui.Button("Accept Current State and Close All Interrupted Operations"))
+                ImGui.OpenPopup("Close all interrupted operations?");
+
+            if (ImGui.BeginPopupModal("Close all interrupted operations?"))
+            {
+                ImGui.TextColored(ImGuiColors.DalamudYellow,
+                    "This abandons every interrupted operation the plugin found. None of them can be " +
+                    "continued or rolled back after this - only Keep Current's outcome is possible for all of them.");
+                if (ImGui.Button("Yes, Close All"))
+                {
+                    _plugin.AcceptAllAndCloseInterruptedOperations();
+                    ImGui.CloseCurrentPopup();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel"))
+                    ImGui.CloseCurrentPopup();
+                ImGui.EndPopup();
+            }
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            return;
+        }
+
+        ImGui.TextWrapped(
+            "The plugin found a mod-organizing operation that didn't finish, likely from a crash or force-" +
+            "quit mid-Apply or mid-Restore. Continuing it or fully rolling it back isn't supported yet. For " +
+            "now, you can accept whatever Penumbra currently has as the correct state and move on - this " +
+            "does not undo or redo any moves, it only stops the plugin from blocking further actions.");
+
+        if (ImGui.Button("Keep Current State"))
+            ImGui.OpenPopup("Keep current state?");
+
+        if (ImGui.BeginPopupModal("Keep current state?"))
+        {
+            ImGui.TextUnformatted("This will mark the interrupted operation as resolved and unblock the plugin.");
+            if (ImGui.Button("Yes, Keep Current"))
+            {
+                _plugin.ResolveKeepCurrent();
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
     }
 
     private void DrawScanTab()
