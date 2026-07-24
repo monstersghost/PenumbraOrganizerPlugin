@@ -503,7 +503,7 @@ public sealed class MainWindow : Window, IDisposable
             .Count(m => !m.Protected && !string.Equals(m.ProposedPath, m.CurrentPath, StringComparison.OrdinalIgnoreCase));
 
         var operationState = _plugin.OperationController.State;
-        if (_applyOperationActive && operationState.CanStartApply)
+        if (_applyOperationActive && operationState.Kind == Organizer.Operations.OperationType.Apply && operationState.CanStartApply)
         {
             _applyOperationActive = false;
             _historyCache = null; // StartApplyOperation() also captures a pre-apply snapshot - history changed

@@ -485,9 +485,10 @@ single operation is currently `_active`, with no per-type split. Gating this blo
 `operationState.CanStartRestore` alone would also read `true` the moment an *Apply* completes,
 causing the History tab to wrongly believe a Restore just finished. Combining with `Kind` (which
 *is* set correctly per-operation by `PublishState`) closes that without adding a new field to a record
-Plan B1 already shipped and reviewed. The identical bug does not exist on the Apply tab today only
-because nothing has ever driven `_applyOperationActive` true while a Restore might be active — this
-plan is the first time two independently-triggerable operation flows share one `OperationController`.
+Plan B1 already shipped and reviewed. The identical misfiring is benign on the Apply tab today (a
+redundant `RunScan()` call with no user-visible impact, since the completion-detection *rendering*
+text is separately gated on `Kind`) — but the logic is unsound and future-proof requires the `Kind`
+check symmetrically on both tabs regardless. This plan adds it to both.
 
 Status text mirrors the Apply tab's structure with corrected copy and the same type gate:
 

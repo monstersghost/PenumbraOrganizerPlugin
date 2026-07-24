@@ -106,7 +106,7 @@ public sealed class OperationController
         var checkpointer = new OperationCheckpointer(_clock, bundleDirectory);
 
         // journal.OperationId and journal.PlanId both reuse plan.OperationId: a plan and the
-        // journal that executes it are always constructed together at StartApply time, so there is
+        // journal that executes it are always constructed together when an operation is started, so there is
         // no meaningful distinction between "this operation's identity" and "this plan's identity"
         // for a freshly-started (non-resumed) operation.
         var preparedJournal = new OperationJournal(
