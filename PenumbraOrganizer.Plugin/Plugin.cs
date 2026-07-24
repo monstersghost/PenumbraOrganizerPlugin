@@ -61,7 +61,7 @@ public sealed class Plugin : IDalamudPlugin
             Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(OperationsRoot));
         OperationController = new Organizer.Operations.OperationController(
             operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
-            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2));
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot);
         _workbookService = new WorkbookWorkflowService(
             new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookWorkflowService>(Log));
         _npcHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(

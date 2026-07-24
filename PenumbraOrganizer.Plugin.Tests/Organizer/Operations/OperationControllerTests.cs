@@ -18,8 +18,16 @@ public class OperationControllerTests
     private static OperationPlan SinglePlan(string id = "mod-a", OperationType type = OperationType.Apply) =>
         OperationPlan.Create(type, [new(0, id, "Weapons/A", OperationStepKind.FinalMove, 0)], [new(id, "Gear/A", "Weapons/A", id)]);
 
-    private static OperationController NewController(IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink? diagnostics = null) =>
-        new(adapter, clock, diagnostics ?? new NoOpDiagnosticsSink(), TimeSpan.FromMilliseconds(4));
+    private static OperationJournal InterruptedJournal(Guid id) => new(
+        SchemaVersion: OperationJournal.CurrentSchemaVersion, OperationId: id, Type: OperationType.Apply,
+        Stage: OperationStage.Mutating, Resolution: OperationResolution.None, SuccessorOperationId: null,
+        CancellationRequested: false, StartedAt: DateTimeOffset.UtcNow, TotalSteps: 1, ProcessedStepCount: 0,
+        LastCompletedIdentifier: null, SnapshotId: Guid.NewGuid(), PlanId: Guid.NewGuid(), TargetHash: "irrelevant",
+        RecoveryOfOperationId: null, UpdatedAt: DateTimeOffset.UtcNow);
+
+    private static OperationController NewController(
+        IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink? diagnostics = null, string? operationsRoot = null) =>
+        new(adapter, clock, diagnostics ?? new NoOpDiagnosticsSink(), TimeSpan.FromMilliseconds(4), operationsRoot ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
 
     [Fact]
     public void State_Initially_IdleWithCanStartApplyTrue()
@@ -200,6 +208,85 @@ public class OperationControllerTests
         {
             dir.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public void RegisterDiscoveredRecovery_NoRecoveryNeeded_StaysIdle()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.NoRecoveryNeeded, [], []),
+            new Dictionary<Guid, OperationJournal>());
+
+        controller.RegisterDiscoveredRecovery(discovery);
+
+        Assert.Equal(OperationStateSnapshot.Idle, controller.State);
+        Assert.False(controller.IsBlockedByMultipleRoots);
+        Assert.Null(controller.GetRecoveryAssessment());
+    }
+
+    [Fact]
+    public void RegisterDiscoveredRecovery_SingleAuthoritative_RequiresRecoveryAndCanResolveTrueImmediately()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewController(new FakePenumbraOperations(), new FakeClock(), operationsRoot: dir.FullName);
+            var journalId = Guid.NewGuid();
+            var journal = InterruptedJournal(journalId);
+            var discovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [journalId], [journalId]),
+                new Dictionary<Guid, OperationJournal> { [journalId] = journal });
+
+            controller.RegisterDiscoveredRecovery(discovery);
+
+            Assert.True(controller.State.RequiresRecovery);
+            Assert.True(controller.State.CanResolveRecovery);
+            Assert.True(controller.State.RecoveryClassificationPending); // WaitingForProvider until Task 6's Update() logic advances it
+            Assert.False(controller.State.CanStartApply);
+            Assert.False(controller.State.CanScan);
+            Assert.False(controller.IsBlockedByMultipleRoots);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RegisterDiscoveredRecovery_MultipleDisconnectedRoots_RequiresRecoveryAndCanResolveTrueButBlockedFlagSet()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, [idA, idB], [idA, idB]),
+            new Dictionary<Guid, OperationJournal> { [idA] = InterruptedJournal(idA), [idB] = InterruptedJournal(idB) });
+
+        controller.RegisterDiscoveredRecovery(discovery);
+
+        Assert.True(controller.State.RequiresRecovery);
+        Assert.True(controller.State.CanResolveRecovery); // AcceptAllAndCloseInterruptedOperations is a real resolution, Task 8
+        Assert.False(controller.State.RecoveryClassificationPending);
+        Assert.False(controller.State.CanStartApply);
+        Assert.True(controller.IsBlockedByMultipleRoots);
+        Assert.Null(controller.GetRecoveryAssessment());
+    }
+
+    [Fact]
+    public void RegisterDiscoveredRecovery_CycleDetected_SameLockoutShapeAsMultipleDisconnectedRoots()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        var id = Guid.NewGuid();
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.CycleDetected, [id], [id]),
+            new Dictionary<Guid, OperationJournal> { [id] = InterruptedJournal(id) });
+
+        controller.RegisterDiscoveredRecovery(discovery);
+
+        Assert.True(controller.State.RequiresRecovery);
+        Assert.True(controller.State.CanResolveRecovery);
+        Assert.True(controller.IsBlockedByMultipleRoots);
     }
 
     [Fact]

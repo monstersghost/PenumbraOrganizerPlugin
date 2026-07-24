@@ -63,21 +63,41 @@ public sealed class OperationController
         public OperationStage? PendingTerminalStage { get; set; }
     }
 
+    public enum RecoveryClassificationStatus { WaitingForProvider, Classified, ClassificationUnavailable }
+
+    private sealed class PendingRecoveryContext
+    {
+        public required OperationJournal Journal { get; set; }
+        public required string BundleDirectory { get; init; }
+        public required OperationRecoveryGraphResult Graph { get; init; }
+        public ArtifactCheckStatus PlanCheckStatus { get; set; } = ArtifactCheckStatus.Unchecked;
+        public OperationPlan? Plan { get; set; }
+        public ArtifactCheckStatus SnapshotCheckStatus { get; set; } = ArtifactCheckStatus.Unchecked;
+        public RollbackSnapshot? Snapshot { get; set; }
+        public RecoveryClassificationStatus ClassificationStatus { get; set; } = RecoveryClassificationStatus.WaitingForProvider;
+        public RecoveryAssessment? Assessment { get; set; }
+        public long? LastClassificationAttemptTimestamp { get; set; }
+    }
+
     private readonly IPenumbraOperations _adapter;
     private readonly IElapsedTimeSource _clock;
     private readonly IDiagnosticsSink _diagnostics;
     private readonly TimeSpan _frameBudget;
+    private readonly string _operationsRoot;
     private ActiveOperationContext? _active;
+    private PendingRecoveryContext? _pendingRecovery;
+    private OperationRecoveryGraphResult? _blockedMultiRootGraph;
     private bool _stopRequested;
 
     public OperationStateSnapshot State { get; private set; } = OperationStateSnapshot.Idle;
 
-    public OperationController(IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink diagnostics, TimeSpan frameBudget)
+    public OperationController(IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink diagnostics, TimeSpan frameBudget, string operationsRoot)
     {
         _adapter = adapter;
         _clock = clock;
         _diagnostics = diagnostics;
         _frameBudget = frameBudget;
+        _operationsRoot = operationsRoot;
     }
 
     public void StartApply(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
@@ -131,6 +151,43 @@ public sealed class OperationController
 
         PublishState();
     }
+
+    public void RegisterDiscoveredRecovery(OperationDiscoveryResult discovery)
+    {
+        switch (discovery.Graph.Status)
+        {
+            case OperationRecoveryGraphStatus.NoRecoveryNeeded:
+                return; // controller stays Idle, exactly as today
+
+            case OperationRecoveryGraphStatus.SingleAuthoritative:
+                RegisterSingleAuthoritative(discovery);
+                return;
+
+            case OperationRecoveryGraphStatus.MultipleDisconnectedRoots:
+            case OperationRecoveryGraphStatus.CycleDetected:
+                _blockedMultiRootGraph = discovery.Graph;
+                PublishState();
+                return;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(discovery), discovery.Graph.Status, "Unhandled OperationRecoveryGraphStatus.");
+        }
+    }
+
+    private void RegisterSingleAuthoritative(OperationDiscoveryResult discovery)
+    {
+        var authoritativeId = discovery.Graph.AuthoritativeOperationIds[0];
+        if (!discovery.Journals.TryGetValue(authoritativeId, out var journal))
+            return; // defensive - graph and journals dictionary are built together by RunStartupDiscovery
+
+        var bundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, authoritativeId);
+        _pendingRecovery = new PendingRecoveryContext { Journal = journal, BundleDirectory = bundleDirectory, Graph = discovery.Graph };
+        PublishState();
+    }
+
+    public RecoveryAssessment? GetRecoveryAssessment() => _pendingRecovery?.Assessment;
+
+    public bool IsBlockedByMultipleRoots => _blockedMultiRootGraph is not null;
 
     public void RequestCancellation()
     {
@@ -303,9 +360,36 @@ public sealed class OperationController
 
     private void PublishState()
     {
-        if (_active is null)
+        if (_active is null && _pendingRecovery is null && _blockedMultiRootGraph is null)
         {
             State = OperationStateSnapshot.Idle;
+            return;
+        }
+
+        if (_active is null && _blockedMultiRootGraph is not null)
+        {
+            State = OperationStateSnapshot.Idle with
+            {
+                RequiresRecovery = true,
+                RecoveryClassificationPending = false,
+                CanResolveRecovery = true, // AcceptAllAndCloseInterruptedOperations, Task 8
+                CanStartApply = false, CanStartRestore = false, CanScan = false, CanIndex = false,
+                CanRunFolderCleanup = false, CanRunFolderCleanupRollback = false, CanCreateBackup = false,
+            };
+            return;
+        }
+
+        if (_active is null) // _pendingRecovery is not null
+        {
+            var pending = _pendingRecovery!;
+            State = OperationStateSnapshot.Idle with
+            {
+                RequiresRecovery = true,
+                RecoveryClassificationPending = pending.ClassificationStatus == RecoveryClassificationStatus.WaitingForProvider,
+                CanResolveRecovery = true, // Keep Current needs neither classification nor a valid plan/snapshot
+                CanStartApply = false, CanStartRestore = false, CanScan = false, CanIndex = false,
+                CanRunFolderCleanup = false, CanRunFolderCleanupRollback = false, CanCreateBackup = false,
+            };
             return;
         }
 
