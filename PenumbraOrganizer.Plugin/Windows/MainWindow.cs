@@ -281,43 +281,47 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
+    // Standard Dear ImGui button-wrapping idiom: draw each button, then only chain a SameLine if
+    // the NEXT button (measured ahead of time via CalcTextSize) would still fit within the
+    // window's visible content width - otherwise it naturally drops to a new line instead of
+    // being clipped or spilling past the window edge on a narrower/unmaximized window.
+    private static void DrawWrappingButtonRow(IReadOnlyList<(string Label, Action OnClick)> buttons)
+    {
+        var style = ImGui.GetStyle();
+        var windowVisibleX2 = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+        for (var i = 0; i < buttons.Count; i++)
+        {
+            var (label, onClick) = buttons[i];
+            if (ImGui.Button(label))
+                onClick();
+
+            if (i + 1 >= buttons.Count)
+                continue;
+
+            var nextButtonWidth = ImGui.CalcTextSize(buttons[i + 1].Label).X + style.FramePadding.X * 2;
+            var lastButtonX2 = ImGui.GetItemRectMax().X;
+            var nextButtonX2 = lastButtonX2 + style.ItemSpacing.X + nextButtonWidth;
+            if (nextButtonX2 < windowVisibleX2)
+                ImGui.SameLine();
+        }
+    }
+
     private void DrawSortTab()
     {
         using var tab = ImRaii.TabItem("Sort");
         if (!tab)
             return;
 
-        if (ImGui.Button("By Creator"))
-            _plugin.OrganizerState.SortByCreator(_creatorCanonicalizer.Canonicalize);
-
-        ImGui.SameLine();
-        if (ImGui.Button("By Mod Type"))
-            _plugin.OrganizerState.SortByModType();
-
-        ImGui.SameLine();
-        if (ImGui.Button("By Mod Type Detailed"))
-            _plugin.OrganizerState.SortByModTypeDetailed();
-
-        ImGui.SameLine();
-        if (ImGui.Button("By Type Then Creator"))
-            _plugin.OrganizerState.SortByTypeThenCreator(_creatorCanonicalizer.Canonicalize);
-
-        ImGui.SameLine();
-        if (ImGui.Button("By Type Then Creator (Flat)"))
-            _plugin.OrganizerState.SortByTypeThenCreatorFlat(_creatorCanonicalizer.Canonicalize);
-
-        ImGui.SameLine();
-        if (ImGui.Button("By Creator Then Type"))
-            _plugin.OrganizerState.SortByCreatorThenType(_creatorCanonicalizer.Canonicalize);
-
-        ImGui.SameLine();
-        if (ImGui.Button("By Creator Then Type (Flat)"))
-            _plugin.OrganizerState.SortByCreatorThenTypeFlat(_creatorCanonicalizer.Canonicalize);
-
-        ImGui.SameLine();
-        if (ImGui.Button("Import Workbook"))
-        {
-            _fileDialogManager.OpenFileDialog(
+        DrawWrappingButtonRow(
+        [
+            ("By Creator", () => _plugin.OrganizerState.SortByCreator(_creatorCanonicalizer.Canonicalize)),
+            ("By Mod Type", () => _plugin.OrganizerState.SortByModType()),
+            ("By Mod Type Detailed", () => _plugin.OrganizerState.SortByModTypeDetailed()),
+            ("By Type Then Creator", () => _plugin.OrganizerState.SortByTypeThenCreator(_creatorCanonicalizer.Canonicalize)),
+            ("By Type Then Creator (Flat)", () => _plugin.OrganizerState.SortByTypeThenCreatorFlat(_creatorCanonicalizer.Canonicalize)),
+            ("By Creator Then Type", () => _plugin.OrganizerState.SortByCreatorThenType(_creatorCanonicalizer.Canonicalize)),
+            ("By Creator Then Type (Flat)", () => _plugin.OrganizerState.SortByCreatorThenTypeFlat(_creatorCanonicalizer.Canonicalize)),
+            ("Import Workbook", () => _fileDialogManager.OpenFileDialog(
                 "Import Workbook",
                 ".xlsx",
                 (success, paths) =>
@@ -325,8 +329,8 @@ public sealed class MainWindow : Window, IDisposable
                     if (success && paths.Count > 0)
                         ImportWorkbook(paths[0]);
                 },
-                selectionCountMax: 1);
-        }
+                selectionCountMax: 1)),
+        ]);
 
         if (_lastWorkbookImportResult is not null)
         {
@@ -701,7 +705,7 @@ public sealed class MainWindow : Window, IDisposable
         if (!tab)
             return;
 
-        ImGui.TextDisabled(
+        ImGui.TextWrapped(
             "Since Penumbra 1.7, its own Mods tab supports a native search syntax (c:[item], t:[tag], "
             + "a:[author], etc.) that covers much of what this tab does. This tab stays available for "
             + "now - it may be retired later if Penumbra's own filtering fully supersedes it.");
