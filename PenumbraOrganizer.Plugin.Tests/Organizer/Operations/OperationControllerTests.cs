@@ -436,6 +436,33 @@ public class OperationControllerTests
     }
 
     [Fact]
+    public void Update_ClassificationThrowsUnexpectedException_BecomesClassificationUnavailableRatherThanPropagating()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, null), onCall: () => throw new InvalidOperationException("simulated unexpected failure"));
+
+            var exception = Record.Exception(() => controller.Update());
+
+            Assert.Null(exception);
+            Assert.False(controller.State.RecoveryClassificationPending);
+            Assert.Null(controller.GetRecoveryAssessment());
+            Assert.True(controller.State.CanResolveRecovery); // Keep Current remains available
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Update_CalledManyTimesWithinSameSecond_CallsGetLiveModsAtMostOnce()
     {
         var dir = Directory.CreateTempSubdirectory();

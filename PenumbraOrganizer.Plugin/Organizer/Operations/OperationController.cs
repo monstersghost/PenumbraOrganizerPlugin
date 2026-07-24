@@ -213,7 +213,21 @@ public sealed class OperationController
     public void Update()
     {
         if (_pendingRecovery is { ClassificationStatus: RecoveryClassificationStatus.WaitingForProvider } pending)
-            TryAdvanceClassification(pending);
+        {
+            try
+            {
+                TryAdvanceClassification(pending);
+            }
+            catch (Exception)
+            {
+                // Mirrors the _active operation's own exception boundary below - an unmodeled failure
+                // here must not propagate out of Update() (this method has no caller-side safety net;
+                // Plugin.cs's Framework.Update subscription doesn't wrap it either), and must not leave
+                // classification stuck retrying the same throw every second indefinitely.
+                pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+                PublishState();
+            }
+        }
 
         if (_active is null || _active.RequiresRecovery)
             return;
