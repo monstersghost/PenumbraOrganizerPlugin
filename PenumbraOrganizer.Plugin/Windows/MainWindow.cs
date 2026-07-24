@@ -484,7 +484,11 @@ public sealed class MainWindow : Window, IDisposable
         {
             _applyOperationActive = false;
             _historyCache = null; // StartApplyOperation() also captures a pre-apply snapshot - history changed
-            RefreshOrphanedFolders(); // the completed Apply moved mods - occupancy changed
+            // The completed Apply moved mods via IPC directly, bypassing OrganizerState - its
+            // cached CurrentPath values are now stale. RunScan() re-reads from Penumbra and
+            // internally calls RefreshOrphanedFolders() itself, matching the same
+            // scan-after-mutation pattern Restore() already relies on.
+            RunScan();
         }
 
         ImGui.BeginDisabled(result.HasIssues || !operationState.CanStartApply);
