@@ -551,6 +551,75 @@ public class OrganizerStateTests
     }
 
     [Fact]
+    public void SortByTypeThenCreatorFlat_GearWithResolvedSlot_IgnoresSlotSubfolder()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
+
+        var count = state.SortByTypeThenCreatorFlat(name => name.ToUpperInvariant());
+
+        Assert.Equal(1, count);
+        Assert.Equal("Gear/SOMEAUTHOR/Cool Boots", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByTypeThenCreator_GearWithResolvedSlot_UsesSlotSubfolder()
+    {
+        // Contrast case proving the detailed variant is unaffected by the flat helper's addition.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
+
+        state.SortByTypeThenCreator(name => name.ToUpperInvariant());
+
+        Assert.Equal("Gear/Feet/SOMEAUTHOR/Cool Boots", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByCreatorThenTypeFlat_GearWithResolvedSlot_IgnoresSlotSubfolder()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
+
+        var count = state.SortByCreatorThenTypeFlat(name => name.ToUpperInvariant());
+
+        Assert.Equal(1, count);
+        Assert.Equal("SOMEAUTHOR/Gear/Cool Boots", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByCreatorThenType_GearWithResolvedSlot_UsesSlotSubfolder()
+    {
+        // Contrast case proving the detailed variant is unaffected by the flat helper's addition.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
+
+        state.SortByCreatorThenType(name => name.ToUpperInvariant());
+
+        Assert.Equal("SOMEAUTHOR/Gear/Feet/Cool Boots", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void SortByModTypeAndSortByModTypeDetailed_GearWithResolvedSlot_DifferOnlyInSlotSubfolder()
+    {
+        var flatState = new OrganizerState();
+        flatState.LoadScan(
+            [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
+        flatState.SortByModType();
+
+        var detailedState = new OrganizerState();
+        detailedState.LoadScan(
+            [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
+        detailedState.SortByModTypeDetailed();
+
+        Assert.Equal("Gear/Cool Boots", flatState.Mods.Single().ProposedPath);
+        Assert.Equal("Gear/Feet/Cool Boots", detailedState.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
     public void HasScanned_FalseBeforeAnyScan()
     {
         var state = new OrganizerState();

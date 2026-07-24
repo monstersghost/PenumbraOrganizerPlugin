@@ -169,6 +169,13 @@ public sealed class MainWindow : Window, IDisposable
             SaveProtectionStateSafely();
         }
 
+        var heliosphereMods = _plugin.OrganizerState.Mods.Where(m => m.HeliosphereManaged).ToList();
+        if (heliosphereMods.Count > 0)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled($"({heliosphereMods.Count(m => m.Protected)}/{heliosphereMods.Count} Heliosphere mods protected)");
+        }
+
         ImGui.Spacing();
         ImGui.InputText("Search mods and folders", ref _protectFilter, 256);
         ImGui.Spacing();
@@ -233,7 +240,10 @@ public sealed class MainWindow : Window, IDisposable
         {
             if (modChild)
             {
-                foreach (var mod in _plugin.OrganizerState.Mods)
+                // Heliosphere-managed mods first (stable within each group) - they're almost
+                // always already protected and are the ones users check on most, per feedback.
+                // Folders above are deliberately untouched by this ordering.
+                foreach (var mod in _plugin.OrganizerState.Mods.OrderByDescending(m => m.HeliosphereManaged))
                 {
                     if (filter.Length > 0
                         && !mod.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
@@ -293,8 +303,16 @@ public sealed class MainWindow : Window, IDisposable
             _plugin.OrganizerState.SortByTypeThenCreator(_creatorCanonicalizer.Canonicalize);
 
         ImGui.SameLine();
+        if (ImGui.Button("By Type Then Creator (Flat)"))
+            _plugin.OrganizerState.SortByTypeThenCreatorFlat(_creatorCanonicalizer.Canonicalize);
+
+        ImGui.SameLine();
         if (ImGui.Button("By Creator Then Type"))
             _plugin.OrganizerState.SortByCreatorThenType(_creatorCanonicalizer.Canonicalize);
+
+        ImGui.SameLine();
+        if (ImGui.Button("By Creator Then Type (Flat)"))
+            _plugin.OrganizerState.SortByCreatorThenTypeFlat(_creatorCanonicalizer.Canonicalize);
 
         ImGui.SameLine();
         if (ImGui.Button("Import Workbook"))
@@ -518,6 +536,8 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
+        ImGui.SetNextWindowSize(new Vector2(480, 0), ImGuiCond.Appearing);
+        ImGui.SetNextWindowPos(ImGui.GetMainViewport().GetCenter(), ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
         if (ImGui.BeginPopupModal("Apply complete - Rediscover Mods reminder"))
         {
             ImGui.TextUnformatted("Apply complete.");
@@ -680,6 +700,12 @@ public sealed class MainWindow : Window, IDisposable
         using var tab = ImRaii.TabItem("Search");
         if (!tab)
             return;
+
+        ImGui.TextDisabled(
+            "Since Penumbra 1.7, its own Mods tab supports a native search syntax (c:[item], t:[tag], "
+            + "a:[author], etc.) that covers much of what this tab does. This tab stays available for "
+            + "now - it may be retired later if Penumbra's own filtering fully supersedes it.");
+        ImGui.Spacing();
 
         using (PluginTheme.PrimaryButton())
         {

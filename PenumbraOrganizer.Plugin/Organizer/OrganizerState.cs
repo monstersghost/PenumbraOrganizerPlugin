@@ -171,13 +171,7 @@ public sealed class OrganizerState
         Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), null));
 
     public int SortByModType() =>
-        Sort(row =>
-        {
-            // Gear only: always the flat folder, ignoring any resolved slot subcategory.
-            // Every other category keeps its normal subfolder behavior via GetFolder unchanged.
-            var subCategory = row.Category == ModCategory.Gear ? null : row.SubCategory;
-            return (TypeFolder(row.Category, subCategory), null);
-        });
+        Sort(row => (TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory)), null));
 
     public int SortByModTypeDetailed() =>
         Sort(row => (TypeFolder(row.Category, row.SubCategory), null));
@@ -185,8 +179,20 @@ public sealed class OrganizerState
     public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
         Sort(row => (TypeFolder(row.Category, row.SubCategory), KnownSegment(canonicalizeCreator(row.Author))));
 
+    public int SortByTypeThenCreatorFlat(Func<string, string> canonicalizeCreator) =>
+        Sort(row => (TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory)), KnownSegment(canonicalizeCreator(row.Author))));
+
     public int SortByCreatorThenType(Func<string, string> canonicalizeCreator) =>
         Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, row.SubCategory)));
+
+    public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
+        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory))));
+
+    // Gear only: always the flat folder, ignoring any resolved slot subcategory. Every other
+    // category keeps its normal subfolder behavior via GetFolder unchanged. Shared by every
+    // "flat" sort variant so Gear/Feet vs Gear stays a single decision point.
+    private static string? FlattenGearSubCategory(ModCategory? category, string? subCategory) =>
+        category == ModCategory.Gear ? null : subCategory;
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
