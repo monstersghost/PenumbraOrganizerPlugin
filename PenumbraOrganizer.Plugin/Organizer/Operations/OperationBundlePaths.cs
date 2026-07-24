@@ -23,4 +23,6 @@ public static class OperationBundlePaths
     public static string SnapshotPath(string bundleDirectory) => Path.Combine(bundleDirectory, "snapshot.json");
 
     public static string ResultsPath(string bundleDirectory) => Path.Combine(bundleDirectory, "results.jsonl");
+
+    public static string RestoreResultSeedPath(string bundleDirectory) => Path.Combine(bundleDirectory, "restore-result-seed.json");
 }

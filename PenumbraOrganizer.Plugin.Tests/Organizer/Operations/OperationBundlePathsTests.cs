@@ -48,5 +48,6 @@ public class OperationBundlePathsTests
         Assert.Equal(Path.Combine(bundleDir, "plan.json"), OperationBundlePaths.PlanPath(bundleDir));
         Assert.Equal(Path.Combine(bundleDir, "snapshot.json"), OperationBundlePaths.SnapshotPath(bundleDir));
         Assert.Equal(Path.Combine(bundleDir, "results.jsonl"), OperationBundlePaths.ResultsPath(bundleDir));
+        Assert.Equal(Path.Combine(bundleDir, "restore-result-seed.json"), OperationBundlePaths.RestoreResultSeedPath(bundleDir));
     }
 }
