@@ -80,12 +80,28 @@ public sealed class OperationController
         _frameBudget = frameBudget;
     }
 
-    public void StartApply(OperationPlan plan, Guid snapshotId, string bundleDirectory)
+    public void StartApply(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
+        StartOperation(plan, snapshotId, bundleDirectory, OperationType.Apply);
+
+    public void StartRestore(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
+        StartOperation(plan, snapshotId, bundleDirectory, OperationType.Restore);
+
+    // Shared by PublishState's canStartNew derivation and this admission guard, so the two can never
+    // independently drift apart - previously each was written separately as its own inline boolean
+    // expression. Public so it can be unit-tested directly against hand-constructed OperationJournal
+    // values: the "terminal Stage co-occurring with RequiresRecovery" case this guards against is
+    // not producible through the real engine today (every RequiresRecovery=true call site in this
+    // class leaves Stage non-terminal), but the predicate must still be correct on its own terms,
+    // not merely lucky given today's callers.
+    public static bool CanStartNext(OperationJournal journal, bool requiresRecovery) =>
+        journal.IsTerminal && !requiresRecovery;
+
+    private void StartOperation(OperationPlan plan, Guid snapshotId, string bundleDirectory, OperationType expectedType)
     {
-        if (plan.Type != OperationType.Apply)
-            throw new ArgumentException($"StartApply requires an Apply-type plan; got {plan.Type}.", nameof(plan));
-        if (_active is not null && !_active.Journal.IsTerminal)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
+        if (plan.Type != expectedType)
+            throw new ArgumentException($"This entry point requires a {expectedType}-type plan; got {plan.Type}.", nameof(plan));
+        if (_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery))
+            throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
 
         var checkpointer = new OperationCheckpointer(_clock, bundleDirectory);
 
@@ -294,7 +310,7 @@ public sealed class OperationController
         }
 
         var journal = _active.Journal;
-        var canStartNew = journal.IsTerminal && !_active.RequiresRecovery;
+        var canStartNew = CanStartNext(journal, _active.RequiresRecovery);
         var modNameByIdentifier = _active.Plan.RecoveryTargets.ToDictionary(t => t.Identifier, t => t.ModName, StringComparer.Ordinal);
         var statuses = _active.Mutation.MutationStatusByIdentifier;
         var processedTargets = statuses.Values.Count(s => s != TargetMutationStatus.NotAttempted);

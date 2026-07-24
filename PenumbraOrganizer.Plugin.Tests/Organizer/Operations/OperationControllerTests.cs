@@ -94,6 +94,115 @@ public class OperationControllerTests
     }
 
     [Fact]
+    public void CanStartNext_TerminalStageWithoutRecovery_IsTrue()
+    {
+        var journal = new OperationJournal(
+            OperationJournal.CurrentSchemaVersion, Guid.NewGuid(), OperationType.Apply,
+            OperationStage.Completed, OperationResolution.None, null, false, DateTimeOffset.UtcNow,
+            1, 1, "mod-a", Guid.NewGuid(), Guid.NewGuid(), "hash", null, DateTimeOffset.UtcNow);
+
+        Assert.True(OperationController.CanStartNext(journal, requiresRecovery: false));
+    }
+
+    [Fact]
+    public void CanStartNext_NonTerminalStage_IsFalse()
+    {
+        var journal = new OperationJournal(
+            OperationJournal.CurrentSchemaVersion, Guid.NewGuid(), OperationType.Apply,
+            OperationStage.Mutating, OperationResolution.None, null, false, DateTimeOffset.UtcNow,
+            1, 0, null, Guid.NewGuid(), Guid.NewGuid(), "hash", null, DateTimeOffset.UtcNow);
+
+        Assert.False(OperationController.CanStartNext(journal, requiresRecovery: false));
+    }
+
+    [Fact]
+    public void CanStartNext_TerminalStageButRequiresRecovery_IsFalse()
+    {
+        // Not reachable through the real engine today (see this task's own notes), but the
+        // predicate must still be correct on its own terms - this is the regression test for the
+        // admission guard fix below, exercised directly rather than via a live engine run.
+        var journal = new OperationJournal(
+            OperationJournal.CurrentSchemaVersion, Guid.NewGuid(), OperationType.Apply,
+            OperationStage.FailedPartiallyApplied, OperationResolution.None, null, false, DateTimeOffset.UtcNow,
+            1, 1, "mod-a", Guid.NewGuid(), Guid.NewGuid(), "hash", null, DateTimeOffset.UtcNow);
+
+        Assert.False(OperationController.CanStartNext(journal, requiresRecovery: true));
+    }
+
+    [Fact]
+    public void StartRestore_ApplyTypePlan_Throws()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+            Assert.Throws<ArgumentException>(() => controller.StartRestore(SinglePlan(type: OperationType.Apply), Guid.NewGuid(), dir.FullName));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StartRestore_RestoreTypePlan_Succeeds()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+            var exception = Record.Exception(() => controller.StartRestore(SinglePlan(type: OperationType.Restore), Guid.NewGuid(), dir.FullName));
+
+            Assert.Null(exception);
+            Assert.Equal(OperationStage.Mutating, controller.State.Stage);
+            Assert.Equal(OperationType.Restore, controller.State.Kind);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StartRestore_ZeroStepPlan_ReachesTerminalUiConsumedStateAfterTheUsualThreeUpdates()
+    {
+        // Update() advances at most one stage per call (Mutating, then Refreshing, then Verifying -
+        // each its own "if (Stage == X) { ...; return; }" block in AdvanceActiveOperation), the same
+        // as every non-empty-plan test in this file - a zero-step plan still needs all three calls,
+        // it just has nothing to do during the Mutating one. Refreshing/Verifying still call into the
+        // adapter even with zero recovery targets (confirmed empirically: with no adapter responses
+        // enqueued, this reaches FailedBeforeMutation, not Completed), so both still need enqueuing,
+        // just with an empty live-mod list since there's nothing to verify against.
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.Success));
+        adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([])));
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var emptyPlan = OperationPlan.Create(OperationType.Restore, [], []);
+            var controller = NewController(adapter, new FakeClock());
+            controller.StartRestore(emptyPlan, Guid.NewGuid(), dir.FullName);
+
+            controller.Update(); // Mutating -> Refreshing
+            controller.Update(); // Refreshing -> Verifying
+            controller.Update(); // Verifying -> Completed
+
+            Assert.Equal(OperationStage.Completed, controller.State.Stage);
+            Assert.Equal(OperationType.Restore, controller.State.Kind);
+            Assert.True(controller.State.CanStartRestore);
+            Assert.False(controller.State.RequiresRecovery);
+            Assert.Equal(0, controller.State.ProcessedSteps);
+            Assert.Equal(0, controller.State.TotalSteps);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void StartApply_SetsCanStartApplyFalseAndStageMutating()
     {
         var dir = Directory.CreateTempSubdirectory();
