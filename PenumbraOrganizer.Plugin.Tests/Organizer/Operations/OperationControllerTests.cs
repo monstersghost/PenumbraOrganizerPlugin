@@ -289,6 +289,179 @@ public class OperationControllerTests
         Assert.True(controller.IsBlockedByMultipleRoots);
     }
 
+    private static OperationController NewControllerWithPendingRecovery(
+        FakePenumbraOperations adapter, FakeClock clock, string operationsRoot, out Guid journalId)
+    {
+        var controller = NewController(adapter, clock, operationsRoot: operationsRoot);
+        journalId = Guid.NewGuid();
+        var journal = InterruptedJournal(journalId);
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [journalId], [journalId]),
+            new Dictionary<Guid, OperationJournal> { [journalId] = journal });
+        controller.RegisterDiscoveredRecovery(discovery);
+        return controller;
+    }
+
+    [Fact]
+    public void Update_ValidPlanAndSnapshot_ClassifiesOnceIpcSucceeds()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.Update();
+
+            Assert.False(controller.State.RecoveryClassificationPending);
+            Assert.NotNull(controller.GetRecoveryAssessment());
+            Assert.True(controller.State.CanResolveRecovery);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_PlanMissing_BecomesPermanentlyClassificationUnavailableWithoutCallingIpc()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations(); // nothing enqueued - a GetLiveMods() call would throw
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out _);
+
+            controller.Update();
+            controller.Update(); // a second call must not attempt GetLiveMods() either
+
+            Assert.False(controller.State.RecoveryClassificationPending);
+            Assert.Null(controller.GetRecoveryAssessment());
+            Assert.True(controller.State.CanResolveRecovery); // Keep Current unaffected
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_SnapshotMissingButPlanValid_ClassificationStillSucceeds()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            // snapshot.json intentionally not written
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.Update();
+
+            Assert.NotNull(controller.GetRecoveryAssessment());
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(LiveModReadStatus.TemporarilyUnavailable)]
+    [InlineData(LiveModReadStatus.ProviderUnavailable)]
+    public void Update_RetryableIpcStatus_StaysPendingAndRetriesAfterThrottleInterval(LiveModReadStatus status)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var clock = new FakeClock();
+            var controller = NewControllerWithPendingRecovery(adapter, clock, dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(status, null));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.Update(); // consumes the retryable response - still pending
+
+            Assert.True(controller.State.RecoveryClassificationPending);
+            Assert.Null(controller.GetRecoveryAssessment());
+
+            clock.Advance(TimeSpan.FromSeconds(1));
+            controller.Update(); // throttle interval elapsed - consumes the Success response
+
+            Assert.False(controller.State.RecoveryClassificationPending);
+            Assert.NotNull(controller.GetRecoveryAssessment());
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_InvalidDataIpcStatus_BecomesPermanentlyClassificationUnavailable()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.InvalidData, null));
+
+            controller.Update();
+
+            Assert.False(controller.State.RecoveryClassificationPending); // permanently unavailable, not pending
+            Assert.Null(controller.GetRecoveryAssessment());
+            Assert.True(controller.State.CanResolveRecovery);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_CalledManyTimesWithinSameSecond_CallsGetLiveModsAtMostOnce()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var clock = new FakeClock();
+            var controller = NewControllerWithPendingRecovery(adapter, clock, dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            var callCount = 0;
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.TemporarilyUnavailable, null), onCall: () => callCount++);
+
+            for (var i = 0; i < 20; i++)
+                controller.Update(); // no clock advance between calls - only the first should reach the adapter
+
+            Assert.Equal(1, callCount);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void StartApply_SetsCanStartApplyFalseAndStageMutating()
     {

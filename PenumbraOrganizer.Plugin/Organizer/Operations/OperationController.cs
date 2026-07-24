@@ -79,6 +79,8 @@ public sealed class OperationController
         public long? LastClassificationAttemptTimestamp { get; set; }
     }
 
+    private static readonly TimeSpan ClassificationRetryInterval = TimeSpan.FromSeconds(1);
+
     private readonly IPenumbraOperations _adapter;
     private readonly IElapsedTimeSource _clock;
     private readonly IDiagnosticsSink _diagnostics;
@@ -210,6 +212,9 @@ public sealed class OperationController
 
     public void Update()
     {
+        if (_pendingRecovery is { ClassificationStatus: RecoveryClassificationStatus.WaitingForProvider } pending)
+            TryAdvanceClassification(pending);
+
         if (_active is null || _active.RequiresRecovery)
             return;
 
@@ -235,6 +240,62 @@ public sealed class OperationController
                 // requiring recovery rather than claiming a terminal outcome that isn't backed up.
                 _active.RequiresRecovery = true;
             }
+        }
+
+        PublishState();
+    }
+
+    private void TryAdvanceClassification(PendingRecoveryContext pending)
+    {
+        var stateChanged = false;
+
+        if (pending.PlanCheckStatus == ArtifactCheckStatus.Unchecked)
+        {
+            (pending.PlanCheckStatus, pending.Plan) = ArtifactStatusChecker.CheckPlan(pending.BundleDirectory);
+            stateChanged = true;
+        }
+        if (pending.SnapshotCheckStatus == ArtifactCheckStatus.Unchecked)
+        {
+            (pending.SnapshotCheckStatus, pending.Snapshot) = ArtifactStatusChecker.CheckSnapshot(pending.BundleDirectory);
+            stateChanged = true;
+        }
+
+        // Classification needs a valid Plan only - a missing/invalid Snapshot does not block it.
+        if (pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
+        {
+            pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+            PublishState();
+            return;
+        }
+
+        if (pending.LastClassificationAttemptTimestamp is { } last && _clock.GetElapsedTime(last) < ClassificationRetryInterval)
+        {
+            if (stateChanged)
+                PublishState();
+            return; // throttle window not yet elapsed since the last attempt
+        }
+
+        pending.LastClassificationAttemptTimestamp = _clock.GetTimestamp(); // record this attempt regardless of outcome
+        var liveResult = _adapter.GetLiveMods();
+
+        switch (liveResult.Status)
+        {
+            case LiveModReadStatus.Success when liveResult.Snapshot is not null:
+                pending.Assessment = RecoveryAssessmentBuilder.Build(pending.Plan!, liveResult.Snapshot);
+                pending.ClassificationStatus = RecoveryClassificationStatus.Classified;
+                break;
+
+            case LiveModReadStatus.TemporarilyUnavailable:
+            case LiveModReadStatus.ProviderUnavailable:
+                // Retryable at startup specifically - Penumbra may simply not have finished loading
+                // yet. pending.ClassificationStatus already is WaitingForProvider; nothing to change.
+                break;
+
+            case LiveModReadStatus.InvalidData:
+            default:
+                // A response that parsed but doesn't make sense won't be fixed by asking again.
+                pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+                break;
         }
 
         PublishState();
