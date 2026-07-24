@@ -49,7 +49,7 @@ PathMutationOperation / IPenumbraOperations
     (unchanged from Plan B1/B2 - Restore's moves are ordinary SetModPath calls)
 ```
 
-## 3. `OperationController`: generalize the entry point
+## 3. `OperationController`: generalize the entry point, and fix a pre-existing recovery-admission gap
 
 `StartApply`'s body has no Apply-specific logic besides its guard. Extract a private `StartOperation`
 and make both public methods thin wrappers, avoiding duplication of the journal/checkpointer/mutation
@@ -66,23 +66,42 @@ private void StartOperation(OperationPlan plan, Guid snapshotId, string bundleDi
 {
     if (plan.Type != expectedType)
         throw new ArgumentException($"This entry point requires a {expectedType}-type plan; got {plan.Type}.", nameof(plan));
-    if (_active is not null && !_active.Journal.IsTerminal)
-        throw new InvalidOperationException("Another organizer operation is already in progress.");
+    if (_active is not null && (!_active.Journal.IsTerminal || _active.RequiresRecovery))
+        throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
 
     // ...unchanged body: build preparedJournal, checkpoint, transition to mutatingJournal,
     // checkpoint, construct _active, PublishState()...
 }
 ```
 
+**This also fixes a pre-existing gap in the shipped Plan B1/B2 `StartApply` guard**, not something
+this plan introduces: the current guard checks only `!_active.Journal.IsTerminal`, never
+`_active.RequiresRecovery`, even though the class's own doc comment states a journal can be
+simultaneously terminal *and* `RequiresRecovery` ("a RecoveryRequired transition sets
+`_active.RequiresRecovery`... retains every field of the context rather than clearing anything").
+`PublishState`'s own `canStartNew = journal.IsTerminal && !_active.RequiresRecovery` already treats
+these as one combined invariant — the guard should use the identical rule, not a weaker one. This
+isn't reachable through the current UI flow (`Plugin.cs`'s own `_operationInProgress` never resets
+while `RequiresRecovery` is true — see §6a), so it isn't a live bug today, but the controller's own
+admission guard should be correct on its own terms rather than rely on a caller's separate,
+independently-maintained flag to stay safe. Plan C is the first plan to add a second caller through
+this exact guard, which is why fixing it belongs here.
+
 Existing `StartApply` tests are unchanged (same public signature/behavior). New tests cover
 `StartRestore` succeeding with a `Restore`-type plan and rejecting an `Apply`-type plan (mirroring the
-existing `StartApply` rejection test with the type reversed).
+existing `StartApply` rejection test with the type reversed), plus a new regression test:
+**`StartRestore` (and `StartApply`) must reject a new operation while the previous `_active` operation
+is `Journal.IsTerminal == true` but `RequiresRecovery == true`.**
 
 ## 4. `RestoreResultSeed`: durable classification metadata
 
-`RollbackHistory.BuildRestorePlan` already computes a five-way classification
-(`Moves`/`UnchangedIdentifiers`/`SkippedUninstalledIdentifiers`/`RootRelocatedIdentifiers`), but only
-`Moves` maps onto an `OperationPlan` (via `RecoveryTargets`). The other three lists have no home in
+`RollbackHistory.BuildRestorePlan` already computes the move list plus three additional
+classification lists (`UnchangedIdentifiers`/`SkippedUninstalledIdentifiers`/`RootRelocatedIdentifiers`).
+`RootRelocatedIdentifiers` is not a mutually-exclusive fifth category alongside `Moved` — it's an
+annotation layered over a subset of `Moves` (a moved identifier whose restored destination is
+Penumbra's plain root rather than the snapshot's exact stored path), which is why it's persisted
+below as a *subset* list, not folded into a five-way partition. Only `Moves` maps onto an
+`OperationPlan` directly (via `RecoveryTargets`). The other three lists have no home in
 the plan/journal schema and would otherwise be discarded as local variables the moment
 `StartRestoreOperation` returns — meaning a restart, or simply Plan E being implemented later, could
 never reconstruct what a given Restore operation actually classified. New file
@@ -117,6 +136,11 @@ public static class OperationRestoreResultSeedCodec
     public static void Save(string path, RestoreResultSeed seed) =>
         AtomicFile.CreateOrReplace(path, JsonSerializer.Serialize(seed));
 
+    // Validates structural completeness, not cross-field semantics (e.g. "every RootRelocated
+    // identifier is also a moved identifier" is Plan E's concern when it interprets this file
+    // against the accompanying OperationPlan, not this codec's). A malformed-but-parseable
+    // payload (null target snapshot, null classification list) must not silently pass through as
+    // valid data for a later reader to trip over.
     public static bool TryLoad(string path, out RestoreResultSeed? seed)
     {
         seed = null;
@@ -133,7 +157,8 @@ public static class OperationRestoreResultSeedCodec
             return false;
         }
 
-        if (candidate is null)
+        if (candidate is null || candidate.TargetSnapshot is null || candidate.UnchangedIdentifiers is null
+            || candidate.SkippedUninstalledIdentifiers is null || candidate.RootRelocatedIdentifiers is null)
             return false;
 
         seed = candidate;
@@ -168,14 +193,25 @@ public static class OperationPlanBuilder
 {
     // ...existing BuildApplyPlan unchanged...
 
-    // currentMods is assumed identifier-unique - the same unguarded invariant Plugin.cs's own
+    // currentMods is expected identifier-unique - the same invariant Plugin.cs's own
     // ReadCurrentModPaths() already relies on elsewhere (GetModListAdapter keys by Penumbra's own
-    // directory identifier). Every move's identifier is guaranteed present in currentMods by
-    // construction: RollbackHistory.BuildRestorePlan only ever emits a move for a mod found in both
-    // the target snapshot and currentMods. The lookup below still throws with a named identifier if
-    // that invariant is ever violated, rather than failing later with a bare KeyNotFoundException.
+    // directory identifier), but enforced explicitly here (unlike that existing call site) so a
+    // violation fails with a clear diagnostic naming the offending identifiers, not a bare LINQ
+    // ArgumentException from ToDictionary. Every move's identifier is guaranteed present in
+    // currentMods by construction: RollbackHistory.BuildRestorePlan only ever emits a move for a
+    // mod found in both the target snapshot and currentMods. The lookup below still throws with a
+    // named identifier if that invariant is ever violated, rather than failing later with a bare
+    // KeyNotFoundException.
     public static IReadOnlyList<NamedModMove> BuildNamedMoves(IReadOnlyList<ModMove> moves, IReadOnlyList<LiveMod> currentMods)
     {
+        var duplicates = currentMods
+            .GroupBy(m => m.Identifier, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+        if (duplicates.Count > 0)
+            throw new InvalidOperationException($"Current mod list contains duplicate identifiers: {string.Join(", ", duplicates)}");
+
         var nameByIdentifier = currentMods.ToDictionary(m => m.Identifier, m => m.Name, StringComparer.Ordinal);
         return moves
             .Select(m => new NamedModMove(
@@ -213,6 +249,13 @@ failure mode independently unit-testable from plan construction. `LiveMod`/`ModM
 unqualified (both defined in the enclosing `PenumbraOrganizer.Plugin.Organizer` namespace, same
 pattern the existing `BuildApplyPlan` already relies on).
 
+`BuildRestoreOperationPlan` needs no separate duplicate check on `namedMoves` itself: I confirmed
+`OperationPlan.Create`'s existing `Validate` already rejects a duplicate recovery-target identifier
+with a precise diagnostic (`"Duplicate recovery target identifier '{t.Identifier}'."`, via
+`targetByIdentifier.TryAdd` in `OperationPlan.cs`) — this path is already exercised by `BuildApplyPlan`
+today and requires no new code, only a test confirming `BuildRestoreOperationPlan` surfaces the same
+existing diagnostic when given duplicate `namedMoves` identifiers.
+
 **Zero-move plans are a real, valid Restore outcome** (everything already matches, or every touched
 mod was uninstalled/protected) and must be verified to work end-to-end through the real engine, not
 just accepted by `OperationPlan.Validate`. Confirmed by reading `PathMutationOperation`'s step loop
@@ -228,21 +271,43 @@ Restore is the first caller to expose, and this plan adds the missing coverage a
 
 Mirrors `StartApplyOperation()`'s shape, reusing everything `Restore(Guid)` already does to build a
 `RestorePlan` — only the tail changes from synchronous `ExecuteOrderedMoves` to an async hand-off.
-Ordering is deliberate: every pure computation and every bundle-local file write happens *before* the
-pre-restore snapshot is appended to the user-visible `organizer-history.json`, so a failure anywhere
-in plan/bundle construction cannot leave a "Snapshot before restoring..." history entry with no
-accompanying restore (the actual data-loss-adjacent risk in the original draft of this design). This
-narrows, rather than eliminates, the residue window: a failure between the history append and a
-successful `OperationController.StartRestore` call can still leave an orphaned bundle directory with
-no discoverable operation — accepted as the same class of residue `StartApplyOperation` already
-carries today (full transactional bundle-staging is out of scope for this plan, matching B2's own
-precedent).
+Two guards run before any side effect: `_operationInProgress` (the existing UI-level gate) and a new
+`OperationController.State.CanStartRestore` preflight read directly from the controller's own
+authoritative state, before the bundle directory or any file exists. The second guard is defense in
+depth, not redundant — it does not itself prove `_operationInProgress` stays perfectly synchronized
+with the controller (see §6a for why that synchronization is expected to hold, not assumed). A narrow
+time-of-check/time-of-use gap remains between this preflight and `OperationController.StartRestore`'s
+own admission a few lines later; closing it fully would require the controller to reserve an admission
+slot atomically before any bundle file becomes externally visible, which this plan does not build
+(the plugin's actual call pattern is single-threaded and UI-driven — both entry points only ever fire
+from a button click on the UI thread — so the gap has no live trigger today, but it is not eliminated
+structurally, and this document says so rather than claiming a guarantee the code doesn't provide).
+
+Ordering is additionally deliberate: every pure computation and every bundle-local file write happens
+*before* the pre-restore snapshot is appended to the user-visible `organizer-history.json`, so a
+failure anywhere in plan/bundle construction cannot leave a "Snapshot before restoring..." history
+entry with no accompanying restore (the actual data-loss-adjacent risk in the original draft of this
+design). This narrows, rather than eliminates, the residue window: a failure between the history
+append and a successful `OperationController.StartRestore` call can still leave an orphaned bundle
+directory with no discoverable operation — accepted as the same class of residue `StartApplyOperation`
+already carries today (full transactional bundle-staging is out of scope for this plan, matching B2's
+own precedent). Likewise, a failure *partway through* the three bundle-local writes (plan/snapshot/
+result-seed) can leave one or two files written and the third missing — this is bundle-local residue
+with no history entry and no active controller operation, not the stronger "fully atomic bundle
+write" some phrasing earlier in this design implied; §11's test list is worded to match that.
 
 ```csharp
 internal void StartRestoreOperation(Guid snapshotId)
 {
     if (_operationInProgress)
         throw new InvalidOperationException("Another organizer operation is already in progress.");
+    // Defense-in-depth alongside _operationInProgress, not a replacement for it: reads the
+    // controller's own authoritative state before any side effect below runs. A narrow TOCTOU gap
+    // remains between this check and OperationController.StartRestore's own admission guard - see
+    // this method's own doc comment for why that gap is accepted rather than closed with a
+    // reservation API.
+    if (!OperationController.State.CanStartRestore)
+        throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
 
     var history = Organizer.RollbackHistory.Load(HistoryFilePath);
     var target = history.FirstOrDefault(s => s.Id == snapshotId)
@@ -310,6 +375,46 @@ catch
 }
 ```
 
+## 6a. Where `_operationInProgress` resets on normal (non-throwing) completion
+
+Neither `StartApplyOperation` nor `StartRestoreOperation` resets `_operationInProgress` back to
+`false` on success — that already happens elsewhere, in `Plugin.OnFrameworkUpdate` (subscribed to
+`Framework.Update`, runs every frame):
+
+```csharp
+private void OnFrameworkUpdate(IFramework framework)
+{
+    OperationController.Update();
+    if (_operationInProgress && OperationController.State.CanStartApply)
+        _operationInProgress = false; // the async Apply operation just reached a terminal stage
+}
+```
+
+**This check already resets the flag correctly for a completed Restore today, with no code change
+needed** — but its comment is now misleading and must be corrected, because the reason it works is
+non-obvious. `OperationStateSnapshot.CanStartApply` and `CanStartRestore` are not independently
+derived: `PublishState` sets every `CanStartX` field (`CanStartApply`, `CanStartRestore`, `CanScan`,
+`CanIndex`, etc.) to the exact same `canStartNew` boolean, because there is only ever one `_active`
+operation at a time — "can something new start" is one global fact, exposed under several
+field names for each UI call site's convenience, not five independently-tracked permissions. Checking
+`CanStartApply` is therefore equivalent to checking `CanStartRestore` today, and this plan relies on
+that equivalence rather than adding a redundant `|| CanStartRestore` to the condition. The comment
+changes to:
+
+```csharp
+if (_operationInProgress && OperationController.State.CanStartApply)
+    _operationInProgress = false; // any async organizer operation (Apply or Restore) just reached
+                                   // a terminal, non-recovery stage - CanStartApply/CanStartRestore
+                                   // are guaranteed equal today (PublishState derives both from one
+                                   // shared canStartNew), so checking either detects completion of
+                                   // either operation type. If a future plan ever splits them apart
+                                   // per-type, this check must be revisited.
+```
+
+If a future plan does split `CanStartApply`/`CanStartRestore` into independently-derived values, this
+line becomes wrong silently — the doc comment is written to make that consequence explicit for
+whoever makes that change, rather than leaving it to be rediscovered as a bug.
+
 ## 7. `Preview​Restore` — untouched
 
 `Plugin.PreviewRestore(Guid)` (the read-only computation backing the confirmation popup) stays exactly
@@ -338,6 +443,14 @@ Build must stay clean (0 warnings/errors) with these attributes present and zero
 that is the actual proof of unreachability, not just an assertion in a doc comment. If any caller is
 found to remain (there should not be any after this plan's MainWindow changes in §9), that's a task
 failure to fix, not a warning to suppress.
+
+**`Restore(Guid)` calls `ExecuteOrderedMoves(...)` internally, and both are marked obsolete-as-error
+here — this does not break the build.** Verified empirically, not assumed: a throwaway two-method
+repro (`[Obsolete(error: true)] A()` calling `[Obsolete(error: true)] B()`) compiled with `dotnet
+build` and produced 0 warnings/0 errors; the CS0619 diagnostic only fires when a *non-obsolete* caller
+reaches an obsolete member, which is exactly the situation these three methods are in relative to each
+other once nothing outside the trio calls into them. No fallback (unannotated private helper,
+non-error `Obsolete`, outright deletion) is needed as a result.
 
 ## 9. `MainWindow`: History tab wiring
 
@@ -409,17 +522,28 @@ than differentiating by outcome:
 
 **Pure/xUnit-testable** (new tests, mirroring existing `StartApply`/`BuildApplyPlan` coverage):
 
-- `OperationController.StartRestore`: happy path with a `Restore`-type plan; rejects an `Apply`-type
-  plan (mirrors the existing `StartApply` rejection test, type reversed); **a genuinely empty
-  `ExecutionSteps`/`RecoveryTargets` plan reaches a terminal stage on the first `Update` tick** — the
-  gap identified in §5, not previously covered by any existing test in this suite.
-- `OperationPlanBuilder.BuildNamedMoves`: happy path resolves names correctly; throws with a named
+- `OperationController.StartRestore`/`StartApply`: happy path with a `Restore`-type plan; rejects an
+  `Apply`-type plan (mirrors the existing `StartApply` rejection test, type reversed); **rejects a new
+  operation while the previous `_active` operation is `Journal.IsTerminal == true` but
+  `RequiresRecovery == true`** (the guard fix in §3 — this is the most important new test in this
+  plan, proving the controller's own admission rule matches its own `PublishState` derivation).
+- **A genuinely empty `ExecutionSteps`/`RecoveryTargets` plan started via `StartRestore` reaches a
+  terminal, UI-consumable state on the first `Update` tick, asserted in full**: `Kind ==
+  OperationType.Restore`, `CanStartRestore == true`, `RequiresRecovery == false`, `ProcessedSteps ==
+  0`, `TotalSteps == 0`. This single test both covers the zero-step gap identified in §5 *and* proves
+  the terminal-retention claim in §9 (`Kind` surviving into a terminal, UI-consumed snapshot) with a
+  real assertion rather than an inference from a doc comment.
+- `OperationPlanBuilder.BuildNamedMoves`: happy path resolves names correctly; throws naming the
+  offending identifiers when `currentMods` contains a duplicate identifier; throws with a named
   identifier when a move's identifier isn't found in `currentMods`.
 - `OperationPlanBuilder.BuildRestoreOperationPlan`: a cyclic restore produces correct temporary/final
   steps and `GroupId`s (mirrors `BuildApplyPlan`'s existing cycle test); recovery targets carry
-  `CurrentPath`→`TargetPath`, never a temporary cycle-breaking hop path.
+  `CurrentPath`→`TargetPath`, never a temporary cycle-breaking hop path; duplicate `namedMoves`
+  identifiers surface `OperationPlan.Create`'s existing "Duplicate recovery target identifier"
+  diagnostic (confirms the existing check applies here too, per §5 — no new validation code needed).
 - `RestoreResultSeed`/`OperationRestoreResultSeedCodec`: round-trips all four fields including the
-  full `TargetSnapshot`; a saved `OperationPlan` with `Type: OperationType.Restore` round-trips through
+  full `TargetSnapshot`; `TryLoad` rejects a payload with a null `TargetSnapshot` or a null
+  classification list; a saved `OperationPlan` with `Type: OperationType.Restore` round-trips through
   `OperationPlanCodec` correctly (confirms `Restore` survives serialization, not just the
   previously-only-exercised `Apply`).
 
@@ -428,11 +552,17 @@ decision not to extract an injectable/testable orchestration service this plan, 
 build-verified plus a manual checklist only; naming this here as accepted risk rather than an
 unavoidable limitation, per the review that shaped this plan):
 
-- Starting Restore while Apply is active is rejected with no bundle/history residue.
-- A bundle-write failure during `StartRestoreOperation` leaves no history entry and no active
-  operation (guaranteed by the ordering in §6, but only exercisable live).
+- Starting Restore while Apply is active is rejected by the `_operationInProgress`/`CanStartRestore`
+  preflight in §6, before any bundle file or history entry is created — so this case produces no
+  residue at all (the preflight runs first, before any write).
+- A failure *partway through* the three bundle-local writes (plan/snapshot/result-seed) or between
+  the last write and the history append leaves **no history entry and no active controller
+  operation** (guaranteed by the ordering in §6) but **may leave partial bundle-local residue** — one
+  or two of the three files written, the bundle directory itself present with no accompanying journal.
+  This is weaker than "no residue at all" and the manual checklist should be worded to match: verify
+  the absence of history/controller state, not the absence of any file on disk.
 - Controller-start failure resets `_operationInProgress` (guaranteed by the try/catch in §6, same
-  caveat).
+  caveat — only exercisable live, not by an automated test).
 - The History tab never shows Restore progress while an Apply is running, and vice versa.
 - A Restore's `restore-result-seed.json` file exists in its bundle directory after a real in-game run
   (Plan D's job is reading it back; this plan's job is only making sure it's there to read).
