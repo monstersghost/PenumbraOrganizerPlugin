@@ -37,6 +37,7 @@ public class OperationBundleDiscoveryTests
             var result = OperationBundleDiscovery.RunStartupDiscovery(dir.FullName);
 
             Assert.Empty(result.Journals);
+            Assert.Equal(OperationRecoveryGraphStatus.NoRecoveryNeeded, result.Graph.Status);
         }
         finally
         {
@@ -128,6 +129,26 @@ public class OperationBundleDiscoveryTests
             Assert.Equal(2, result.Journals.Count);
             Assert.Equal(OperationRecoveryGraphStatus.SingleAuthoritative, result.Graph.Status);
             Assert.Equal([childId], result.Graph.AuthoritativeOperationIds);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RunStartupDiscovery_OnlyTerminalBundlesPresent_NoRecoveryNeeded()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var id = Guid.NewGuid();
+            SaveActiveBundle(dir.FullName, Journal(id, OperationStage.Completed));
+
+            var result = OperationBundleDiscovery.RunStartupDiscovery(dir.FullName);
+
+            Assert.Empty(result.Journals);
+            Assert.Equal(OperationRecoveryGraphStatus.NoRecoveryNeeded, result.Graph.Status);
         }
         finally
         {

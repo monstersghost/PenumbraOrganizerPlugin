@@ -23,10 +23,11 @@ public class OperationRecoveryGraphTests
         UpdatedAt: DateTimeOffset.UtcNow);
 
     [Fact]
-    public void Analyze_EmptyList_SingleAuthoritativeIsMeaninglessButMustNotThrow()
+    public void Analyze_EmptyList_NoRecoveryNeeded()
     {
         var result = OperationRecoveryGraph.Analyze([]);
 
+        Assert.Equal(OperationRecoveryGraphStatus.NoRecoveryNeeded, result.Status);
         Assert.Empty(result.AuthoritativeOperationIds);
         Assert.Empty(result.AllOperationIds);
     }

@@ -1,6 +1,6 @@
 namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 
-public enum OperationRecoveryGraphStatus { SingleAuthoritative, MultipleDisconnectedRoots, CycleDetected }
+public enum OperationRecoveryGraphStatus { NoRecoveryNeeded, SingleAuthoritative, MultipleDisconnectedRoots, CycleDetected }
 
 public sealed record OperationRecoveryGraphResult(
     OperationRecoveryGraphStatus Status,
@@ -21,6 +21,9 @@ public static class OperationRecoveryGraph
     {
         var idSet = journals.Select(j => j.OperationId).ToHashSet();
         var allIds = idSet.ToList();
+
+        if (allIds.Count == 0)
+            return new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.NoRecoveryNeeded, [], []);
 
         // Only edges where the parent is also in this set count for graph structure.
         var childToParent = journals
