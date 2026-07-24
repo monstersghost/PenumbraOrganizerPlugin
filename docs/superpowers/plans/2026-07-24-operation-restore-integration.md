@@ -23,9 +23,12 @@ last so the build stays green at every checkpoint.
 
 ## Global Constraints
 
-- `dotnet build` must remain 0 warnings/errors at the end of every task, including Task 6's
-  `[Obsolete(error: true)]` attributes - this is the actual proof those methods have zero remaining
-  callers, not an assertion.
+- `dotnet build` must introduce no NEW warnings/errors at the end of any task, and 0 errors always.
+  The verified baseline (confirmed at worktree setup) already carries 2 pre-existing, already-accepted
+  warnings from Plan B2 (`CS0649` on `MainWindow._lastApplyResults`, `xUnit2017` in
+  `ApplyPlannerTests.cs`) - neither is in scope for this plan to fix, and neither should be flagged as
+  a regression. Task 6 specifically must end at 0 errors with its `[Obsolete(error: true)]` attributes
+  present - that is the actual proof those methods have zero remaining callers, not an assertion.
 - No automated test may mock `IDalamudPluginInterface`/`IFramework`/Penumbra IPC to force unit
   coverage onto `Plugin.cs`/`MainWindow.cs` - same documented limitation carried forward from Plan
   B1/B2. Those two files are verified by build + the manual checklist in Task 7 only.
@@ -288,7 +291,7 @@ In `PenumbraOrganizer.Plugin/Organizer/Operations/OperationBundlePaths.cs`, add 
 - [ ] **Step 7: Run the full test suite**
 
 Run: `dotnet build && dotnet test PenumbraOrganizer.Plugin.Tests`
-Expected: build succeeds 0 warnings/errors; all tests pass (existing count plus 6 new).
+Expected: build succeeds with no new warnings/errors beyond the accepted baseline (see Global Constraints); all tests pass (existing count plus 6 new).
 
 - [ ] **Step 8: Commit**
 
@@ -528,7 +531,7 @@ Expected: all pass (existing 4 plus 8 new = 12/12).
 - [ ] **Step 5: Run the full test suite**
 
 Run: `dotnet build && dotnet test PenumbraOrganizer.Plugin.Tests`
-Expected: build succeeds 0 warnings/errors; all tests pass.
+Expected: build succeeds with no new warnings/errors beyond the accepted baseline; all tests pass.
 
 - [ ] **Step 6: Commit**
 
@@ -766,7 +769,7 @@ Expected: all existing `StartApply_*` tests still pass unchanged, plus the 6 new
 - [ ] **Step 6: Run the full test suite**
 
 Run: `dotnet build && dotnet test PenumbraOrganizer.Plugin.Tests`
-Expected: build succeeds 0 warnings/errors; all tests pass (this is the "after each controller stage"
+Expected: build succeeds with no new warnings/errors beyond the accepted baseline; all tests pass (this is the "after each controller stage"
 checkpoint - the repository must be fully green here before Task 4 begins).
 
 - [ ] **Step 7: Commit**
@@ -919,7 +922,7 @@ before this step; only the misleading comment is being fixed.
 - [ ] **Step 4: Build**
 
 Run: `dotnet build`
-Expected: 0 warnings, 0 errors. (No automated tests for this task - `Plugin.cs` is Dalamud-coupled.)
+Expected: 0 errors, no new warnings beyond the accepted baseline. (No automated tests for this task - `Plugin.cs` is Dalamud-coupled.)
 
 - [ ] **Step 5: Run the full test suite**
 
@@ -1094,7 +1097,7 @@ with:
 - [ ] **Step 5: Build**
 
 Run: `dotnet build`
-Expected: 0 warnings, 0 errors.
+Expected: 0 errors, no new warnings beyond the accepted baseline.
 
 - [ ] **Step 6: Run the full test suite**
 
@@ -1149,7 +1152,7 @@ method declarations (do not change their bodies):
 - [ ] **Step 3: Build - confirm obsolete-calling-obsolete does not error**
 
 Run: `dotnet build`
-Expected: 0 warnings, 0 errors. `ApplyChanges()`'s and `Restore(Guid)`'s internal calls to
+Expected: 0 errors. `ApplyChanges()`'s and `Restore(Guid)`'s internal calls to
 `ExecuteOrderedMoves(...)` do not trigger CS0619, because the C# compiler exempts a call from one
 `[Obsolete(error: true)]` member to another (verified empirically during this plan's design phase via
 a standalone repro compiled with `dotnet build`, not assumed). If this build step surprises that
@@ -1179,7 +1182,7 @@ git commit -m "chore: mark legacy synchronous Apply/Restore path obsolete-as-err
 - [ ] **Step 1: Full clean build**
 
 Run: `dotnet build`
-Expected: 0 warnings, 0 errors.
+Expected: 0 errors, no new warnings beyond the accepted baseline.
 
 - [ ] **Step 2: Full test suite**
 
