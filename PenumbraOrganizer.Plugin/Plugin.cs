@@ -355,6 +355,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal bool FolderBackupExists => File.Exists(FolderBackupFilePath);
 
+    [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
     internal IReadOnlyList<Organizer.ApplyResult> ApplyChanges()
     {
         if (_operationInProgress)
@@ -528,6 +529,7 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
     internal IReadOnlyList<Organizer.RestoreResult> Restore(Guid snapshotId)
     {
         if (_operationInProgress)
@@ -630,6 +632,7 @@ public sealed class Plugin : IDalamudPlugin
     // Runs a cycle-safe ordered set of SetModPath calls and reports, per identifier, the first
     // failure it hit (skipping any later step for an identifier once one of its steps has failed,
     // since a mod parked mid-cycle can't reach its real target if its own earlier hop failed).
+    [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
     private Dictionary<string, string> ExecuteOrderedMoves(IReadOnlyList<Organizer.ModMove> moves)
     {
         var steps = Organizer.ApplyPlanner.OrderMovesForApply(moves);
