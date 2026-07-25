@@ -36,6 +36,10 @@ public sealed class MainWindow : Window, IDisposable
     private IReadOnlyList<Organizer.RestoreResult>? _lastRestoreResults;
     private Guid? _pendingRestoreSnapshotId;
     private Organizer.RestorePlan? _pendingRestorePreview;
+    private IReadOnlyList<Organizer.Operations.OperationJournal> _recentOperations = [];
+    private bool _recentOperationsLoaded;
+    private string? _recentOperationsError;
+    private bool _recentOperationsSectionWasOpen;
     private IReadOnlyList<Organizer.RollbackSnapshot>? _historyCache;
     private Organizer.FolderDetectionResult? _orphanedFolders;
     private DateTimeOffset? _organizationJsonLastReadAt;
@@ -838,6 +842,25 @@ public sealed class MainWindow : Window, IDisposable
         DrawOrphanedFoldersSection();
     }
 
+    private void RefreshRecentOperations()
+    {
+        try
+        {
+            _recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
+            _recentOperationsError = null;
+        }
+        catch (Exception ex)
+        {
+            _recentOperations = [];
+            _recentOperationsError = $"Could not load recent operations: {ex.Message}";
+            Plugin.Log.Warning(ex, "Loading recent operations failed.");
+        }
+        finally
+        {
+            _recentOperationsLoaded = true;
+        }
+    }
+
     private void DrawHistoryTab()
     {
         using var tab = ImRaii.TabItem("History");
@@ -985,6 +1008,55 @@ public sealed class MainWindow : Window, IDisposable
                 DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore"); // Task 8 wires the real cancel callback
             else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        var recentOperationsOpen = ImGui.CollapsingHeader("Recent Operations");
+        // Reload only on a collapsed -> expanded transition (or the very first expansion), not every
+        // frame the header stays open - the naive "load every frame it's expanded" version is exactly
+        // the per-frame-disk-read pattern this section must avoid.
+        if (recentOperationsOpen && (!_recentOperationsLoaded || !_recentOperationsSectionWasOpen))
+            RefreshRecentOperations();
+        _recentOperationsSectionWasOpen = recentOperationsOpen;
+
+        if (recentOperationsOpen)
+        {
+            if (ImGui.Button("Refresh##recent-operations"))
+                RefreshRecentOperations();
+
+            if (_recentOperationsError is { } error)
+            {
+                ImGui.TextColored(PluginTheme.CollisionBad, error);
+            }
+            else if (_recentOperations.Count == 0)
+            {
+                ImGui.TextDisabled("No completed operations yet.");
+            }
+            else
+            {
+                using var table = ImRaii.Table("RecentOperationsTable", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV);
+                if (table)
+                {
+                    ImGui.TableSetupColumn("When");
+                    ImGui.TableSetupColumn("Type");
+                    ImGui.TableSetupColumn("Stage");
+                    ImGui.TableSetupColumn("Resolution");
+                    ImGui.TableHeadersRow();
+                    foreach (var journal in _recentOperations)
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(journal.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(journal.Type.ToString());
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(journal.Stage.ToString());
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(journal.Resolution.ToString());
+                    }
+                }
+            }
         }
     }
 
