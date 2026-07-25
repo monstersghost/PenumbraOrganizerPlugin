@@ -1622,6 +1622,66 @@ public class OperationControllerTests
         }
     }
 
+    [Fact]
+    public void ResolveContinue_ParentJournalWriteFails_SuccessorStillBecomesAuthoritativeOnNextStartupDiscovery()
+    {
+        // Final whole-branch review, Important finding: the catch block around the parent-journal
+        // write claims "on next startup the successor's own RecoveryOfOperationId makes it, not the
+        // stale parent, authoritative in OperationRecoveryGraph.Analyze" - this test proves that claim
+        // is actually true end-to-end (StartRecoverySuccessor threading RecoveryOfOperationId through
+        // to StartOperation, then a real OperationBundleDiscovery.RunStartupDiscovery pass over the
+        // resulting on-disk state), rather than trusting the comment's own assertion.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, journalId, interruptedBundleDirectory) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+
+            // Force the parent-journal-resolution write specifically to fail (not the successor's own
+            // journal write, which lives in a different, freshly-created bundle directory) - same
+            // exclusive-lock-on-the-temp-file technique already established by
+            // AcceptAllAndCloseInterruptedOperations_RetryAfterPartialFailure.
+            var interruptedJournalPath = OperationBundlePaths.JournalPath(interruptedBundleDirectory);
+            var interruptedTempPath = interruptedJournalPath + ".tmp";
+            var lockOnTempFile = new FileStream(interruptedTempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+
+            Exception? exception;
+            try
+            {
+                exception = Record.Exception(() => controller.ResolveContinue());
+            }
+            finally
+            {
+                lockOnTempFile.Dispose();
+                File.Delete(interruptedTempPath);
+            }
+
+            Assert.Null(exception); // the successor already started successfully - must not report failure
+            Assert.False(controller.State.RequiresRecovery); // _pendingRecovery was cleared before the parent-write attempt
+
+            // The interrupted bundle is untouched (still active/, still non-terminal) since its own
+            // write failed; the successor got its own new bundle directory.
+            Assert.True(Directory.Exists(interruptedBundleDirectory));
+            var activeDir = OperationBundlePaths.ActiveDirectory(dir.FullName);
+            var successorBundleDirectory = Directory.GetDirectories(activeDir).Single(d => !string.Equals(d.TrimEnd('\\', '/'), interruptedBundleDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(successorBundleDirectory), out var successorJournal));
+            Assert.Equal(journalId, successorJournal!.RecoveryOfOperationId); // the fix under test
+
+            var discovery = OperationBundleDiscovery.RunStartupDiscovery(dir.FullName);
+
+            Assert.Equal(OperationRecoveryGraphStatus.SingleAuthoritative, discovery.Graph.Status);
+            Assert.Equal(successorJournal.OperationId, Assert.Single(discovery.Graph.AuthoritativeOperationIds));
+            Assert.DoesNotContain(journalId, discovery.Graph.AuthoritativeOperationIds); // the stale parent is not re-surfaced
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     private static OperationController NewControllerWithBlockedMultiRoot(
         FakePenumbraOperations adapter, FakeClock clock, string operationsRoot, IReadOnlyList<Guid> ids)
     {

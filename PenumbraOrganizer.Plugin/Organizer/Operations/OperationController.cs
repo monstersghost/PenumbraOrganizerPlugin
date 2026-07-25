@@ -138,7 +138,7 @@ public sealed class OperationController
     // start while that lockout is in effect.
     private void StartOperation(
         OperationPlan plan, Guid snapshotId, string bundleDirectory, OperationType expectedType,
-        bool bypassPendingRecoveryLockout = false)
+        bool bypassPendingRecoveryLockout = false, Guid? recoveryOfOperationId = null)
     {
         if (plan.Type != expectedType)
             throw new ArgumentException($"This entry point requires a {expectedType}-type plan; got {plan.Type}.", nameof(plan));
@@ -153,13 +153,17 @@ public sealed class OperationController
         // journal.OperationId and journal.PlanId both reuse plan.OperationId: a plan and the
         // journal that executes it are always constructed together when an operation is started, so there is
         // no meaningful distinction between "this operation's identity" and "this plan's identity"
-        // for a freshly-started (non-resumed) operation.
+        // for a freshly-started (non-resumed) operation. RecoveryOfOperationId is null for an ordinary
+        // StartApply/StartRestore and set only by StartRecoverySuccessor - it is what actually makes
+        // OperationRecoveryGraph.Analyze treat a recovery successor as authoritative over its stale
+        // parent on a later startup (design doc section 5's stated safety net for a failed parent-
+        // journal write; this parameter is what makes that guarantee true, not merely asserted).
         var preparedJournal = new OperationJournal(
             SchemaVersion: OperationJournal.CurrentSchemaVersion, OperationId: plan.OperationId, Type: plan.Type,
             Stage: OperationStage.Prepared, Resolution: OperationResolution.None, SuccessorOperationId: null,
             CancellationRequested: false, StartedAt: DateTimeOffset.UtcNow, TotalSteps: plan.ExecutionSteps.Count,
             ProcessedStepCount: 0, LastCompletedIdentifier: null, SnapshotId: snapshotId, PlanId: plan.OperationId,
-            TargetHash: plan.IntegrityHash, RecoveryOfOperationId: null, UpdatedAt: DateTimeOffset.UtcNow);
+            TargetHash: plan.IntegrityHash, RecoveryOfOperationId: recoveryOfOperationId, UpdatedAt: DateTimeOffset.UtcNow);
         checkpointer.CheckpointIfDue(preparedJournal, force: true); // forced write on entering Prepared
 
         var mutatingJournal = preparedJournal with { Stage = OperationStage.Mutating, UpdatedAt = DateTimeOffset.UtcNow };
@@ -178,8 +182,8 @@ public sealed class OperationController
         PublishState();
     }
 
-    private void StartRecoverySuccessor(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
-        StartOperation(plan, snapshotId, bundleDirectory, plan.Type, bypassPendingRecoveryLockout: true);
+    private void StartRecoverySuccessor(OperationPlan plan, Guid snapshotId, string bundleDirectory, Guid recoveryOfOperationId) =>
+        StartOperation(plan, snapshotId, bundleDirectory, plan.Type, bypassPendingRecoveryLockout: true, recoveryOfOperationId: recoveryOfOperationId);
 
     public void RegisterDiscoveredRecovery(OperationDiscoveryResult discovery)
     {
@@ -374,7 +378,7 @@ public sealed class OperationController
         {
             OperationPlanCodec.Save(OperationBundlePaths.PlanPath(newBundleDirectory), newPlan);
             OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(newBundleDirectory), newSnapshot);
-            StartRecoverySuccessor(newPlan, newSnapshot.Id, newBundleDirectory);
+            StartRecoverySuccessor(newPlan, newSnapshot.Id, newBundleDirectory, expectedPending.Journal.OperationId);
         }
         catch
         {
