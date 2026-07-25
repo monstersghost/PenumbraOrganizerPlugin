@@ -14,6 +14,8 @@ public sealed class MainWindow : Window, IDisposable
 {
     private const int MaxEventLogLines = 200;
     private const int RecentOperationsCount = 20;
+    private const float StandardPopupWidth = 420f;
+    private const float DetailedPopupWidth = 560f;
 
     private readonly Plugin _plugin;
     private readonly CreatorCanonicalizer _creatorCanonicalizer = new();
@@ -153,14 +155,24 @@ public sealed class MainWindow : Window, IDisposable
             foreach (var (operationId, journal) in blocked.OrderByDescending(b => b.Journal.UpdatedAt))
             {
                 ImGui.TextUnformatted($"{journal.Type} - {journal.Stage} - interrupted {journal.UpdatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
-                ImGui.SameLine();
-                if (ImGui.Button($"Keep Current State##multiroot-{operationId}"))
+                // Same wrapping idiom as DrawWrappingButtonRow - the row's text is unbounded
+                // (Stage names vary widely in length), so only chain the button onto the same
+                // line if it actually still fits at this window's current width; otherwise it
+                // drops to its own line instead of spilling past the window edge.
+                var buttonLabel = $"Keep Current State##multiroot-{operationId}";
+                var buttonWidth = ImGui.CalcTextSize("Keep Current State").X + ImGui.GetStyle().FramePadding.X * 2;
+                var textEndX = ImGui.GetItemRectMax().X;
+                var windowVisibleX2 = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+                if (textEndX + ImGui.GetStyle().ItemSpacing.X + buttonWidth < windowVisibleX2)
+                    ImGui.SameLine();
+                if (ImGui.Button(buttonLabel))
                     ImGui.OpenPopup($"Keep current state for {operationId}?");
 
+                ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
                 if (ImGui.BeginPopupModal($"Keep current state for {operationId}?"))
                 {
-                    ImGui.TextUnformatted("This selected operation cannot later be continued or restored - it will be permanently abandoned.");
-                    ImGui.TextUnformatted("Any other interrupted operations found stay blocked until resolved separately.");
+                    ImGui.TextWrapped("This selected operation cannot later be continued or restored - it will be permanently abandoned.");
+                    ImGui.TextWrapped("Any other interrupted operations found stay blocked until resolved separately.");
                     if (ImGui.Button("Yes, Keep Current") && ResolveOneMultiRoot(operationId))
                         ImGui.CloseCurrentPopup();
                     ImGui.SameLine();
@@ -174,9 +186,10 @@ public sealed class MainWindow : Window, IDisposable
             if (ImGui.Button("Accept Current State and Close All Interrupted Operations"))
                 ImGui.OpenPopup("Close all interrupted operations?");
 
+            ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
             if (ImGui.BeginPopupModal("Close all interrupted operations?"))
             {
-                ImGui.TextColored(ImGuiColors.DalamudYellow,
+                TextColoredWrapped(ImGuiColors.DalamudYellow,
                     "This abandons every interrupted operation the plugin found. None of them can be " +
                     "continued or rolled back after this - only Keep Current's outcome is possible for all of them.");
                 if (ImGui.Button("Yes, Close All"))
@@ -206,9 +219,10 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.OpenPopup("Keep current state?");
         ImGui.EndDisabled();
 
+        ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Keep current state?"))
         {
-            ImGui.TextUnformatted("This will mark the interrupted operation as resolved and unblock the plugin.");
+            ImGui.TextWrapped("This will mark the interrupted operation as resolved and unblock the plugin.");
             if (ImGui.Button("Yes, Keep Current"))
             {
                 _plugin.ResolveKeepCurrent();
@@ -226,9 +240,10 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.OpenPopup("Continue interrupted operation?");
         ImGui.EndDisabled();
 
+        ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Continue interrupted operation?"))
         {
-            ImGui.TextUnformatted("This will finish the interrupted operation from where it left off.");
+            ImGui.TextWrapped("This will finish the interrupted operation from where it left off.");
             if (ImGui.Button("Yes, Continue") && ContinueRecovery())
                 ImGui.CloseCurrentPopup();
             ImGui.SameLine();
@@ -243,9 +258,10 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.OpenPopup("Restore to state before the interrupted operation?");
         ImGui.EndDisabled();
 
+        ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Restore to state before the interrupted operation?"))
         {
-            ImGui.TextUnformatted("This will roll every mod back to how it was before the interrupted operation started.");
+            ImGui.TextWrapped("This will roll every mod back to how it was before the interrupted operation started.");
             if (ImGui.Button("Yes, Restore") && RestorePreviousState())
                 ImGui.CloseCurrentPopup();
             ImGui.SameLine();
@@ -275,7 +291,7 @@ public sealed class MainWindow : Window, IDisposable
                     if (operationState.RecoveryClassificationPending)
                         ImGui.TextDisabled("Still checking live mod state...");
                     else
-                        ImGui.TextColored(PluginTheme.CollisionBad, "Per-mod classification is unavailable - see the artifact status above.");
+                        TextColoredWrapped(PluginTheme.CollisionBad, "Per-mod classification is unavailable - see the artifact status above.");
                 }
                 else if (assessment.Classifications.Count == 0)
                 {
@@ -293,7 +309,11 @@ public sealed class MainWindow : Window, IDisposable
                         {
                             ImGui.TableNextRow();
                             ImGui.TableNextColumn();
+                            // Wrapped at the column's own width, not clipped - a mod identifier
+                            // can be long enough to otherwise get cut off in a narrow window.
+                            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X);
                             ImGui.TextUnformatted(classification.Identifier);
+                            ImGui.PopTextWrapPos();
                             ImGui.TableNextColumn();
                             var color = classification.State switch
                             {
@@ -314,7 +334,7 @@ public sealed class MainWindow : Window, IDisposable
                 // _pendingRecovery, so no artifacts were ever recorded and there is nothing to
                 // classify - falling through to the classification-unavailable text would misleadingly
                 // point the user at an artifact section that was never shown.
-                ImGui.TextDisabled("This operation failed during the current session; no interrupted-plan artifacts were recorded.");
+                TextDisabledWrapped("This operation failed during the current session; no interrupted-plan artifacts were recorded.");
             }
         }
 
@@ -533,6 +553,55 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
+    // Same wrapping idiom as DrawWrappingButtonRow above, adapted for a run of checkboxes - used
+    // wherever a toggle row can have enough items to overflow a narrow window (Search tab: up to
+    // 12 categories + Unknown, or 9 equipment slots + Unresolved, none of which fit on one line at
+    // this window's 900px minimum width without wrapping).
+    private static void DrawWrappingCheckboxRow(IReadOnlyList<(string Label, bool Checked, Action<bool> OnToggle)> items)
+    {
+        var style = ImGui.GetStyle();
+        var windowVisibleX2 = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+        for (var i = 0; i < items.Count; i++)
+        {
+            var (label, isChecked, onToggle) = items[i];
+            var value = isChecked;
+            if (ImGui.Checkbox(label, ref value))
+                onToggle(value);
+
+            if (i + 1 >= items.Count)
+                continue;
+
+            var nextLabel = items[i + 1].Label;
+            var nextItemWidth = ImGui.GetFrameHeight() + style.ItemInnerSpacing.X + ImGui.CalcTextSize(nextLabel).X;
+            var lastItemX2 = ImGui.GetItemRectMax().X;
+            var nextItemX2 = lastItemX2 + style.ItemSpacing.X + nextItemWidth;
+            if (nextItemX2 < windowVisibleX2)
+                ImGui.SameLine();
+        }
+    }
+
+    // Popups auto-size to their content by default, which makes a single long, unwrapped
+    // TextColored sentence stretch the whole popup to match (a genuinely "too big" popup, often
+    // wider than the main window's own minimum width). ImGui has no built-in colored+wrapped text
+    // call, so this pairs PushStyleColor with TextWrapped, matching PluginTheme.cs's own
+    // push-then-pop style for temporary color overrides.
+    private static void TextColoredWrapped(Vector4 color, string text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        ImGui.TextWrapped(text);
+        ImGui.PopStyleColor();
+    }
+
+    // Same rationale as TextColoredWrapped above, for the dimmed/disabled text color -
+    // ImGui.TextDisabled has no built-in wrapped variant either, and several long explanatory
+    // lines in this file use it.
+    private static void TextDisabledWrapped(string text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+        ImGui.TextWrapped(text);
+        ImGui.PopStyleColor();
+    }
+
     // Target-based, not step-based: a cycle-breaking plan has more execution steps than recovery
     // targets (a temporary hop plus a final move both count as steps for one target), so a
     // step-based fraction misrepresents "how many mods are done" to a user whose mental model is
@@ -609,11 +678,11 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_lastWorkbookImportResult is not null)
         {
-            ImGui.TextUnformatted(_lastWorkbookImportResult.Summary);
+            ImGui.TextWrapped(_lastWorkbookImportResult.Summary);
             foreach (var error in _lastWorkbookImportResult.Errors)
-                ImGui.TextColored(PluginTheme.CollisionBad, $"  {error}");
+                TextColoredWrapped(PluginTheme.CollisionBad, $"  {error}");
             foreach (var warning in _lastWorkbookImportResult.Warnings)
-                ImGui.TextColored(ImGuiColors.DalamudYellow, $"  {warning}");
+                TextColoredWrapped(ImGuiColors.DalamudYellow, $"  {warning}");
         }
 
         ImGui.Spacing();
@@ -636,14 +705,14 @@ public sealed class MainWindow : Window, IDisposable
         if (_npcRefreshResult is not null)
         {
             if (_npcRefreshResult.RecoveredFromCorruption)
-                ImGui.TextColored(ImGuiColors.DalamudYellow,
+                TextColoredWrapped(ImGuiColors.DalamudYellow,
                     "The existing NPC name list was unreadable and has been reset from the bundled "
                     + "seed list; the old file was preserved alongside it as a timestamped backup.");
 
             foreach (var category in _npcRefreshResult.Categories)
             {
                 if (category.FailureReason is not null)
-                    ImGui.TextColored(PluginTheme.CollisionBad, $"  {category.CategoryName} failed: {category.FailureReason}");
+                    TextColoredWrapped(PluginTheme.CollisionBad, $"  {category.CategoryName} failed: {category.FailureReason}");
                 else
                     ImGui.TextUnformatted($"  {category.CategoryName}: +{category.AddedCount}");
             }
@@ -715,10 +784,10 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.TextColored(PluginTheme.ChangedGood, "No issues found.");
 
         foreach (var identifier in result.ProtectedViolations)
-            ImGui.TextColored(PluginTheme.CollisionBad, $"Protected mod changed: {identifier}");
+            TextColoredWrapped(PluginTheme.CollisionBad, $"Protected mod changed: {identifier}");
 
         foreach (var (path, identifiers) in result.PathCollisions)
-            ImGui.TextColored(PluginTheme.CollisionBad, $"Collision at '{path}': {string.Join(", ", identifiers)}");
+            TextColoredWrapped(PluginTheme.CollisionBad, $"Collision at '{path}': {string.Join(", ", identifiers)}");
 
         ImGui.Spacing();
         PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: true);
@@ -735,13 +804,15 @@ public sealed class MainWindow : Window, IDisposable
         if (ImGui.Button("Create Diagnostic Dump"))
             _lastDiagnosticDumpPath = CreateDiagnosticDump();
 
+        // File paths are unbounded in length (depend on the user's own Windows profile/folder
+        // depth) - wrapped, and with any action button on its own line below rather than chained
+        // via SameLine, so a long path can never push a button past the window edge.
         if (_lastExportPath is not null)
-            ImGui.TextUnformatted($"Exported to: {_lastExportPath}");
+            ImGui.TextWrapped($"Exported to: {_lastExportPath}");
 
         if (_lastDiagnosticDumpPath is not null)
         {
-            ImGui.TextUnformatted($"Diagnostic dump written to: {_lastDiagnosticDumpPath}");
-            ImGui.SameLine();
+            ImGui.TextWrapped($"Diagnostic dump written to: {_lastDiagnosticDumpPath}");
             if (ImGui.Button("Show Dump File"))
                 OpenContainingFolder(_lastDiagnosticDumpPath);
         }
@@ -757,10 +828,9 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_lastWorkbookExportPath is not null)
         {
-            ImGui.SameLine();
-            ImGui.TextUnformatted($"Workbook exported to: {_lastWorkbookExportPath}");
-
-            ImGui.SameLine();
+            // Own line, wrapped, and the button below it rather than SameLine'd - same reasoning
+            // as the Export/Diagnostic Dump paths above: the path itself is unbounded in length.
+            ImGui.TextWrapped($"Workbook exported to: {_lastWorkbookExportPath}");
             if (ImGui.Button("Open Workbook"))
                 OpenFileWithDefaultApp(_lastWorkbookExportPath);
         }
@@ -801,6 +871,7 @@ public sealed class MainWindow : Window, IDisposable
         if (applyClicked)
             ImGui.OpenPopup("Apply changes?");
 
+        ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Apply changes?"))
         {
             ImGui.TextUnformatted($"Apply changes to {touchedCount} mods?");
@@ -902,7 +973,7 @@ public sealed class MainWindow : Window, IDisposable
 
         if (history.Count == 0)
         {
-            ImGui.TextDisabled("No backups yet. Backups are created automatically before every Apply and Restore.");
+            TextDisabledWrapped("No backups yet. Backups are created automatically before every Apply and Restore.");
         }
 
         foreach (var snapshot in history)
@@ -913,9 +984,12 @@ public sealed class MainWindow : Window, IDisposable
             var title = snapshot.Label is { Length: > 0 } label
                 ? $"{snapshot.CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} — {label}"
                 : $"{snapshot.CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} — {snapshot.AutoDescription}";
-            ImGui.TextUnformatted($"{title} ({snapshot.ModPaths.Count} mods)");
+            // Wrapped, and NOT SameLine'd with the buttons below - the label is user-supplied
+            // free text up to 200 characters (see the "Label (optional)" input above), unbounded
+            // enough that chaining it with the Restore/Delete buttons could push them past the
+            // window edge.
+            ImGui.TextWrapped($"{title} ({snapshot.ModPaths.Count} mods)");
 
-            ImGui.SameLine();
             ImGui.BeginDisabled(!operationState.CanStartRestore);
             var restoreButtonClicked = ImGui.Button($"Restore##restore-{snapshot.Id}");
             ImGui.EndDisabled();
@@ -937,6 +1011,8 @@ public sealed class MainWindow : Window, IDisposable
                 DeleteHistorySnapshot(snapshot.Id);
             }
 
+            if (_pendingRestoreSnapshotId == snapshot.Id)
+                ImGui.SetNextWindowSize(new Vector2(DetailedPopupWidth, 0), ImGuiCond.Appearing);
             if (_pendingRestoreSnapshotId == snapshot.Id && ImGui.BeginPopupModal("Restore snapshot?"))
             {
                 // Exact preview via PreviewRestore, not an ad-hoc estimate: the previous
@@ -960,16 +1036,16 @@ public sealed class MainWindow : Window, IDisposable
                 var heliosphereMovingCount = preview.Moves.Count(move =>
                     modsByIdentifier.TryGetValue(move.Identifier, out var mod) && mod.HeliosphereManaged);
 
-                ImGui.TextUnformatted($"Restore to: {title}");
-                ImGui.TextUnformatted($"{preview.Moves.Count} mods will move to their snapshot path.");
-                ImGui.TextUnformatted($"{preview.UnchangedIdentifiers.Count} mods are already at their snapshot path.");
-                ImGui.TextUnformatted($"{preview.RootRelocatedIdentifiers.Count} mods installed since this snapshot will be moved to the Penumbra root.");
-                ImGui.TextUnformatted($"{preview.SkippedUninstalledIdentifiers.Count} mods from this snapshot are no longer installed and will be skipped.");
-                ImGui.TextColored(ImGuiColors.DalamudYellow,
+                ImGui.TextWrapped($"Restore to: {title}");
+                ImGui.TextWrapped($"{preview.Moves.Count} mods will move to their snapshot path.");
+                ImGui.TextWrapped($"{preview.UnchangedIdentifiers.Count} mods are already at their snapshot path.");
+                ImGui.TextWrapped($"{preview.RootRelocatedIdentifiers.Count} mods installed since this snapshot will be moved to the Penumbra root.");
+                ImGui.TextWrapped($"{preview.SkippedUninstalledIdentifiers.Count} mods from this snapshot are no longer installed and will be skipped.");
+                TextColoredWrapped(ImGuiColors.DalamudYellow,
                     "Exact Restore: this reproduces the snapshot's historical paths, including for mods that are "
                     + "currently protected or Heliosphere-managed.");
                 if (protectedMovingCount > 0 || heliosphereMovingCount > 0)
-                    ImGui.TextColored(ImGuiColors.DalamudYellow,
+                    TextColoredWrapped(ImGuiColors.DalamudYellow,
                         $"{protectedMovingCount} currently protected and {heliosphereMovingCount} Heliosphere-managed "
                         + "mod(s) among these will move despite their current protection status.");
 
@@ -1100,19 +1176,33 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
 
         ImGui.TextUnformatted("Categories:");
-        foreach (var category in SearchableCategories)
-            DrawCategoryToggle(category);
-        DrawUnknownToggle();
+        var categoryToggles = SearchableCategories
+            .Select(category => ($"{category}##search-category-{category}", _librarySearchCategories.Contains(category), (Action<bool>)(isChecked =>
+            {
+                if (isChecked)
+                    _librarySearchCategories.Add(category);
+                else
+                    _librarySearchCategories.Remove(category);
+            })))
+            .Append(("Unknown##search-category-unknown", _librarySearchIncludeUnknown, isChecked => _librarySearchIncludeUnknown = isChecked))
+            .ToList();
+        DrawWrappingCheckboxRow(categoryToggles);
 
         if (_librarySearchCategories.Contains(ModCategory.Gear))
         {
             ImGui.Spacing();
             ImGui.TextUnformatted("Slots:");
-            foreach (var slot in Enum.GetValues<EquipmentSlot>())
-                DrawSlotToggle(slot);
-            var includeUnresolved = _librarySearchIncludeUnresolved;
-            if (ImGui.Checkbox("Unresolved##slot-unresolved", ref includeUnresolved))
-                _librarySearchIncludeUnresolved = includeUnresolved;
+            var slotToggles = Enum.GetValues<EquipmentSlot>()
+                .Select(slot => ($"{SlotLabel(slot)}##search-slot-{slot}", _librarySearchSlots.Contains(slot), (Action<bool>)(isChecked =>
+                {
+                    if (isChecked)
+                        _librarySearchSlots.Add(slot);
+                    else
+                        _librarySearchSlots.Remove(slot);
+                })))
+                .Append(("Unresolved##slot-unresolved", _librarySearchIncludeUnresolved, isChecked => _librarySearchIncludeUnresolved = isChecked))
+                .ToList();
+            DrawWrappingCheckboxRow(slotToggles);
         }
 
         ImGui.Spacing();
@@ -1176,39 +1266,6 @@ public sealed class MainWindow : Window, IDisposable
                 }
             }
         }
-    }
-
-    private void DrawCategoryToggle(ModCategory category)
-    {
-        var isChecked = _librarySearchCategories.Contains(category);
-        if (ImGui.Checkbox($"{category}##search-category-{category}", ref isChecked))
-        {
-            if (isChecked)
-                _librarySearchCategories.Add(category);
-            else
-                _librarySearchCategories.Remove(category);
-        }
-        ImGui.SameLine();
-    }
-
-    private void DrawUnknownToggle()
-    {
-        var isChecked = _librarySearchIncludeUnknown;
-        if (ImGui.Checkbox("Unknown##search-category-unknown", ref isChecked))
-            _librarySearchIncludeUnknown = isChecked;
-    }
-
-    private void DrawSlotToggle(EquipmentSlot slot)
-    {
-        var isChecked = _librarySearchSlots.Contains(slot);
-        if (ImGui.Checkbox($"{SlotLabel(slot)}##search-slot-{slot}", ref isChecked))
-        {
-            if (isChecked)
-                _librarySearchSlots.Add(slot);
-            else
-                _librarySearchSlots.Remove(slot);
-        }
-        ImGui.SameLine();
     }
 
     private static string SlotLabel(EquipmentSlot slot) => slot switch
@@ -1346,7 +1403,7 @@ public sealed class MainWindow : Window, IDisposable
         if (detection.Status is Organizer.FolderDetectionStatus.UnsupportedVersion
             or Organizer.FolderDetectionStatus.MalformedJson)
         {
-            ImGui.TextColored(ImGuiColors.DalamudYellow,
+            TextColoredWrapped(ImGuiColors.DalamudYellow,
                 "organization.json couldn't be read — folder cleanup unavailable "
                 + (detection.Status == Organizer.FolderDetectionStatus.UnsupportedVersion
                     ? "(unsupported version)."
@@ -1360,7 +1417,7 @@ public sealed class MainWindow : Window, IDisposable
             // install has no organization.json until its tree first gains folders, and an
             // invisible section reads as "the feature is gone" (real user report, 2026-07-19).
             ImGui.TextUnformatted("Orphaned Folders");
-            ImGui.TextDisabled(
+            TextDisabledWrapped(
                 "Penumbra hasn't created organization.json yet — it appears once the mod tree has "
                 + "folders (e.g. after your first Apply). Folder cleanup will activate then.");
             return;
@@ -1369,7 +1426,7 @@ public sealed class MainWindow : Window, IDisposable
         var total = detection.PlainEmpty.Count + detection.CustomizedEmpty.Count;
 
         if (_folderReloadRequired)
-            ImGui.TextColored(ImGuiColors.DalamudYellow,
+            TextColoredWrapped(ImGuiColors.DalamudYellow,
                 "Waiting on Rediscover Mods — the list below reflects organization.json on disk, "
                 + "not Penumbra's confirmed live state. Click Rediscover Mods in Penumbra, then Scan here, to re-check.");
 
@@ -1383,7 +1440,7 @@ public sealed class MainWindow : Window, IDisposable
             ? $"Last read: {readAt.ToLocalTime():HH:mm:ss} ({FormatElapsed(DateTimeOffset.Now - readAt)} ago)"
             : "Not yet read this session.");
 
-        ImGui.TextDisabled(
+        TextDisabledWrapped(
             "This reflects organization.json on disk as of the last read above, not Penumbra's live folder tree. "
             + "If Penumbra hasn't written a change to disk yet, re-reading won't show it — move a folder in "
             + "Penumbra's own UI (or use Rediscover Mods) to make Penumbra flush its tree, then re-read again.");
@@ -1415,11 +1472,19 @@ public sealed class MainWindow : Window, IDisposable
             if (cleanClicked)
                 ImGui.OpenPopup("Clean up folders?");
 
+            ImGui.SetNextWindowSize(new Vector2(DetailedPopupWidth, 0), ImGuiCond.Appearing);
             if (ImGui.BeginPopupModal("Clean up folders?"))
             {
                 ImGui.TextUnformatted($"Remove {_selectedOrphans.Count} folder entries from Penumbra's organization.json?");
-                foreach (var path in _selectedOrphans.OrderBy(p => p, StringComparer.Ordinal))
-                    ImGui.TextUnformatted($"  {path}");
+                // Height-capped and scrollable, not an unbounded list of TextUnformatted lines -
+                // a real library has hit 229 orphaned folders in one run (see docs/HANDOFF_FOLDER_CLEANUP.md),
+                // which would otherwise stretch this popup far past the screen's own height.
+                using (var list = ImRaii.Child("CleanUpFoldersList", new Vector2(0, 300), border: true))
+                {
+                    if (list)
+                        foreach (var path in _selectedOrphans.OrderBy(p => p, StringComparer.Ordinal))
+                            ImGui.TextWrapped(path);
+                }
                 if (ImGui.Button("Yes, Clean Up"))
                 {
                     CleanUpSelectedFolders();
@@ -1434,7 +1499,10 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_plugin.FolderBackupExists)
         {
-            ImGui.SameLine();
+            // Deliberately its own line, not SameLine'd - whatever was drawn immediately above
+            // (the wrapped explanatory paragraph, or nothing if total == 0) can end at an
+            // unpredictable X position depending on window width and how many lines it wrapped
+            // to, which could otherwise push this button most of the way off the window edge.
             ImGui.BeginDisabled(!operationState.CanRunFolderCleanupRollback);
             if (ImGui.Button("Rollback Folder Cleanup"))
                 RollbackFolderCleanup();
@@ -1467,25 +1535,25 @@ public sealed class MainWindow : Window, IDisposable
             {
                 case Organizer.FolderCleanupStatus.Success:
                     ImGui.TextUnformatted($"{r.Pruned.Count} folder entries removed from organization.json.");
-                    ImGui.TextColored(ImGuiColors.DalamudYellow,
+                    TextColoredWrapped(ImGuiColors.DalamudYellow,
                         "Penumbra hasn't loaded this change yet — open Penumbra's Settings tab and click "
                         + "Rediscover Mods before making any other folder changes there.");
                     if (r.SkippedStale.Count > 0)
-                        ImGui.TextUnformatted(
+                        ImGui.TextWrapped(
                             $"{r.SkippedStale.Count} selected folder(s) were no longer orphaned and were skipped.");
                     break;
                 case Organizer.FolderCleanupStatus.SucceededBackupFailed:
-                    ImGui.TextColored(PluginTheme.CollisionBad,
+                    TextColoredWrapped(PluginTheme.CollisionBad,
                         $"{r.Pruned.Count} folder entries removed, but the rollback backup could not be saved. "
                         + "Rediscover Mods in Penumbra now, then avoid running another cleanup until you've "
                         + "confirmed the result — there is no safety net for this action right now.");
                     if (_plugin.FolderBackupExists)
-                        ImGui.TextColored(PluginTheme.CollisionBad,
+                        TextColoredWrapped(PluginTheme.CollisionBad,
                             "The Rollback button restores an OLDER backup that predates this cleanup — "
                             + "clicking it would undo more than just this action.");
                     break;
                 case Organizer.FolderCleanupStatus.NothingStillValid:
-                    ImGui.TextUnformatted(
+                    ImGui.TextWrapped(
                         "Nothing was cleaned up — the selected folder(s) are no longer orphaned (or no longer exist). "
                         + "No files were changed.");
                     break;
@@ -1493,7 +1561,7 @@ public sealed class MainWindow : Window, IDisposable
                     ImGui.TextUnformatted("Nothing selected — no files were changed.");
                     break;
                 case Organizer.FolderCleanupStatus.FileMissing:
-                    ImGui.TextUnformatted("organization.json does not exist on this install — nothing to clean up.");
+                    ImGui.TextWrapped("organization.json does not exist on this install — nothing to clean up.");
                     break;
                 case Organizer.FolderCleanupStatus.UnsupportedVersion:
                 case Organizer.FolderCleanupStatus.MalformedJson:
@@ -1501,7 +1569,7 @@ public sealed class MainWindow : Window, IDisposable
                         "organization.json couldn't be read — no files were changed.");
                     break;
                 case Organizer.FolderCleanupStatus.FileChangedDuringCleanup:
-                    ImGui.TextColored(ImGuiColors.DalamudYellow,
+                    TextColoredWrapped(ImGuiColors.DalamudYellow,
                         "organization.json changed (likely Penumbra itself) while this cleanup was running — "
                         + "no files were touched. Scan and try again.");
                     break;
@@ -1518,7 +1586,7 @@ public sealed class MainWindow : Window, IDisposable
                         "Penumbra hasn't loaded this change yet — click Rediscover Mods.");
                     break;
                 case Organizer.FolderRollbackStatus.InvalidBackup:
-                    ImGui.TextColored(PluginTheme.CollisionBad,
+                    TextColoredWrapped(PluginTheme.CollisionBad,
                         "The backup file is unreadable or unsupported — rollback aborted, organization.json was not touched.");
                     break;
                 case Organizer.FolderRollbackStatus.NoBackup:
