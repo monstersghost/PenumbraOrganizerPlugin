@@ -462,13 +462,26 @@ private static void TryDeleteBundleDirectory(string bundleDirectory)
 }
 ```
 
-**`ResolveContinue`** — takes its own fresh live read, re-derives the assessment from it, and rejects
-duplicates before building anything:
+**Found while implementation-planning this section: the artifact checks need the same "fresh, not
+cached" treatment as the live read, or every caller (including every test) is forced to have already
+triggered at least one classification pass just to populate `pending.PlanCheckStatus`/`Plan`.** The
+original sketch below gated on `pending.PlanCheckStatus`/`pending.Plan` — fields populated only by
+`TryAdvanceClassification`'s async, throttled loop. In real usage this is harmless (the button can't be
+clicked before classification has run at least once, since `CanContinueRecovery` itself depends on
+that same loop having settled) — but it's an unnecessary coupling given `ArtifactStatusChecker.
+CheckPlan`/`CheckSnapshot` are cheap, synchronous, side-effect-free file reads. Re-checking them
+directly inside the resolution methods removes the dependency on prior classification entirely and
+matches the same "revalidate atomically, don't trust a cache" principle already applied to the live
+read:
 
 ```csharp
 public void ResolveContinue()
 {
-    if (_pendingRecovery is not { Plan: { } plan } pending || pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
+    if (_pendingRecovery is not { } pending)
+        throw new InvalidOperationException("No pending recovery to continue.");
+
+    var (planStatus, plan) = ArtifactStatusChecker.CheckPlan(pending.BundleDirectory);
+    if (planStatus != ArtifactCheckStatus.Valid || plan is null)
         throw new InvalidOperationException("No pending recovery with a valid plan to continue.");
 
     var freshSnapshot = ReadFreshLiveModsOrThrow();
@@ -504,7 +517,11 @@ interrupted operation's own type:
 ```csharp
 public void ResolveRestorePreviousState()
 {
-    if (_pendingRecovery is not { Snapshot: { } targetSnapshot } pending || pending.SnapshotCheckStatus != ArtifactCheckStatus.Valid)
+    if (_pendingRecovery is not { } pending)
+        throw new InvalidOperationException("No pending recovery to restore.");
+
+    var (snapshotStatus, targetSnapshot) = ArtifactStatusChecker.CheckSnapshot(pending.BundleDirectory);
+    if (snapshotStatus != ArtifactCheckStatus.Valid || targetSnapshot is null)
         throw new InvalidOperationException("No pending recovery with a valid snapshot to restore.");
 
     var freshSnapshot = ReadFreshLiveModsOrThrow();
