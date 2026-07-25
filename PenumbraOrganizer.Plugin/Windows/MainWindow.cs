@@ -723,7 +723,7 @@ public sealed class MainWindow : Window, IDisposable
         if (operationState.Stage is not null && operationState.Kind == Organizer.Operations.OperationType.Apply)
         {
             if (!operationState.CanStartApply && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Applying", null, "##cancel-apply"); // Task 8 wires the real cancel callback
+                DrawOperationProgress(operationState, "Applying", _plugin.RequestCancellation, "##cancel-apply"); // Task 8 wires the real cancel callback
             else if (operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
             else
@@ -879,7 +879,7 @@ public sealed class MainWindow : Window, IDisposable
         if (_restoreOperationActive)
         {
             if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Restoring", null, "##cancel-restore"); // Task 8 wires the real cancel callback
+                DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore"); // Task 8 wires the real cancel callback
             else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
         }
