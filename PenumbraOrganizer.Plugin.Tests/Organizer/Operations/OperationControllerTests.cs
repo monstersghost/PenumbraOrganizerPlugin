@@ -1246,6 +1246,382 @@ public class OperationControllerTests
         }
     }
 
+    private static (OperationController Controller, Guid JournalId, string BundleDirectory) SetUpPendingContinue(
+        FakePenumbraOperations adapter, FakeClock clock, string operationsRoot, OperationPlan interruptedPlan)
+    {
+        var controller = NewControllerWithPendingRecovery(adapter, clock, operationsRoot, out var journalId);
+        var bundleDirectory = OperationBundlePaths.BundleDirectory(operationsRoot, active: true, journalId);
+        OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), interruptedPlan);
+        return (controller, journalId, bundleDirectory);
+    }
+
+    [Fact]
+    public void ResolveContinue_NoPendingRecovery_Throws()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Throws<InvalidOperationException>(() => controller.ResolveContinue());
+    }
+
+    [Fact]
+    public void ResolveContinue_HappyPath_StartsSuccessorAndResolvesTheInterruptedJournal()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, journalId, bundleDirectory) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            // mod-a is still at the snapshot path - a real, non-empty residual move.
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+
+            controller.ResolveContinue();
+
+            Assert.Equal(OperationStage.Mutating, controller.State.Stage);
+            Assert.Equal(OperationType.Apply, controller.State.Kind); // same type as the interrupted operation
+            Assert.False(controller.State.RequiresRecovery);
+            Assert.False(Directory.Exists(bundleDirectory)); // relocated out of active/
+            var completedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, journalId);
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var resolved));
+            Assert.Equal(OperationResolution.ContinuedByNewOperation, resolved!.Resolution);
+            Assert.NotNull(resolved.SuccessorOperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveContinue_UsesAFreshLiveReadNotACachedOne()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, _, _) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+
+            // Classification-time read: mod-a already at its final path (AtIntended) - a valid,
+            // empty Continue, cached as CanContinueRecovery = true with zero residual moves.
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+            controller.Update();
+            Assert.True(controller.State.CanContinueRecovery);
+
+            // Resolution-time read: mod-a has since moved back to the snapshot path - a real residual
+            // move now exists. If ResolveContinue reused the cached (empty) result instead of taking
+            // its own fresh read, the successor would incorrectly be a zero-step plan.
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+
+            controller.ResolveContinue();
+
+            Assert.Equal(1, controller.State.TotalSteps); // the residual move the FRESH read implies, not zero
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveContinue_FreshReadShowsABlockingState_ThrowsEvenThoughCachedAvailabilityWasTrue()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, _, bundleDirectory) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+            controller.Update();
+            Assert.True(controller.State.CanContinueRecovery);
+
+            // mod-a has since been uninstalled entirely - MissingLive, blocking.
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([])));
+
+            Assert.Throws<InvalidOperationException>(() => controller.ResolveContinue());
+            Assert.True(controller.State.RequiresRecovery); // _pendingRecovery untouched - still pending
+            Assert.True(Directory.Exists(bundleDirectory)); // interrupted bundle never touched
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveContinue_FreshReadHasDuplicateIdentifiers_Throws()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, _, _) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            var duplicateSnapshot = new LiveModSnapshot(
+                new Dictionary<string, LiveMod> { ["mod-a"] = new("mod-a", "mod-a", "Weapons/A", false) },
+                new HashSet<string> { "mod-a" });
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, duplicateSnapshot));
+
+            Assert.Throws<InvalidOperationException>(() => controller.ResolveContinue());
+            Assert.True(controller.State.RequiresRecovery);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveContinue_LiveReadUnavailable_ThrowsAndLeavesPendingRecoveryIntact()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, _, bundleDirectory) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.ProviderUnavailable, null));
+
+            Assert.Throws<InvalidOperationException>(() => controller.ResolveContinue());
+
+            Assert.True(controller.State.RequiresRecovery);
+            Assert.True(Directory.Exists(bundleDirectory));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveContinue_ZeroResidualMoves_StartsAndCompletesAZeroStepSuccessor()
+    {
+        // Every target already AtIntended - Continue is Ready with an empty move list. Proves the
+        // same zero-step engine path Plan C's own StartRestore_ZeroStepPlan test already established
+        // works correctly for Continue's own new call path too.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Restore,
+                [new(0, "mod-a", "Gear/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Weapons/A", "Gear/A", "mod-a")]);
+            var (controller, _, _) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)]))); // AtIntended
+            adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.Success));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([])));
+
+            controller.ResolveContinue();
+            Assert.Equal(OperationType.Restore, controller.State.Kind); // matches the interrupted operation's own type
+            Assert.Equal(0, controller.State.TotalSteps);
+
+            controller.Update(); // Mutating -> Refreshing
+            controller.Update(); // Refreshing -> Verifying
+            controller.Update(); // Verifying -> Completed
+
+            Assert.Equal(OperationStage.Completed, controller.State.Stage);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveRestorePreviousState_NoPendingRecovery_Throws()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Throws<InvalidOperationException>(() => controller.ResolveRestorePreviousState());
+    }
+
+    [Fact]
+    public void ResolveRestorePreviousState_HappyPath_StartsARestoreSuccessorRegardlessOfInterruptedType()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            // The interrupted operation was an Apply; Restore Previous State's successor must still
+            // always be Restore-type (design doc section 1) - no plan.json needed at all.
+            var targetSnapshot = new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto",
+                new Dictionary<string, string> { ["mod-a"] = "Gear/A" });
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), targetSnapshot);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.ResolveRestorePreviousState();
+
+            Assert.Equal(OperationType.Restore, controller.State.Kind);
+            Assert.False(controller.State.RequiresRecovery);
+            var completedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, journalId);
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var resolved));
+            Assert.Equal(OperationResolution.RestoredByNewOperation, resolved!.Resolution);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveRestorePreviousState_AvailableEvenWhenPlanIsInvalid()
+    {
+        // Proves section 2's decoupling holds all the way through to the actual resolution, not just
+        // the cached CanRestorePreviousState flag.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            // plan.json intentionally not written at all.
+            var targetSnapshot = new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto",
+                new Dictionary<string, string> { ["mod-a"] = "Gear/A" });
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), targetSnapshot);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            var exception = Record.Exception(() => controller.ResolveRestorePreviousState());
+
+            Assert.Null(exception);
+            Assert.Equal(OperationType.Restore, controller.State.Kind);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveRestorePreviousState_TargetHasIdentifierAbsentFromLive_SkipsItRatherThanFailing()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var targetSnapshot = new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto",
+                new Dictionary<string, string> { ["mod-a"] = "Gear/A", ["mod-gone"] = "Gear/Gone" });
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), targetSnapshot);
+            // mod-gone is absent from live - RollbackHistory.BuildRestorePlan's SkippedUninstalledIdentifiers.
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            var exception = Record.Exception(() => controller.ResolveRestorePreviousState());
+
+            Assert.Null(exception);
+            Assert.Equal(1, controller.State.TotalTargets); // only mod-a, mod-gone silently excluded (not failed)
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveContinue_StartOperationRejectsIt_DeletesTheOrphanedBundleAndLeavesPendingRecoveryIntact()
+    {
+        // Not reachable through the real engine today (an active, non-terminal operation and a
+        // pending recovery are mutually exclusive in practice - recovery is only ever registered at
+        // startup, before anything is active), but StartRecoverySuccessor's own admission guard
+        // (StartOperation's "_active is not null && !CanStartNext" check, which
+        // bypassPendingRecoveryLockout does NOT exempt) must still correctly reject this shape, and
+        // its failure-cleanup path must
+        // still run - forced here using the same "not reachable via the engine but must still be
+        // correct on its own terms" pattern this file already uses for
+        // CanStartNext_TerminalStageButRequiresRecovery_IsFalse.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewController(adapter, new FakeClock(), operationsRoot: dir.FullName);
+            var otherPlan = SinglePlan("mod-z");
+            controller.StartApply(otherPlan, Guid.NewGuid(), OperationBundlePaths.BundleDirectory(dir.FullName, active: true, otherPlan.OperationId)); // sets _active, non-terminal Mutating
+
+            var journalId = Guid.NewGuid();
+            var discovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [journalId], [journalId]),
+                new Dictionary<Guid, OperationJournal> { [journalId] = InterruptedJournal(journalId) });
+            controller.RegisterDiscoveredRecovery(discovery); // sets _pendingRecovery alongside the already-set _active
+            var interruptedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(interruptedBundleDirectory), interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)]))); // ResolveContinue's own fresh read
+
+            var exception = Record.Exception(() => controller.ResolveContinue());
+
+            Assert.IsType<InvalidOperationException>(exception);
+            Assert.True(Directory.Exists(interruptedBundleDirectory)); // the interrupted bundle itself is never touched
+
+            // The successor's own freshly-created bundle directory (plan.json/snapshot.json written
+            // just before the rejected StartRecoverySuccessor call) must not survive the failure -
+            // active/ must contain only otherPlan's bundle and the interrupted one, nothing extra.
+            var activeDir = OperationBundlePaths.ActiveDirectory(dir.FullName);
+            Assert.Equal(2, Directory.GetDirectories(activeDir).Length);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StartRecoverySuccessor_BlockedMultiRootGraphPresent_StillRejects()
+    {
+        // Review point 1 (critical): the private bypass must exempt only _pendingRecovery, never
+        // _blockedMultiRootGraph - D2 explicitly does not resolve the multi-root/cycle case (design
+        // doc section 7), so a recovery successor must never be able to start while that lockout is
+        // in effect. Not reachable through the real engine today (two separate
+        // RegisterDiscoveredRecovery calls, one setting _blockedMultiRootGraph and another setting
+        // _pendingRecovery, don't occur within one real startup discovery pass), but the guard must
+        // still be correct on its own terms.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewController(adapter, new FakeClock(), operationsRoot: dir.FullName);
+
+            var blockedIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+            var blockedDiscovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, blockedIds, blockedIds),
+                blockedIds.ToDictionary(id => id, InterruptedJournal));
+            controller.RegisterDiscoveredRecovery(blockedDiscovery); // sets _blockedMultiRootGraph
+
+            var journalId = Guid.NewGuid();
+            var pendingDiscovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [journalId], [journalId]),
+                new Dictionary<Guid, OperationJournal> { [journalId] = InterruptedJournal(journalId) });
+            controller.RegisterDiscoveredRecovery(pendingDiscovery); // ALSO sets _pendingRecovery, alongside the still-set _blockedMultiRootGraph
+            Assert.True(controller.IsBlockedByMultipleRoots);
+
+            var interruptedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(interruptedBundleDirectory), interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+
+            var exception = Record.Exception(() => controller.ResolveContinue());
+
+            Assert.IsType<InvalidOperationException>(exception);
+            Assert.True(controller.IsBlockedByMultipleRoots); // both lockouts remain exactly as they were
+            Assert.True(Directory.Exists(interruptedBundleDirectory));
+            var activeDir = OperationBundlePaths.ActiveDirectory(dir.FullName);
+            Assert.Equal(1, Directory.GetDirectories(activeDir).Length); // only the interrupted bundle - no orphaned successor left behind
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     private static OperationController NewControllerWithBlockedMultiRoot(
         FakePenumbraOperations adapter, FakeClock clock, string operationsRoot, IReadOnlyList<Guid> ids)
     {

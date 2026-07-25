@@ -128,11 +128,24 @@ public sealed class OperationController
     public static bool CanStartNext(OperationJournal journal, bool requiresRecovery) =>
         journal.IsTerminal && !requiresRecovery;
 
-    private void StartOperation(OperationPlan plan, Guid snapshotId, string bundleDirectory, OperationType expectedType)
+    // bypassPendingRecoveryLockout is intentionally unreachable from StartApply/StartRestore's public
+    // surface - only StartRecoverySuccessor (below) ever passes true, and only Task 4's
+    // ResolveContinue/ResolveRestorePreviousState ever call that. An ordinary Apply/Restore must keep
+    // being rejected while a recovery is pending; only the controlled recovery-resolution path itself
+    // is allowed to bypass that lockout. Note this bypasses ONLY the _pendingRecovery half of the
+    // guard - _blockedMultiRootGraph is never bypassable, by anything: D2 explicitly does not resolve
+    // the multi-root/cycle case (design doc section 7), so a recovery successor must never be able to
+    // start while that lockout is in effect.
+    private void StartOperation(
+        OperationPlan plan, Guid snapshotId, string bundleDirectory, OperationType expectedType,
+        bool bypassPendingRecoveryLockout = false)
     {
         if (plan.Type != expectedType)
             throw new ArgumentException($"This entry point requires a {expectedType}-type plan; got {plan.Type}.", nameof(plan));
-        if ((_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery)) || _pendingRecovery is not null || _blockedMultiRootGraph is not null)
+
+        var pendingRecoveryLocked = !bypassPendingRecoveryLockout && _pendingRecovery is not null;
+        var blockedGraphLocked = _blockedMultiRootGraph is not null;
+        if ((_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery)) || pendingRecoveryLocked || blockedGraphLocked)
             throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
 
         var checkpointer = new OperationCheckpointer(_clock, bundleDirectory);
@@ -164,6 +177,9 @@ public sealed class OperationController
 
         PublishState();
     }
+
+    private void StartRecoverySuccessor(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
+        StartOperation(plan, snapshotId, bundleDirectory, plan.Type, bypassPendingRecoveryLockout: true);
 
     public void RegisterDiscoveredRecovery(OperationDiscoveryResult discovery)
     {
@@ -273,6 +289,149 @@ public sealed class OperationController
         }
 
         throw new InvalidOperationException("No pending recovery to resolve.");
+    }
+
+    // Note the difference from a naive first draft: these re-check ArtifactStatusChecker.CheckPlan/
+    // CheckSnapshot directly, rather than reading pending.PlanCheckStatus/pending.Plan (which are
+    // only populated once TryAdvanceClassification's async loop has run at least once). This removes
+    // any dependency on classification having already advanced - matching the same "revalidate
+    // fresh, don't trust a cache" principle already applied to the live-mods read below, and it's
+    // cheap (a small, synchronous, side-effect-free file read).
+    public void ResolveContinue()
+    {
+        if (_pendingRecovery is not { } pending)
+            throw new InvalidOperationException("No pending recovery to continue.");
+
+        var (planStatus, plan) = ArtifactStatusChecker.CheckPlan(pending.BundleDirectory);
+        if (planStatus != ArtifactCheckStatus.Valid || plan is null)
+            throw new InvalidOperationException("No pending recovery with a valid plan to continue.");
+
+        var freshSnapshot = ReadFreshLiveModsOrThrow();
+        if (freshSnapshot.DuplicateIdentifiers.Count > 0)
+            throw new InvalidOperationException("Continue is not available - live state has duplicate identifiers.");
+
+        var freshAssessment = RecoveryAssessmentBuilder.Build(plan, freshSnapshot);
+        var result = ContinuationPlanner.TryBuildResidualMoves(plan, freshAssessment);
+        if (result.Status != ContinuationPlanStatus.Ready)
+            throw new InvalidOperationException("Continue is not available for the current live state.");
+
+        var newPlan = OperationPlanBuilder.BuildOperationPlan(plan.Type, result.ResidualMoves);
+        var newSnapshot = RollbackHistory.CaptureSnapshot(
+            freshSnapshot.Mods.Values.ToList(), label: null,
+            autoDescription: $"Snapshot before continuing interrupted operation {pending.Journal.OperationId}");
+
+        StartRecoverySuccessorOrThrow(pending, newPlan, newSnapshot, OperationResolution.ContinuedByNewOperation);
+    }
+
+    public void ResolveRestorePreviousState()
+    {
+        if (_pendingRecovery is not { } pending)
+            throw new InvalidOperationException("No pending recovery to restore.");
+
+        var (snapshotStatus, targetSnapshot) = ArtifactStatusChecker.CheckSnapshot(pending.BundleDirectory);
+        if (snapshotStatus != ArtifactCheckStatus.Valid || targetSnapshot is null)
+            throw new InvalidOperationException("No pending recovery with a valid snapshot to restore.");
+
+        var freshSnapshot = ReadFreshLiveModsOrThrow();
+        if (freshSnapshot.DuplicateIdentifiers.Count > 0)
+            throw new InvalidOperationException("Restore Previous State is not available - live state has duplicate identifiers.");
+
+        var currentMods = freshSnapshot.Mods.Values.ToList();
+        var restorePlan = RollbackHistory.BuildRestorePlan(targetSnapshot, currentMods);
+        var namedMoves = OperationPlanBuilder.BuildNamedMoves(restorePlan.Moves, currentMods);
+        var newPlan = OperationPlanBuilder.BuildOperationPlan(OperationType.Restore, namedMoves);
+        var newSnapshot = RollbackHistory.CaptureSnapshot(
+            currentMods, label: null,
+            autoDescription: $"Snapshot before restoring interrupted operation {pending.Journal.OperationId} to its prior state");
+
+        StartRecoverySuccessorOrThrow(pending, newPlan, newSnapshot, OperationResolution.RestoredByNewOperation);
+    }
+
+    private LiveModSnapshot ReadFreshLiveModsOrThrow()
+    {
+        var result = _adapter.GetLiveMods();
+        if (result.Status != LiveModReadStatus.Success || result.Snapshot is null)
+            throw new InvalidOperationException("Live mod state is not currently available; try again shortly.");
+        return result.Snapshot;
+    }
+
+    // Design doc section 5: the failure-atomic recovery-successor transaction. _pendingRecovery is
+    // cleared only after StartRecoverySuccessor has durably activated the new operation - if anything
+    // in the try block throws, _pendingRecovery is untouched and the interrupted operation is exactly
+    // as recoverable as it was before this call.
+    private void StartRecoverySuccessorOrThrow(
+        PendingRecoveryContext expectedPending, OperationPlan newPlan, RollbackSnapshot newSnapshot,
+        OperationResolution parentResolution)
+    {
+        // Defends the invariant, not a currently-reachable race: OperationController has no concurrent
+        // entry points (same single-threaded Dalamud Update()/UI-callback model every other method
+        // here already assumes). Guards a future refactor that introduces reentrancy.
+        if (!ReferenceEquals(_pendingRecovery, expectedPending))
+            throw new InvalidOperationException("The pending recovery changed before this resolution could start.");
+
+        var newBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, newPlan.OperationId);
+        try
+        {
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(newBundleDirectory), newPlan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(newBundleDirectory), newSnapshot);
+            StartRecoverySuccessor(newPlan, newSnapshot.Id, newBundleDirectory);
+        }
+        catch
+        {
+            TryDeleteBundleDirectory(newBundleDirectory);
+            throw; // _pendingRecovery untouched - a failed attempt leaves recovery exactly as it was
+        }
+
+        // Reached only once the successor is durably active (StartOperation persisted Prepared and
+        // Mutating checkpoints, force: true, before returning). Only now does clearing
+        // _pendingRecovery become safe.
+        var interruptedJournal = expectedPending.Journal;
+        var interruptedBundleDirectory = expectedPending.BundleDirectory;
+        _pendingRecovery = null;
+
+        try
+        {
+            var resolvedInterruptedJournal = interruptedJournal with
+            {
+                Resolution = parentResolution,
+                SuccessorOperationId = newPlan.OperationId,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
+            TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal);
+        }
+        catch (Exception ex)
+        {
+            // The successor is already durably running - the user's Continue/Restore request already
+            // succeeded. Failing to decorate the parent journal is a housekeeping gap, not a
+            // resolution failure: on next startup the successor's own RecoveryOfOperationId makes it,
+            // not the stale parent, authoritative in OperationRecoveryGraph.Analyze regardless of
+            // whether this write landed - nothing is silently lost, just not yet tidied up. Must not
+            // rethrow: that would report "Continue failed" for a Continue that actually started.
+            // Must not stay completely silent either though (review point 7) - logged via the same
+            // Plugin.Log?.Warning pattern TryRelocateToCompleted already uses for its own best-effort
+            // failures, below.
+            Plugin.Log?.Warning(ex,
+                $"{parentResolution} successor {newPlan.OperationId} started, but resolving the interrupted " +
+                $"journal {interruptedJournal.OperationId} failed. It will be correctly picked up on next " +
+                "startup via the successor's own RecoveryOfOperationId.");
+        }
+    }
+
+    private static void TryDeleteBundleDirectory(string bundleDirectory)
+    {
+        try
+        {
+            if (Directory.Exists(bundleDirectory))
+                Directory.Delete(bundleDirectory, recursive: true);
+        }
+        catch (Exception)
+        {
+            // Best-effort. A bundle whose journal.json is missing or fails to load is skipped
+            // outright by OperationBundleDiscovery.LoadNonTerminalActiveJournals (both call sites),
+            // never treated as an interrupted operation needing recovery - a leftover journal-less
+            // bundle here is inert disk clutter, not a correctness risk.
+        }
     }
 
     // Resolves every journal in the blocked graph, not only the "authoritative" leaves - an
