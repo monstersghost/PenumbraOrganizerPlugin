@@ -164,9 +164,9 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.TextWrapped(
             "The plugin found a mod-organizing operation that didn't finish, likely from a crash or force-" +
-            "quit mid-Apply or mid-Restore. Continuing it or fully rolling it back isn't supported yet. For " +
-            "now, you can accept whatever Penumbra currently has as the correct state and move on - this " +
-            "does not undo or redo any moves, it only stops the plugin from blocking further actions.");
+            "quit mid-Apply or mid-Restore. You can accept whatever Penumbra currently has as the correct " +
+            "state and move on, finish the interrupted operation from where it left off, or roll everything " +
+            "back to how it was before the interrupted operation started.");
 
         if (ImGui.Button("Keep Current State"))
             ImGui.OpenPopup("Keep current state?");
@@ -179,6 +179,40 @@ public sealed class MainWindow : Window, IDisposable
                 _plugin.ResolveKeepCurrent();
                 ImGui.CloseCurrentPopup();
             }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!operationState.CanContinueRecovery);
+        if (ImGui.Button("Continue"))
+            ImGui.OpenPopup("Continue interrupted operation?");
+        ImGui.EndDisabled();
+
+        if (ImGui.BeginPopupModal("Continue interrupted operation?"))
+        {
+            ImGui.TextUnformatted("This will finish the interrupted operation from where it left off.");
+            if (ImGui.Button("Yes, Continue") && ContinueRecovery())
+                ImGui.CloseCurrentPopup();
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!operationState.CanRestorePreviousState);
+        if (ImGui.Button("Restore Previous State"))
+            ImGui.OpenPopup("Restore to state before the interrupted operation?");
+        ImGui.EndDisabled();
+
+        if (ImGui.BeginPopupModal("Restore to state before the interrupted operation?"))
+        {
+            ImGui.TextUnformatted("This will roll every mod back to how it was before the interrupted operation started.");
+            if (ImGui.Button("Yes, Restore") && RestorePreviousState())
+                ImGui.CloseCurrentPopup();
             ImGui.SameLine();
             if (ImGui.Button("Cancel"))
                 ImGui.CloseCurrentPopup();
@@ -967,6 +1001,47 @@ public sealed class MainWindow : Window, IDisposable
         {
             _lastError = $"Restore failed: {ex.Message}";
             Plugin.Log.Error(ex, "Restore failed.");
+        }
+    }
+
+    private bool ContinueRecovery()
+    {
+        try
+        {
+            _plugin.ResolveContinue();
+            _lastError = null;
+            // The successor's type isn't known until after it's started (an interrupted Apply's
+            // Continue is Apply-type, an interrupted Restore's Continue is Restore-type) - read it
+            // back from the now-active operation rather than guessing from the interrupted one.
+            var kind = _plugin.OperationController.State.Kind;
+            if (kind == Organizer.Operations.OperationType.Apply)
+                _applyOperationActive = true;
+            else if (kind == Organizer.Operations.OperationType.Restore)
+                _restoreOperationActive = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Continue failed: {ex.Message}";
+            Plugin.Log.Error(ex, "Continue failed.");
+            return false;
+        }
+    }
+
+    private bool RestorePreviousState()
+    {
+        try
+        {
+            _plugin.ResolveRestorePreviousState();
+            _lastError = null;
+            _restoreOperationActive = true; // always Restore-type regardless of the interrupted operation's own type
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Restore Previous State failed: {ex.Message}";
+            Plugin.Log.Error(ex, "Restore Previous State failed.");
+            return false;
         }
     }
 
