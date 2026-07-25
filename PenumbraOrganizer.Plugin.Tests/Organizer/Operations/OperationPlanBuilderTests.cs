@@ -116,7 +116,7 @@ public class OperationPlanBuilderTests
         new(id, name, currentPath, targetPath);
 
     [Fact]
-    public void BuildRestoreOperationPlan_IndependentMoves_ProducesOneStepPerMod()
+    public void BuildOperationPlan_RestoreType_IndependentMoves_ProducesOneStepPerMod()
     {
         var moves = new[]
         {
@@ -124,7 +124,7 @@ public class OperationPlanBuilderTests
             Named("mod-b", "Mod B", "Weapons/B", "Gear/B"),
         };
 
-        var plan = OperationPlanBuilder.BuildRestoreOperationPlan(moves);
+        var plan = OperationPlanBuilder.BuildOperationPlan(OperationType.Restore, moves);
 
         Assert.Equal(OperationType.Restore, plan.Type);
         Assert.Equal(2, plan.ExecutionSteps.Count);
@@ -137,7 +137,7 @@ public class OperationPlanBuilderTests
     }
 
     [Fact]
-    public void BuildRestoreOperationPlan_TwoWayCycle_ProducesATemporaryHopStep()
+    public void BuildOperationPlan_RestoreType_TwoWayCycle_ProducesATemporaryHopStep()
     {
         var moves = new[]
         {
@@ -145,21 +145,20 @@ public class OperationPlanBuilderTests
             Named("Y", "Mod Y", "Gear/B", "Gear/A"),
         };
 
-        var plan = OperationPlanBuilder.BuildRestoreOperationPlan(moves);
+        var plan = OperationPlanBuilder.BuildOperationPlan(OperationType.Restore, moves);
 
         Assert.Equal(3, plan.ExecutionSteps.Count); // temp hop + 2 final moves
         Assert.Contains(plan.ExecutionSteps, s => s.Kind == OperationStepKind.CycleBreakingTemporaryMove);
         Assert.Equal(2, plan.RecoveryTargets.Count);
-        // Recovery targets carry the real current/target paths, never a temporary cycle-breaking hop path.
         var targetX = plan.RecoveryTargets.Single(t => t.Identifier == "X");
         Assert.Equal("Gear/A", targetX.SnapshotRawPath);
         Assert.Equal("Gear/B", targetX.FinalRawPath);
     }
 
     [Fact]
-    public void BuildRestoreOperationPlan_EmptyMoves_ProducesAValidZeroStepPlan()
+    public void BuildOperationPlan_RestoreType_EmptyMoves_ProducesAValidZeroStepPlan()
     {
-        var plan = OperationPlanBuilder.BuildRestoreOperationPlan([]);
+        var plan = OperationPlanBuilder.BuildOperationPlan(OperationType.Restore, []);
 
         Assert.Empty(plan.ExecutionSteps);
         Assert.Empty(plan.RecoveryTargets);
@@ -167,7 +166,7 @@ public class OperationPlanBuilderTests
     }
 
     [Fact]
-    public void BuildRestoreOperationPlan_DuplicateIdentifiers_ThrowsOperationPlansExistingDiagnostic()
+    public void BuildOperationPlan_RestoreType_DuplicateIdentifiers_ThrowsOperationPlansExistingDiagnostic()
     {
         var moves = new[]
         {
@@ -175,7 +174,19 @@ public class OperationPlanBuilderTests
             Named("mod-a", "Mod A", "Gear/A", "Weapons/B"),
         };
 
-        var exception = Assert.Throws<InvalidOperationException>(() => OperationPlanBuilder.BuildRestoreOperationPlan(moves));
+        var exception = Assert.Throws<InvalidOperationException>(() => OperationPlanBuilder.BuildOperationPlan(OperationType.Restore, moves));
         Assert.Contains("Duplicate recovery target identifier", exception.Message);
+    }
+
+    [Fact]
+    public void BuildOperationPlan_ApplyType_ProducesAnApplyTypePlan()
+    {
+        var moves = new[] { Named("mod-a", "Mod A", "Weapons/A", "Gear/A") };
+
+        var plan = OperationPlanBuilder.BuildOperationPlan(OperationType.Apply, moves);
+
+        Assert.Equal(OperationType.Apply, plan.Type);
+        Assert.Single(plan.ExecutionSteps);
+        Assert.Single(plan.RecoveryTargets);
     }
 }

@@ -497,7 +497,7 @@ public sealed class Plugin : IDalamudPlugin
         // reasoning from the synchronous Restore() path (tester report, Bug 3).
         var restorePlan = Organizer.RollbackHistory.BuildRestorePlan(target, currentMods);
         var namedMoves = Organizer.Operations.OperationPlanBuilder.BuildNamedMoves(restorePlan.Moves, currentMods);
-        var plan = Organizer.Operations.OperationPlanBuilder.BuildRestoreOperationPlan(namedMoves);
+        var plan = Organizer.Operations.OperationPlanBuilder.BuildOperationPlan(Organizer.Operations.OperationType.Restore, namedMoves);
 
         var preRestoreLabel = target.Label ?? target.CreatedAt.ToString("u");
         var preRestoreSnapshot = Organizer.RollbackHistory.CaptureSnapshot(

@@ -60,7 +60,10 @@ public static class OperationPlanBuilder
             .ToList();
     }
 
-    public static OperationPlan BuildRestoreOperationPlan(IReadOnlyList<NamedModMove> namedMoves)
+    // Generalized from BuildRestoreOperationPlan (Plan C) to also serve Continue's residual-move
+    // plans (design doc section 4), which must match the interrupted operation's own type - an
+    // interrupted Apply's Continue is itself an Apply-type plan.
+    public static OperationPlan BuildOperationPlan(OperationType type, IReadOnlyList<NamedModMove> namedMoves)
     {
         // Check for duplicate identifiers before processing, so OperationPlan.Create's own
         // diagnostic is visible (not masked by ApplyPlanner's dictionary insert error).
@@ -72,9 +75,9 @@ public static class OperationPlanBuilder
         }
 
         var moves = namedMoves.Select(m => new ModMove(m.Identifier, m.CurrentPath, m.TargetPath)).ToList();
-        var restoreSteps = ApplyPlanner.OrderMovesForApply(moves);
+        var steps = ApplyPlanner.OrderMovesForApply(moves);
 
-        var executionSteps = restoreSteps
+        var executionSteps = steps
             .Select((s, index) => new OperationExecutionStep(
                 index, s.Identifier, s.TargetPath,
                 s.IsTemporary ? OperationStepKind.CycleBreakingTemporaryMove : OperationStepKind.FinalMove,
@@ -85,7 +88,7 @@ public static class OperationPlanBuilder
             .Select(m => new OperationRecoveryTarget(m.Identifier, m.CurrentPath, m.TargetPath, m.ModName))
             .ToList();
 
-        return OperationPlan.Create(OperationType.Restore, executionSteps, recoveryTargets);
+        return OperationPlan.Create(type, executionSteps, recoveryTargets);
     }
 }
 
