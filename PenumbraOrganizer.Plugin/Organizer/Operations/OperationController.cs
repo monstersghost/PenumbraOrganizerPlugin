@@ -457,6 +457,47 @@ public sealed class OperationController
         }
     }
 
+    private enum JournalResolutionOutcome { Resolved, AlreadyResolved, Failed }
+
+    // Extracted from AcceptAllAndCloseInterruptedOperations (this method's own logic is unchanged,
+    // just no longer duplicated for Task 3's per-root resolution). Resolves one journal via
+    // Keep-Current semantics: persists the resolution, best-effort relocates to completed/. Treats
+    // "already resolved and relocated by a prior partial attempt" as its own outcome, not Failed -
+    // a retry must not resurrect an already-successfully-resolved journal (see the existing
+    // AcceptAllAndCloseInterruptedOperations_RetryAfterPartialFailure test, unchanged by this
+    // extraction).
+    private JournalResolutionOutcome TryResolveJournalAsKeepCurrent(Guid operationId)
+    {
+        var activeBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, operationId);
+        if (!Directory.Exists(activeBundleDirectory))
+        {
+            var completedBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: false, operationId);
+            var alreadyResolved = OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var existing)
+                && existing is not null
+                && existing.OperationId == operationId
+                && existing.IsTerminal
+                && existing.Resolution == OperationResolution.AcceptedCurrentState;
+            return alreadyResolved ? JournalResolutionOutcome.AlreadyResolved : JournalResolutionOutcome.Failed;
+        }
+
+        if (!OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(activeBundleDirectory), out var journal) || journal is null)
+            return JournalResolutionOutcome.Failed;
+
+        var resolvedJournal = journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
+        try
+        {
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), resolvedJournal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Plugin.Log?.Warning(ex, $"Failed to persist Keep-Current resolution for {operationId}.");
+            return JournalResolutionOutcome.Failed;
+        }
+
+        TryRelocateToCompleted(activeBundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
+        return JournalResolutionOutcome.Resolved;
+    }
+
     // Resolves every journal in the blocked graph, not only the "authoritative" leaves - an
     // unresolved non-leaf ancestor journal would recreate this exact lockout at the next startup,
     // once its (now-terminal) child drops out of the non-terminal set and the ancestor becomes its
@@ -469,42 +510,8 @@ public sealed class OperationController
         var unresolved = new List<Guid>();
         foreach (var operationId in graph.AllOperationIds)
         {
-            var activeBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: true, operationId);
-            if (!Directory.Exists(activeBundleDirectory))
-            {
-                // Not present under active/ - either already resolved and relocated by a prior
-                // partial attempt (retry case), or never existed. Verify which, rather than assuming
-                // absence means success: a retry must not silently skip a genuinely-missing journal.
-                var completedBundleDirectory = OperationBundlePaths.BundleDirectory(_operationsRoot, active: false, operationId);
-                var alreadyResolved = OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedBundleDirectory), out var existing)
-                    && existing is not null
-                    && existing.OperationId == operationId
-                    && existing.IsTerminal
-                    && existing.Resolution == OperationResolution.AcceptedCurrentState;
-                if (!alreadyResolved)
-                    unresolved.Add(operationId);
-                continue;
-            }
-
-            if (!OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(activeBundleDirectory), out var journal) || journal is null)
-            {
+            if (TryResolveJournalAsKeepCurrent(operationId) == JournalResolutionOutcome.Failed)
                 unresolved.Add(operationId);
-                continue;
-            }
-
-            var resolvedJournal = journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
-            try
-            {
-                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), resolvedJournal);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Plugin.Log?.Warning(ex, $"Accept all: failed to persist resolution for {operationId}.");
-                unresolved.Add(operationId);
-                continue;
-            }
-
-            TryRelocateToCompleted(activeBundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
         }
 
         if (unresolved.Count > 0)
@@ -514,6 +521,7 @@ public sealed class OperationController
         }
 
         _blockedMultiRootGraph = null;
+        _blockedMultiRootJournals = null;
         PublishState();
         return [];
     }
