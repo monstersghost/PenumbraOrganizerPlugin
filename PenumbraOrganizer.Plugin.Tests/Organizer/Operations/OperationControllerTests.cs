@@ -1614,7 +1614,7 @@ public class OperationControllerTests
             Assert.True(controller.IsBlockedByMultipleRoots); // both lockouts remain exactly as they were
             Assert.True(Directory.Exists(interruptedBundleDirectory));
             var activeDir = OperationBundlePaths.ActiveDirectory(dir.FullName);
-            Assert.Equal(1, Directory.GetDirectories(activeDir).Length); // only the interrupted bundle - no orphaned successor left behind
+            Assert.Single(Directory.GetDirectories(activeDir)); // only the interrupted bundle - no orphaned successor left behind
         }
         finally
         {
