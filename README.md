@@ -1,6 +1,3 @@
-# New Plugin now available, Much better than the app! get it here:
-https://github.com/monstersghost/PenumbraOrganizerPlugin
-
 # Penumbra Organizer
 
 Penumbra Organizer is an in-game Dalamud plugin for FINAL FANTASY XIV that helps you organize your
