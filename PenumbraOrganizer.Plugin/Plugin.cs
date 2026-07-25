@@ -64,6 +64,14 @@ public sealed class Plugin : IDalamudPlugin
             operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot);
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
+        try
+        {
+            Organizer.Operations.OperationBundleRetention.RunRetentionPass(OperationsRoot, DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Operation bundle retention failed; plugin startup will continue.");
+        }
         _workbookService = new WorkbookWorkflowService(
             new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookWorkflowService>(Log));
         _npcHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -580,6 +588,20 @@ public sealed class Plugin : IDalamudPlugin
     {
         OperationController.AcceptAllAndCloseInterruptedOperations();
         RunScan();
+    }
+
+    internal void RequestCancellation() => OperationController.RequestCancellation();
+
+    internal void ResolveOneMultiRootOperation(Guid operationId)
+    {
+        OperationController.ResolveOneMultiRootOperation(operationId);
+        // Resolving one root can just as easily leave an ordinary single pending recovery (two roots
+        // -> one) or a smaller blocked set (three roots -> two) as it can reach Idle (the last root
+        // resolved) - in the first two outcomes CanScan is still false, so an unconditional RunScan()
+        // would throw or record a misleading error while a recovery is still outstanding. Only scan
+        // once recovery has actually cleared.
+        if (!OperationController.State.RequiresRecovery)
+            RunScan();
     }
 
     [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
