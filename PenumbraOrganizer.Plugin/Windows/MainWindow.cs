@@ -13,6 +13,7 @@ namespace PenumbraOrganizer.Plugin.Windows;
 public sealed class MainWindow : Window, IDisposable
 {
     private const int MaxEventLogLines = 200;
+    private const int RecentOperationsCount = 20;
 
     private readonly Plugin _plugin;
     private readonly CreatorCanonicalizer _creatorCanonicalizer = new();
@@ -37,7 +38,6 @@ public sealed class MainWindow : Window, IDisposable
     private Guid? _pendingRestoreSnapshotId;
     private Organizer.RestorePlan? _pendingRestorePreview;
     private IReadOnlyList<Organizer.Operations.OperationJournal> _recentOperations = [];
-    private bool _recentOperationsLoaded;
     private string? _recentOperationsError;
     private bool _recentOperationsSectionWasOpen;
     private IReadOnlyList<Organizer.RollbackSnapshot>? _historyCache;
@@ -142,9 +142,10 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.TextWrapped(
                 "Multiple interrupted operations were found. You can resolve one at a time below by " +
                 "keeping its current state - the recovery graph is then recalculated for what's left, " +
-                "which may become a smaller blocked set, a single recoverable operation, or fully " +
-                "resolved. You can also abandon all of them at once and accept whatever Penumbra " +
-                "currently has as correct - this does not undo or redo any moves for any of them, it " +
+                "which may become a smaller blocked set, a different blocked set of the same size (if " +
+                "the resolved operation's parent is promoted to a new leaf), a single recoverable " +
+                "operation, or fully resolved. You can also abandon all of them at once and accept " +
+                "whatever Penumbra currently has as correct - this does not undo or redo any moves for any of them, it " +
                 "only stops the plugin from blocking further actions.");
 
             ImGui.Spacing();
@@ -160,11 +161,8 @@ public sealed class MainWindow : Window, IDisposable
                 {
                     ImGui.TextUnformatted("This selected operation cannot later be continued or restored - it will be permanently abandoned.");
                     ImGui.TextUnformatted("Any other interrupted operations found stay blocked until resolved separately.");
-                    if (ImGui.Button("Yes, Keep Current"))
-                    {
-                        _plugin.ResolveOneMultiRootOperation(operationId);
+                    if (ImGui.Button("Yes, Keep Current") && ResolveOneMultiRoot(operationId))
                         ImGui.CloseCurrentPopup();
-                    }
                     ImGui.SameLine();
                     if (ImGui.Button("Cancel"))
                         ImGui.CloseCurrentPopup();
@@ -264,49 +262,59 @@ public sealed class MainWindow : Window, IDisposable
             {
                 DrawArtifactLine(status.Plan, "Interrupted plan", "Continue");
                 DrawArtifactLine(status.Snapshot, "Snapshot", "Restore Previous State");
-            }
 
-            var assessment = _plugin.OperationController.GetRecoveryAssessment();
-            if (assessment is null)
-            {
-                // GetRecoveryAssessment() returning null has two distinct causes needing distinct
-                // messages: classification genuinely hasn't settled yet (RecoveryClassificationPending
-                // true - correct to say "still checking"), or it permanently failed to settle (an
-                // invalid plan/live-read/provider per D2's own non-retryable settling design -
-                // RecoveryClassificationPending is false, and "still checking" would be permanently,
-                // silently wrong).
-                if (operationState.RecoveryClassificationPending)
-                    ImGui.TextDisabled("Still checking live mod state...");
+                var assessment = _plugin.OperationController.GetRecoveryAssessment();
+                if (assessment is null)
+                {
+                    // GetRecoveryAssessment() returning null has two distinct causes needing distinct
+                    // messages: classification genuinely hasn't settled yet (RecoveryClassificationPending
+                    // true - correct to say "still checking"), or it permanently failed to settle (an
+                    // invalid plan/live-read/provider per D2's own non-retryable settling design -
+                    // RecoveryClassificationPending is false, and "still checking" would be permanently,
+                    // silently wrong).
+                    if (operationState.RecoveryClassificationPending)
+                        ImGui.TextDisabled("Still checking live mod state...");
+                    else
+                        ImGui.TextColored(PluginTheme.CollisionBad, "Per-mod classification is unavailable - see the artifact status above.");
+                }
+                else if (assessment.Classifications.Count == 0)
+                {
+                    ImGui.TextDisabled("No mods to classify.");
+                }
                 else
-                    ImGui.TextColored(PluginTheme.CollisionBad, "Per-mod classification is unavailable - see the artifact status above.");
-            }
-            else if (assessment.Classifications.Count == 0)
-            {
-                ImGui.TextDisabled("No mods to classify.");
+                {
+                    using var table = ImRaii.Table("RecoveryClassificationTable", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV);
+                    if (table)
+                    {
+                        ImGui.TableSetupColumn("Mod");
+                        ImGui.TableSetupColumn("State");
+                        ImGui.TableHeadersRow();
+                        foreach (var classification in assessment.Classifications.OrderBy(c => c.Identifier, StringComparer.Ordinal))
+                        {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(classification.Identifier);
+                            ImGui.TableNextColumn();
+                            var color = classification.State switch
+                            {
+                                Organizer.Operations.ItemRecoveryState.AtNeither or Organizer.Operations.ItemRecoveryState.MissingLive => PluginTheme.CollisionBad,
+                                Organizer.Operations.ItemRecoveryState.AtIntended or Organizer.Operations.ItemRecoveryState.AtBoth => ImGuiColors.HealerGreen,
+                                _ => ImGuiColors.DalamudYellow,
+                            };
+                            ImGui.TextColored(color, classification.State.ToString());
+                        }
+                    }
+                }
             }
             else
             {
-                using var table = ImRaii.Table("RecoveryClassificationTable", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV);
-                if (table)
-                {
-                    ImGui.TableSetupColumn("Mod");
-                    ImGui.TableSetupColumn("State");
-                    ImGui.TableHeadersRow();
-                    foreach (var classification in assessment.Classifications.OrderBy(c => c.Identifier, StringComparer.Ordinal))
-                    {
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-                        ImGui.TextUnformatted(classification.Identifier);
-                        ImGui.TableNextColumn();
-                        var color = classification.State switch
-                        {
-                            Organizer.Operations.ItemRecoveryState.AtNeither or Organizer.Operations.ItemRecoveryState.MissingLive => PluginTheme.CollisionBad,
-                            Organizer.Operations.ItemRecoveryState.AtIntended or Organizer.Operations.ItemRecoveryState.AtBoth => ImGuiColors.HealerGreen,
-                            _ => ImGuiColors.DalamudYellow,
-                        };
-                        ImGui.TextColored(color, classification.State.ToString());
-                    }
-                }
+                // artifactStatus is null when this is a live in-session failure (checkpoint-write or
+                // refresh/verify settlement failure set RequiresRecovery directly - see
+                // OperationController), not a startup-discovered pending recovery. There's no
+                // _pendingRecovery, so no artifacts were ever recorded and there is nothing to
+                // classify - falling through to the classification-unavailable text would misleadingly
+                // point the user at an artifact section that was never shown.
+                ImGui.TextDisabled("This operation failed during the current session; no interrupted-plan artifacts were recorded.");
             }
         }
 
@@ -346,7 +354,7 @@ public sealed class MainWindow : Window, IDisposable
                 RunScan();
             ImGui.EndDisabled();
         }
-        if (!scanOperationState.CanScan && ImGui.IsItemHovered())
+        if (!scanOperationState.CanScan && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
         ImGui.SameLine();
@@ -534,11 +542,11 @@ public sealed class MainWindow : Window, IDisposable
     // full even after the operation finishes processing everything. Completion (how much work is
     // done) and outcome (whether it succeeded) are separate concerns, shown on separate lines.
     //
-    // onCancel is null from Task 7's two call sites (no cancel affordance yet) - Task 8 passes the
-    // real callback. Cancel is drawn here, not at each call site, so the "reserve width for the
-    // button before the full-width progress bar claims it" math isn't duplicated for Apply and
-    // Restore separately. cancelButtonId carries a distinct ##-suffix per call site (ImGui requires
-    // unique widget IDs across the whole window, not just within one tab, matching this file's own
+    // onCancel is the plugin's real cancellation callback, passed by both Apply and Restore call
+    // sites. Cancel is drawn here, not at each call site, so the "reserve width for the button
+    // before the full-width progress bar claims it" math isn't duplicated for Apply and Restore
+    // separately. cancelButtonId carries a distinct ##-suffix per call site (ImGui requires unique
+    // widget IDs across the whole window, not just within one tab, matching this file's own
     // established per-row uniqueness convention documented in DrawHistoryTab).
     private static void DrawOperationProgress(Organizer.Operations.OperationStateSnapshot operationState, string verb, Action? onCancel, string cancelButtonId)
     {
@@ -830,7 +838,7 @@ public sealed class MainWindow : Window, IDisposable
         if (operationState.Stage is not null && operationState.Kind == Organizer.Operations.OperationType.Apply)
         {
             if (!operationState.CanStartApply && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Applying", _plugin.RequestCancellation, "##cancel-apply"); // Task 8 wires the real cancel callback
+                DrawOperationProgress(operationState, "Applying", _plugin.RequestCancellation, "##cancel-apply");
             else if (operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
             else
@@ -846,7 +854,7 @@ public sealed class MainWindow : Window, IDisposable
     {
         try
         {
-            _recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
+            _recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: RecentOperationsCount);
             _recentOperationsError = null;
         }
         catch (Exception ex)
@@ -854,10 +862,6 @@ public sealed class MainWindow : Window, IDisposable
             _recentOperations = [];
             _recentOperationsError = $"Could not load recent operations: {ex.Message}";
             Plugin.Log.Warning(ex, "Loading recent operations failed.");
-        }
-        finally
-        {
-            _recentOperationsLoaded = true;
         }
     }
 
@@ -885,7 +889,7 @@ public sealed class MainWindow : Window, IDisposable
             _createBackupLabelInput = string.Empty;
         }
         ImGui.EndDisabled();
-        if (!operationState.CanCreateBackup && ImGui.IsItemHovered())
+        if (!operationState.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
         ImGui.Spacing();
@@ -915,7 +919,7 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.BeginDisabled(!operationState.CanStartRestore);
             var restoreButtonClicked = ImGui.Button($"Restore##restore-{snapshot.Id}");
             ImGui.EndDisabled();
-            if (!operationState.CanStartRestore && ImGui.IsItemHovered())
+            if (!operationState.CanStartRestore && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
             if (restoreButtonClicked)
             {
@@ -1005,7 +1009,7 @@ public sealed class MainWindow : Window, IDisposable
         if (_restoreOperationActive)
         {
             if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore"); // Task 8 wires the real cancel callback
+                DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore");
             else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
         }
@@ -1016,7 +1020,7 @@ public sealed class MainWindow : Window, IDisposable
         // Reload only on a collapsed -> expanded transition (or the very first expansion), not every
         // frame the header stays open - the naive "load every frame it's expanded" version is exactly
         // the per-frame-disk-read pattern this section must avoid.
-        if (recentOperationsOpen && (!_recentOperationsLoaded || !_recentOperationsSectionWasOpen))
+        if (recentOperationsOpen && !_recentOperationsSectionWasOpen)
             RefreshRecentOperations();
         _recentOperationsSectionWasOpen = recentOperationsOpen;
 
@@ -1282,6 +1286,22 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
+    private bool ResolveOneMultiRoot(Guid operationId)
+    {
+        try
+        {
+            _plugin.ResolveOneMultiRootOperation(operationId);
+            _lastError = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Keep Current State failed: {ex.Message}";
+            Plugin.Log.Error(ex, "Keep Current State (multi-root) failed.");
+            return false;
+        }
+    }
+
     private void CreateBackup(string? label)
     {
         try
@@ -1390,7 +1410,7 @@ public sealed class MainWindow : Window, IDisposable
             // operation" when that's actually why the button is disabled - with no selection at all,
             // the button is disabled for an unrelated, pre-existing reason (nothing chosen yet), and
             // this tooltip must not claim an operation is blocking it when none is.
-            if (_selectedOrphans.Count > 0 && !operationState.CanRunFolderCleanup && ImGui.IsItemHovered())
+            if (_selectedOrphans.Count > 0 && !operationState.CanRunFolderCleanup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
             if (cleanClicked)
                 ImGui.OpenPopup("Clean up folders?");
@@ -1419,7 +1439,7 @@ public sealed class MainWindow : Window, IDisposable
             if (ImGui.Button("Rollback Folder Cleanup"))
                 RollbackFolderCleanup();
             ImGui.EndDisabled();
-            if (!operationState.CanRunFolderCleanupRollback && ImGui.IsItemHovered())
+            if (!operationState.CanRunFolderCleanupRollback && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
         }
 
@@ -1638,7 +1658,7 @@ public sealed class MainWindow : Window, IDisposable
             var pendingJournal = _plugin.OperationController.GetPendingRecoveryJournal();
             if (pendingJournal is not null)
             {
-                sb.AppendLine($"OperationId={pendingJournal.OperationId}, Type={pendingJournal.Type}, Stage={pendingJournal.Stage}, {pendingJournal.ProcessedStepCount}/{pendingJournal.TotalSteps} steps, UpdatedAt={pendingJournal.UpdatedAt.ToLocalTime():u}");
+                sb.AppendLine($"  OperationId={pendingJournal.OperationId}, Type={pendingJournal.Type}, Stage={pendingJournal.Stage}, {pendingJournal.ProcessedStepCount}/{pendingJournal.TotalSteps} steps, UpdatedAt={pendingJournal.UpdatedAt.ToLocalTime():u}");
             }
             else
             {
@@ -1664,7 +1684,7 @@ public sealed class MainWindow : Window, IDisposable
         sb.AppendLine("== Recent operations ==");
         try
         {
-            var recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
+            var recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: RecentOperationsCount);
             if (recentOperations.Count == 0)
             {
                 sb.AppendLine("(none)");

@@ -232,7 +232,7 @@ public sealed class OperationController
     // Only AuthoritativeOperationIds (the ones actually independently resolvable - for disconnected
     // roots these are literal graph leaves, but for a cycle every member is authoritative), not
     // AllOperationIds - a non-authoritative ancestor isn't independently actionable; it gets folded in
-    // automatically once its authoritative descendant resolves and discovery re-runs (Task 3).
+    // automatically once its authoritative descendant resolves and discovery re-runs.
     public IReadOnlyList<(Guid OperationId, OperationJournal Journal)> GetBlockedOperations() =>
         _blockedMultiRootGraph is not { } graph || _blockedMultiRootJournals is not { } journals
             ? []
@@ -460,7 +460,7 @@ public sealed class OperationController
     private enum JournalResolutionOutcome { Resolved, AlreadyResolved, Failed }
 
     // Extracted from AcceptAllAndCloseInterruptedOperations (this method's own logic is unchanged,
-    // just no longer duplicated for Task 3's per-root resolution). Resolves one journal via
+    // just no longer duplicated for ResolveOneMultiRootOperation's per-root resolution). Resolves one journal via
     // Keep-Current semantics: persists the resolution, best-effort relocates to completed/. Treats
     // "already resolved and relocated by a prior partial attempt" as its own outcome, not Failed -
     // a retry must not resurrect an already-successfully-resolved journal (see the existing
