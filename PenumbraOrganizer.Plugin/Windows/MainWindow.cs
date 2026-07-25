@@ -1560,6 +1560,91 @@ public sealed class MainWindow : Window, IDisposable
         }
         sb.AppendLine();
 
+        sb.AppendLine("== Interrupted operation ==");
+        try
+        {
+            var pendingJournal = _plugin.OperationController.GetPendingRecoveryJournal();
+            if (pendingJournal is not null)
+            {
+                sb.AppendLine($"OperationId={pendingJournal.OperationId}, Type={pendingJournal.Type}, Stage={pendingJournal.Stage}, {pendingJournal.ProcessedStepCount}/{pendingJournal.TotalSteps} steps, UpdatedAt={pendingJournal.UpdatedAt.ToLocalTime():u}");
+            }
+            else
+            {
+                var blocked = _plugin.OperationController.GetBlockedOperations();
+                if (blocked.Count == 0)
+                {
+                    sb.AppendLine("(none)");
+                }
+                else
+                {
+                    foreach (var (_, journal) in blocked)
+                        sb.AppendLine($"  OperationId={journal.OperationId}, Type={journal.Type}, Stage={journal.Stage}, UpdatedAt={journal.UpdatedAt.ToLocalTime():u}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"(failed to read: {ex.Message})");
+            Plugin.Log.Warning(ex, "Diagnostic dump: reading interrupted operation state failed.");
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("== Recent operations ==");
+        try
+        {
+            var recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
+            if (recentOperations.Count == 0)
+            {
+                sb.AppendLine("(none)");
+            }
+            else
+            {
+                foreach (var journal in recentOperations)
+                    sb.AppendLine($"  {journal.UpdatedAt.ToLocalTime():u} - {journal.Type} - {journal.Stage} - {journal.Resolution}");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"(failed to read: {ex.Message})");
+            Plugin.Log.Warning(ex, "Diagnostic dump: reading recent operations failed.");
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("== Slow calls ==");
+        try
+        {
+            var diagnosticsLogPath = Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(_plugin.OperationsRoot);
+            var slowCalls = Organizer.Operations.DiagnosticsLog.ReadAll(diagnosticsLogPath)
+                .Where(e => e.Kind == Organizer.Operations.DiagnosticEventKind.SlowCall)
+                .ToList();
+            if (slowCalls.Count == 0)
+            {
+                sb.AppendLine("(none)");
+            }
+            else
+            {
+                // Grouped by identifier, not just the five longest raw events - five slow calls to the
+                // same identifier would otherwise crowd out four other identifiers that are each slow
+                // exactly once. Ranked by worst (max) duration per identifier.
+                var grouped = slowCalls
+                    .GroupBy(e => e.Identifier, StringComparer.Ordinal)
+                    .Select(g => new { Identifier = g.Key, Count = g.Count(), WorstMs = g.Max(e => e.DurationMilliseconds), TotalMs = g.Sum(e => e.DurationMilliseconds) })
+                    .OrderByDescending(x => x.WorstMs)
+                    .ThenByDescending(x => x.Count)
+                    .Take(5)
+                    .ToList();
+                sb.AppendLine($"{slowCalls.Count} recorded slow calls across {grouped.Count} displayed identifiers (ranked by worst duration):");
+                foreach (var item in grouped)
+                    sb.AppendLine($"  {item.Identifier}: {item.Count} calls, worst {item.WorstMs}ms, total {item.TotalMs}ms");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"(failed to read: {ex.Message})");
+            Plugin.Log.Warning(ex, "Diagnostic dump: reading slow-call log failed.");
+        }
+        sb.AppendLine();
+
         sb.AppendLine("== Session event log (most recent first) ==");
         foreach (var line in _eventLog)
             sb.AppendLine(line);

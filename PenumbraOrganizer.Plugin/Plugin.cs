@@ -353,7 +353,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private string HistoryFilePath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-history.json");
 
-    private string OperationsRoot => Path.Combine(PluginInterface.ConfigDirectory.FullName, "operations");
+    internal string OperationsRoot => Path.Combine(PluginInterface.ConfigDirectory.FullName, "operations");
 
     // Penumbra's config dir is a sibling of this plugin's own under Dalamud's pluginConfigs
     // folder — no IPC exposes it (confirmed against the full Penumbra.Api 5.15.1 surface; see
