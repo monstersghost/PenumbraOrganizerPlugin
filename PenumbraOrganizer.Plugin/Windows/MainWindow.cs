@@ -418,6 +418,54 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
+    // Target-based, not step-based: a cycle-breaking plan has more execution steps than recovery
+    // targets (a temporary hop plus a final move both count as steps for one target), so a
+    // step-based fraction misrepresents "how many mods are done" to a user whose mental model is
+    // mods, not steps (design doc section 2). ProcessedTargets, not SuccessfulTargets, drives the
+    // fraction - SuccessfulTargets is a subset of ProcessedTargets (attempted-and-succeeded, not
+    // attempted), so a run with even one failure would otherwise leave the bar permanently short of
+    // full even after the operation finishes processing everything. Completion (how much work is
+    // done) and outcome (whether it succeeded) are separate concerns, shown on separate lines.
+    //
+    // onCancel is null from Task 7's two call sites (no cancel affordance yet) - Task 8 passes the
+    // real callback. Cancel is drawn here, not at each call site, so the "reserve width for the
+    // button before the full-width progress bar claims it" math isn't duplicated for Apply and
+    // Restore separately. cancelButtonId carries a distinct ##-suffix per call site (ImGui requires
+    // unique widget IDs across the whole window, not just within one tab, matching this file's own
+    // established per-row uniqueness convention documented in DrawHistoryTab).
+    private static void DrawOperationProgress(Organizer.Operations.OperationStateSnapshot operationState, string verb, Action? onCancel, string cancelButtonId)
+    {
+        var fraction = operationState.TotalTargets > 0
+            ? (float)operationState.ProcessedTargets / operationState.TotalTargets
+            : 1f;
+
+        var showCancel = onCancel is not null && operationState.CanRequestCancellation;
+        var barWidth = -1f;
+        var buttonWidth = 0f;
+        if (showCancel)
+        {
+            buttonWidth = ImGui.CalcTextSize("Cancel").X + ImGui.GetStyle().FramePadding.X * 2;
+            var spacing = ImGui.GetStyle().ItemSpacing.X;
+            barWidth = MathF.Max(1f, ImGui.GetContentRegionAvail().X - buttonWidth - spacing);
+        }
+
+        ImGui.ProgressBar(fraction, new Vector2(barWidth, 0), $"{operationState.ProcessedTargets}/{operationState.TotalTargets} processed");
+        if (showCancel)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button($"Cancel{cancelButtonId}", new Vector2(buttonWidth, 0)))
+                onCancel!();
+        }
+
+        var failedTargets = operationState.ProcessedTargets - operationState.SuccessfulTargets;
+        ImGui.TextDisabled(failedTargets > 0
+            ? $"{operationState.SuccessfulTargets} succeeded, {failedTargets} failed"
+            : $"{operationState.SuccessfulTargets} succeeded");
+        if (operationState.LastProcessedDisplayName is { } name)
+            ImGui.TextDisabled($"{verb}: {name}");
+        ImGui.TextDisabled($"{operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage})");
+    }
+
     private void DrawSortTab()
     {
         using var tab = ImRaii.TabItem("Sort");
@@ -669,15 +717,13 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
-        // Deliberately minimal - the real progress UI and recovery dialog are Plan E's job. This
-        // just keeps Apply usable and observable in-game now that it spans multiple frames. Gated on
-        // Kind == Apply so an in-progress or just-completed Restore (sharing the same
+        // Gated on Kind == Apply so an in-progress or just-completed Restore (sharing the same
         // OperationController) never renders here - CanStartApply/CanStartRestore are the same value
         // today, so Kind is the only field that actually distinguishes the two operations.
         if (operationState.Stage is not null && operationState.Kind == Organizer.Operations.OperationType.Apply)
         {
             if (!operationState.CanStartApply && !operationState.RequiresRecovery)
-                ImGui.TextUnformatted($"Applying... {operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage}).");
+                DrawOperationProgress(operationState, "Applying", null, "##cancel-apply"); // Task 8 wires the real cancel callback
             else if (operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
             else
@@ -833,7 +879,7 @@ public sealed class MainWindow : Window, IDisposable
         if (_restoreOperationActive)
         {
             if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
-                ImGui.TextUnformatted($"Restoring... {operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage}).");
+                DrawOperationProgress(operationState, "Restoring", null, "##cancel-restore"); // Task 8 wires the real cancel callback
             else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
         }
