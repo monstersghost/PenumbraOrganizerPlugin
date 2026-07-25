@@ -118,13 +118,17 @@ public sealed class Plugin : IDalamudPlugin
     private void OnFrameworkUpdate(IFramework framework)
     {
         OperationController.Update();
-        if (_operationInProgress && OperationController.State.CanStartApply)
+        if (_operationInProgress && (OperationController.State.CanStartApply || OperationController.State.RequiresRecovery))
             _operationInProgress = false; // any async organizer operation (Apply or Restore) just reached
                                            // a terminal, non-recovery stage - CanStartApply/CanStartRestore
                                            // are guaranteed equal today (PublishState derives both from one
                                            // shared canStartNew), so checking either detects completion of
                                            // either operation type. If a future plan ever splits them apart
-                                           // per-type, this check must be revisited.
+                                           // per-type, this check must be revisited. Also clears on
+                                           // RequiresRecovery (Plan D2, review point 2) - an operation that
+                                           // needs recovery has stopped executing even though it isn't
+                                           // terminal, and _operationInProgress should track "is something
+                                           // executing," not "is there unresolved history."
     }
 
     public void RunScan()
@@ -535,6 +539,41 @@ public sealed class Plugin : IDalamudPlugin
     {
         OperationController.ResolveKeepCurrent();
         RunScan();
+    }
+
+    internal void ResolveContinue()
+    {
+        if (_operationInProgress)
+            throw new InvalidOperationException("Another organizer operation is already in progress.");
+        _operationInProgress = true;
+        try
+        {
+            OperationController.ResolveContinue();
+        }
+        catch
+        {
+            _operationInProgress = false;
+            throw;
+        }
+        // No RunScan() here, unlike ResolveKeepCurrent/AcceptAll - this starts a new async operation,
+        // which is polled to completion exactly like an ordinary Apply/Restore already is (Task 6's
+        // MainWindow wiring) - RunScan() belongs there, not at the moment the operation merely starts.
+    }
+
+    internal void ResolveRestorePreviousState()
+    {
+        if (_operationInProgress)
+            throw new InvalidOperationException("Another organizer operation is already in progress.");
+        _operationInProgress = true;
+        try
+        {
+            OperationController.ResolveRestorePreviousState();
+        }
+        catch
+        {
+            _operationInProgress = false;
+            throw;
+        }
     }
 
     internal void AcceptAllAndCloseInterruptedOperations()
