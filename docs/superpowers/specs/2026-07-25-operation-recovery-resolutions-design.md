@@ -585,19 +585,54 @@ cached booleans already checked them against the *cached* one, because those two
 
 ## 6. `Plugin.cs` and `MainWindow`: wiring
 
+**Verified against the real `Plugin.cs`, not assumed: `_operationInProgress` needs to be set here too.**
+`StartApplyOperation`/`StartRestoreOperation` both guard with `if (_operationInProgress) throw ...` before
+doing any work, set it `true`, and reset it in a `catch` on failure (`Plugin.cs:433-476`); `Framework.Update`
+auto-clears it once `OperationController.State.CanStartApply` becomes true again (`Plugin.cs:118-128`).
+`ResolveKeepCurrent`/`AcceptAllAndCloseInterruptedOperations` don't touch this flag because they resolve
+*synchronously* — nothing is left running afterward for the flag to guard. Continue/Restore Previous
+State are different: like Apply/Restore, they leave a new async operation running. Without setting
+`_operationInProgress`, a user who clicks Continue and then immediately clicks the ordinary "Apply"
+button would still be correctly rejected (`OperationController.StartApply`'s own admission guard still
+throws once `_active` is non-null), just later and more wastefully — after `StartApplyOperation`
+re-reads live mods, captures a snapshot, and writes bundle files, all for nothing. Matching the existing
+pattern closes that gap for free:
+
 ```csharp
 internal void ResolveContinue()
 {
-    OperationController.ResolveContinue();
-    // No RunScan() here, unlike ResolveKeepCurrent/AcceptAll - this starts a new async operation
-    // (StartApply/StartRestore), which is polled to completion exactly like an ordinary Apply/Restore
-    // already is (MainWindow's existing completion-detection blocks, Plan B2/C) - RunScan() belongs
-    // there, not at the moment the operation merely starts.
+    if (_operationInProgress)
+        throw new InvalidOperationException("Another organizer operation is already in progress.");
+    _operationInProgress = true;
+    try
+    {
+        OperationController.ResolveContinue();
+    }
+    catch
+    {
+        _operationInProgress = false;
+        throw;
+    }
+    // No RunScan() here, unlike ResolveKeepCurrent/AcceptAll - this starts a new async operation,
+    // which is polled to completion exactly like an ordinary Apply/Restore already is (MainWindow's
+    // existing completion-detection blocks, below) - RunScan() belongs there, not at the moment the
+    // operation merely starts.
 }
 
 internal void ResolveRestorePreviousState()
 {
-    OperationController.ResolveRestorePreviousState();
+    if (_operationInProgress)
+        throw new InvalidOperationException("Another organizer operation is already in progress.");
+    _operationInProgress = true;
+    try
+    {
+        OperationController.ResolveRestorePreviousState();
+    }
+    catch
+    {
+        _operationInProgress = false;
+        throw;
+    }
 }
 ```
 
@@ -615,18 +650,66 @@ if (operationState.CanRestorePreviousState && ImGui.Button("Restore Previous Sta
 // ...popup calls _plugin.ResolveRestorePreviousState()...
 ```
 
-**Revised after review (point 12): no new completion observer needed.** The original draft argued the
-crude panel needed its own `Kind`-gated completion-detection block since a Continue/Restore-Previous-
-State successor is "otherwise indistinguishable from an ordinary user-initiated Apply/Restore." That's
-true, but it's not a problem — the successor genuinely *is* an Apply or Restore operation from the
-engine's perspective (`Kind` is one of exactly those two values, never a third). Plan C's existing
-`Kind`-gated completion-detection blocks on the Apply and Restore tabs already observe it correctly,
-the same way they'd observe any other Apply/Restore. Adding a second observer in the recovery panel
-would just be a redundant poll of the same state. Once Continue/Restore Previous State starts the
-successor, the crude panel's only remaining job is to stop showing the now-resolved recovery UI (which
-it already does — `_pendingRecovery` is cleared, so `PublishState()` no longer reports a pending
-recovery at all) and let the existing Apply/Restore tab pick up the successor's progress like any other
-operation of that type.
+**Revised after review (point 12), then corrected again after actually reading `MainWindow.cs`.** The
+first revision argued no new completion observer was needed since Plan C's existing `Kind`-gated
+completion blocks on the Apply/Restore tabs (`MainWindow.cs:576-584` for Apply, `:658-662` for Restore)
+already observe *any* Apply/Restore, including a Continue/Restore-Previous-State successor. That's true
+of the `Kind` check, but wrong about what actually gates those blocks: each is also conditioned on a
+**MainWindow-local flag** (`_applyOperationActive`/`_restoreOperationActive`) that today is set to `true`
+in exactly one place each — `ApplyChanges()` right after `_plugin.StartApplyOperation()` succeeds, and
+`RestoreSnapshot()` right after `_plugin.StartRestoreOperation()` succeeds. Neither flag has anything to
+do with `OperationController.State` directly; they're MainWindow's own "I started this, watch for it"
+latches. A Continue/Restore-Previous-State successor started from the recovery panel would never set
+either flag, so `RunScan()`/`_historyCache = null`/the Rediscover-Mods reminder would silently never
+fire for it — confirmed by reading `MainWindow.cs` directly, not inferred from the block's own comment.
+
+**The actual fix is much smaller than either draft: two new MainWindow wrapper methods set the existing
+flag(s) after a successful call, reusing 100% of the existing completion machinery.** No new observer
+block, no new polling — just correctly latching the flags that already exist:
+
+```csharp
+private void ContinueRecovery()
+{
+    try
+    {
+        _plugin.ResolveContinue();
+        _lastError = null;
+        // The successor's type isn't known until after it's started (an interrupted Apply's Continue
+        // is Apply-type, an interrupted Restore's Continue is Restore-type - section 1) - read it back
+        // from the now-populated _active state rather than guessing from the interrupted operation.
+        var kind = _plugin.OperationController.State.Kind;
+        if (kind == Organizer.Operations.OperationType.Apply)
+            _applyOperationActive = true;
+        else if (kind == Organizer.Operations.OperationType.Restore)
+            _restoreOperationActive = true;
+    }
+    catch (Exception ex)
+    {
+        _lastError = $"Continue failed: {ex.Message}";
+        Plugin.Log.Error(ex, "Continue failed.");
+    }
+}
+
+private void RestorePreviousState()
+{
+    try
+    {
+        _plugin.ResolveRestorePreviousState();
+        _lastError = null;
+        _restoreOperationActive = true; // always Restore-type, section 1
+    }
+    catch (Exception ex)
+    {
+        _lastError = $"Restore Previous State failed: {ex.Message}";
+        Plugin.Log.Error(ex, "Restore Previous State failed.");
+    }
+}
+```
+
+These follow `ApplyChanges()`/`RestoreSnapshot()`'s exact existing shape (try/catch into `_lastError`,
+flag set only after the call succeeds). The recovery panel's popups call these, not `_plugin.
+ResolveContinue()`/`_plugin.ResolveRestorePreviousState()` directly, matching how the panel already
+calls `RestoreSnapshot`-style wrappers rather than `_plugin` methods directly elsewhere in this file.
 
 ## 7. What D2 does not cover
 
