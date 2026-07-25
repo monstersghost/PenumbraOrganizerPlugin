@@ -526,6 +526,45 @@ public sealed class OperationController
         return [];
     }
 
+    // Clears every recovery-related field and re-registers a fresh discovery result in one place, so
+    // a multi-root-to-single-root or multi-root-to-none transition can't leave a stale field from the
+    // previous state behind. Called only once RunStartupDiscovery has already succeeded (see
+    // ResolveOneMultiRootOperation below) - never call this before a fresh OperationDiscoveryResult is
+    // in hand.
+    private void ReplaceDiscoveredRecovery(OperationDiscoveryResult discovery)
+    {
+        _pendingRecovery = null;
+        _blockedMultiRootGraph = null;
+        _blockedMultiRootJournals = null;
+        RegisterDiscoveredRecovery(discovery);
+
+        // RegisterDiscoveredRecovery's NoRecoveryNeeded branch returns without calling PublishState()
+        // (correct at startup, where State already defaults to Idle) - here we may be transitioning
+        // OUT of a non-Idle blocked state, so publish unconditionally regardless of which branch fired.
+        PublishState();
+    }
+
+    public void ResolveOneMultiRootOperation(Guid operationId)
+    {
+        if (_blockedMultiRootGraph is not { } graph)
+            throw new InvalidOperationException("No blocked multi-root recovery to resolve.");
+        if (!graph.AuthoritativeOperationIds.Contains(operationId))
+            throw new InvalidOperationException("The requested operation is not an independently resolvable root of the blocked recovery graph.");
+
+        if (TryResolveJournalAsKeepCurrent(operationId) == JournalResolutionOutcome.Failed)
+            throw new InvalidOperationException($"Failed to resolve {operationId} - see the plugin log.");
+
+        // Re-run discovery over whatever remains on disk now that operationId has dropped out (either
+        // just resolved above, or already resolved by a prior partial attempt) - the same startup
+        // discovery path Plugin.cs's constructor uses, reused here rather than hand-rolling a second
+        // graph derivation. Deliberately NOT cleared before this call: if RunStartupDiscovery throws,
+        // the old _blockedMultiRootGraph/_blockedMultiRootJournals stay exactly as they were rather
+        // than being discarded with nothing to replace them - the journal we just resolved is already
+        // durably terminal regardless of whether this line succeeds, so a retry is always safe.
+        var discovery = OperationBundleDiscovery.RunStartupDiscovery(_operationsRoot);
+        ReplaceDiscoveredRecovery(discovery);
+    }
+
     public void RequestCancellation()
     {
         if (_active is null || _active.Journal.Stage != OperationStage.Mutating)

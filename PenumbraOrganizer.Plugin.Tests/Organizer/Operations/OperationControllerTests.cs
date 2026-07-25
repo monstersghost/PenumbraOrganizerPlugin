@@ -1824,6 +1824,225 @@ public class OperationControllerTests
     }
 
     [Fact]
+    public void ResolveOneMultiRootOperation_NoBlockedGraph_Throws()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Throws<InvalidOperationException>(() => controller.ResolveOneMultiRootOperation(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_IdNotInAuthoritativeSet_Throws()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+
+            Assert.Throws<InvalidOperationException>(() => controller.ResolveOneMultiRootOperation(Guid.NewGuid()));
+            Assert.True(controller.IsBlockedByMultipleRoots); // untouched
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_TwoDisconnectedRoots_ResolvingOneLeavesTheOtherAsOrdinarySingleRecovery()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            foreach (var id in new[] { idA, idB })
+            {
+                var bundleDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, id);
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDir), InterruptedJournal(id));
+            }
+
+            controller.ResolveOneMultiRootOperation(idA);
+
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.True(controller.State.RequiresRecovery); // idB is now an ordinary single pending recovery
+            Assert.True(controller.State.CanResolveRecovery);
+            var completedDirA = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, idA);
+            Assert.True(OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(completedDirA), out var resolvedA));
+            Assert.Equal(OperationResolution.AcceptedCurrentState, resolvedA!.Resolution);
+            Assert.True(Directory.Exists(OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idB))); // still there, now the sole pending recovery
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_LastRemainingRoot_TransitionsToIdle()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA]);
+            var bundleDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idA);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDir), InterruptedJournal(idA));
+
+            controller.ResolveOneMultiRootOperation(idA);
+
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.False(controller.State.RequiresRecovery);
+            Assert.True(controller.State.CanStartApply);
+            Assert.Empty(controller.GetBlockedOperations());
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_ThreeDisconnectedRoots_ResolvingOneLeavesTwoStillBlocked()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var idC = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB, idC]);
+            foreach (var id in new[] { idA, idB, idC })
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: true, id)), InterruptedJournal(id));
+
+            controller.ResolveOneMultiRootOperation(idA);
+
+            Assert.True(controller.IsBlockedByMultipleRoots);
+            var remaining = controller.GetBlockedOperations().Select(b => b.OperationId).ToList();
+            Assert.Equal(2, remaining.Count);
+            Assert.Contains(idB, remaining);
+            Assert.Contains(idC, remaining);
+            Assert.DoesNotContain(idA, remaining);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_ResolvingOneMemberOfAThreeNodeCycle_BreaksTheCycleCorrectly()
+    {
+        // Design doc section 5's hand-traced proof, made concrete: A -> B -> C -> A via
+        // RecoveryOfOperationId. Resolving B removes it from the next non-terminal-journal load, so
+        // the only surviving edge is C -> A (both still present); A is referenced as a parent by C
+        // but has no parent itself in-set, so leaves = {C} once B drops out - SingleAuthoritative
+        // with C as the sole remaining authoritative operation, not a smaller but still-cyclic set.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var idC = Guid.NewGuid();
+            var journalA = InterruptedJournal(idA) with { RecoveryOfOperationId = idB };
+            var journalB = InterruptedJournal(idB) with { RecoveryOfOperationId = idC };
+            var journalC = InterruptedJournal(idC) with { RecoveryOfOperationId = idA };
+            var cycleIds = new[] { idA, idB, idC };
+            var controller = NewController(new FakePenumbraOperations(), new FakeClock(), operationsRoot: dir.FullName);
+            var discovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.CycleDetected, cycleIds, cycleIds),
+                new Dictionary<Guid, OperationJournal> { [idA] = journalA, [idB] = journalB, [idC] = journalC });
+            controller.RegisterDiscoveredRecovery(discovery);
+            foreach (var (id, journal) in new[] { (idA, journalA), (idB, journalB), (idC, journalC) })
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: true, id)), journal);
+
+            controller.ResolveOneMultiRootOperation(idB);
+
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.True(controller.State.RequiresRecovery); // now an ordinary single pending recovery, not still blocked
+            // Directory presence alone wouldn't distinguish "C is correctly authoritative" from "the
+            // controller latched onto the wrong id while C incidentally still sits under active/" -
+            // assert via the controller's own authoritative accessor, not disk state.
+            var pendingJournal = controller.GetPendingRecoveryJournal();
+            Assert.NotNull(pendingJournal);
+            Assert.Equal(idC, pendingJournal!.OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_RetriedAfterAlreadyResolved_SucceedsWithoutResolvingTwice()
+    {
+        // Stands in as the regression test for the failure-atomicity property (design doc section 5):
+        // RunStartupDiscovery itself can't practically be forced to throw in a plain filesystem test
+        // (every read failure it can hit - missing directory, corrupt/locked journal - is already
+        // caught and treated as "skip this entry" one layer down), so this test instead exercises the
+        // retry path the atomicity guarantee exists to make safe. Simulates the recovery path from a
+        // prior partial failure: idA's journal is already resolved-and-relocated to completed/ (as if
+        // a previous call got as far as resolving it, and this is a retry), but the controller's
+        // in-memory blocked state still lists it as blocked - exactly the state the atomicity fix is
+        // designed to leave behind if rediscovery didn't complete last time. The retry must not throw
+        // or attempt to re-resolve an already-terminal journal - TryResolveJournalAsKeepCurrent's
+        // AlreadyResolved outcome (proven by the existing AcceptAllAndCloseInterruptedOperations retry
+        // test, unchanged by Task 2's extraction) makes this a normal, successful path.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            // idA: already resolved and relocated, as if by a prior partial attempt - nothing under
+            // active/ for it.
+            var completedDirA = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, idA);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(completedDirA), InterruptedJournal(idA) with { Resolution = OperationResolution.AcceptedCurrentState, Stage = OperationStage.Completed });
+            // idB: still genuinely active.
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idB)), InterruptedJournal(idB));
+
+            controller.ResolveOneMultiRootOperation(idA);
+
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.True(controller.State.RequiresRecovery); // idB is now the ordinary single pending recovery
+            var pendingJournal = controller.GetPendingRecoveryJournal();
+            Assert.NotNull(pendingJournal);
+            Assert.Equal(idB, pendingJournal!.OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_JournalResolutionFails_ThrowsAndLeavesBlockStateIntact()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            // idA's bundle directory/journal is never written to disk - TryResolveJournalAsKeepCurrent
+            // returns Failed for it (matches AcceptAllAndCloseInterruptedOperations_OneJournalUnloadable's
+            // own established trigger).
+
+            Assert.Throws<InvalidOperationException>(() => controller.ResolveOneMultiRootOperation(idA));
+
+            Assert.True(controller.IsBlockedByMultipleRoots);
+            Assert.Equal(2, controller.GetBlockedOperations().Count);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void GetPendingRecoveryArtifactStatus_NoPendingRecovery_ReturnsNull()
     {
         var controller = NewController(new FakePenumbraOperations(), new FakeClock());
