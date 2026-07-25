@@ -168,8 +168,10 @@ public sealed class MainWindow : Window, IDisposable
             "state and move on, finish the interrupted operation from where it left off, or roll everything " +
             "back to how it was before the interrupted operation started.");
 
+        ImGui.BeginDisabled(!operationState.CanResolveRecovery);
         if (ImGui.Button("Keep Current State"))
             ImGui.OpenPopup("Keep current state?");
+        ImGui.EndDisabled();
 
         if (ImGui.BeginPopupModal("Keep current state?"))
         {
@@ -229,11 +231,16 @@ public sealed class MainWindow : Window, IDisposable
         if (!tab)
             return;
 
+        var scanOperationState = _plugin.OperationController.State;
         using (PluginTheme.PrimaryButton())
         {
+            ImGui.BeginDisabled(!scanOperationState.CanScan);
             if (ImGui.Button("Refresh mod list"))
                 RunScan();
+            ImGui.EndDisabled();
         }
+        if (!scanOperationState.CanScan && ImGui.IsItemHovered())
+            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
         ImGui.SameLine();
         ImGui.Text($"{_plugin.OrganizerState.Mods.Count} mods loaded");
@@ -698,12 +705,16 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.InputText("Label (optional)", ref _createBackupLabelInput, 200);
         ImGui.SameLine();
+        ImGui.BeginDisabled(!operationState.CanCreateBackup);
         if (ImGui.Button("Create Backup"))
         {
             var label = _createBackupLabelInput.Trim();
             CreateBackup(label.Length > 0 ? label : null);
             _createBackupLabelInput = string.Empty;
         }
+        ImGui.EndDisabled();
+        if (!operationState.CanCreateBackup && ImGui.IsItemHovered())
+            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -729,7 +740,12 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.TextUnformatted($"{title} ({snapshot.ModPaths.Count} mods)");
 
             ImGui.SameLine();
-            if (ImGui.Button($"Restore##restore-{snapshot.Id}"))
+            ImGui.BeginDisabled(!operationState.CanStartRestore);
+            var restoreButtonClicked = ImGui.Button($"Restore##restore-{snapshot.Id}");
+            ImGui.EndDisabled();
+            if (!operationState.CanStartRestore && ImGui.IsItemHovered())
+                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+            if (restoreButtonClicked)
             {
                 _pendingRestoreSnapshotId = snapshot.Id;
                 // Compute the preview once, here, rather than every frame the popup is drawn -
@@ -1082,6 +1098,7 @@ public sealed class MainWindow : Window, IDisposable
     private void DrawOrphanedFoldersSection()
     {
         var detection = _orphanedFolders;
+        var operationState = _plugin.OperationController.State;
         if (detection is null || detection.Status == Organizer.FolderDetectionStatus.NotScanned)
             return; // nothing meaningful before the first scan
 
@@ -1145,9 +1162,15 @@ public sealed class MainWindow : Window, IDisposable
             }
 
             ImGui.Spacing();
-            ImGui.BeginDisabled(_selectedOrphans.Count == 0);
+            ImGui.BeginDisabled(_selectedOrphans.Count == 0 || !operationState.CanRunFolderCleanup);
             var cleanClicked = ImGui.Button("Clean Up Selected Folders");
             ImGui.EndDisabled();
+            // Gated on _selectedOrphans.Count > 0 so this tooltip only claims the reason is "another
+            // operation" when that's actually why the button is disabled - with no selection at all,
+            // the button is disabled for an unrelated, pre-existing reason (nothing chosen yet), and
+            // this tooltip must not claim an operation is blocking it when none is.
+            if (_selectedOrphans.Count > 0 && !operationState.CanRunFolderCleanup && ImGui.IsItemHovered())
+                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
             if (cleanClicked)
                 ImGui.OpenPopup("Clean up folders?");
 
@@ -1171,8 +1194,12 @@ public sealed class MainWindow : Window, IDisposable
         if (_plugin.FolderBackupExists)
         {
             ImGui.SameLine();
+            ImGui.BeginDisabled(!operationState.CanRunFolderCleanupRollback);
             if (ImGui.Button("Rollback Folder Cleanup"))
                 RollbackFolderCleanup();
+            ImGui.EndDisabled();
+            if (!operationState.CanRunFolderCleanupRollback && ImGui.IsItemHovered())
+                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
         }
 
         DrawFolderActionResults();
