@@ -10,12 +10,17 @@ RunRetentionPass`, found to have zero production call sites despite being fully 
 Plan A2.
 
 **Architecture:** No execution-engine changes. `OperationController` gains three query accessors
-(`GetPendingRecoveryArtifactStatus`, `GetBlockedOperations`) and one genuinely new resolution method
-(`ResolveOneMultiRootOperation`, built by extracting a shared per-journal Keep-Current helper out of
-the existing `AcceptAllAndCloseInterruptedOperations` and re-running the existing
-`OperationBundleDiscovery.RunStartupDiscovery` → `RegisterDiscoveredRecovery` pipeline over whatever
-remains after resolving one root). `OperationBundleDiscovery` gains one new read function
-(`LoadRecentCompletedJournals`). Everything else is `MainWindow.cs`/`Plugin.cs` wiring.
+(`GetPendingRecoveryArtifactStatus`, `GetPendingRecoveryJournal`, `GetBlockedOperations`) and one
+genuinely new resolution method (`ResolveOneMultiRootOperation`, built by extracting a shared
+per-journal Keep-Current helper out of the existing `AcceptAllAndCloseInterruptedOperations` and
+re-running the existing `OperationBundleDiscovery.RunStartupDiscovery` → `RegisterDiscoveredRecovery`
+pipeline over whatever remains after resolving one root — failure-atomically: the old blocked-graph
+state is only replaced once a fresh discovery result is in hand, never cleared speculatively before
+one exists). `OperationBundleDiscovery` gains one new read function (`LoadRecentCompletedJournals`).
+Everything else is `MainWindow.cs`/`Plugin.cs` wiring, with two correctness details that aren't just
+wiring: the `Plugin.cs` wrapper for `ResolveOneMultiRootOperation` only re-scans once recovery has
+actually cleared (resolving one root doesn't always reach `Idle`), and the retention-pass call is
+isolated in its own try/catch so a maintenance failure can't block plugin startup.
 
 **Tech Stack:** C# / .NET, xUnit, Dalamud plugin (ImGui via `Dalamud.Bindings.ImGui`).
 
@@ -31,15 +36,18 @@ remains after resolving one root). `OperationBundleDiscovery` gains one new read
   `OperationBundleRetention`'s existing retention algorithm are out of scope for behavior changes —
   this plan consumes their existing output/reads their existing data unchanged.
 - `AcceptAllAndCloseInterruptedOperations`'s existing observable behavior (return value, which
-  journals get resolved, when it unblocks) must be bit-for-bit unchanged after its internal refactor
-  (Task 2) — verified by its own existing test suite passing unmodified.
+  journals get resolved, when it unblocks) must be unchanged after its internal refactor (Task 2) —
+  verified by its own existing test suite passing unmodified. (Task 2 does add one new internal-state
+  line, clearing `_blockedMultiRootJournals` alongside `_blockedMultiRootGraph` on success — an
+  internal-state correction Task 1 itself made necessary, not an externally observable behavior
+  change, and not covered by the pre-existing test suite since it predates Task 1's new field.)
 - No method reachable from `OperationController.Update()` may let an exception escape it — unchanged
   by this plan, but every new method must not violate it either.
 - `PublishState()` remains the sole place `OperationController.State` is assigned.
 
 ---
 
-## Task 1: `OperationController` — `GetPendingRecoveryArtifactStatus`, `GetBlockedOperations`
+## Task 1: `OperationController` — `GetPendingRecoveryArtifactStatus`, `GetPendingRecoveryJournal`, `GetBlockedOperations`
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin/Organizer/Operations/OperationController.cs`
@@ -47,11 +55,12 @@ remains after resolving one root). `OperationBundleDiscovery` gains one new read
 
 **Interfaces:**
 - Produces: `OperationController.GetPendingRecoveryArtifactStatus() -> (ArtifactCheckStatus Plan,
-  ArtifactCheckStatus Snapshot)?`, `OperationController.GetBlockedOperations() ->
-  IReadOnlyList<(Guid OperationId, OperationJournal Journal)>` — both consumed by Task 9/10's
-  `MainWindow` wiring.
+  ArtifactCheckStatus Snapshot)?`, `OperationController.GetPendingRecoveryJournal() -> OperationJournal?`,
+  `OperationController.GetBlockedOperations() -> IReadOnlyList<(Guid OperationId, OperationJournal
+  Journal)>` — all three consumed by Task 9/10/11's `MainWindow` wiring, and
+  `GetPendingRecoveryJournal` also by Task 3's cycle-resolution test.
 
-Design doc §4/§5. Two pure, read-only query accessors over already-existing state. No behavior
+Design doc §4/§5/§6. Three pure, read-only query accessors over already-existing state. No behavior
 change to anything — additive only.
 
 `GetBlockedOperations()` depends on a new field, `_blockedMultiRootJournals`, that doesn't exist yet
@@ -70,6 +79,33 @@ Add to `OperationControllerTests.cs`:
         var controller = NewController(new FakePenumbraOperations(), new FakeClock());
 
         Assert.Null(controller.GetPendingRecoveryArtifactStatus());
+    }
+
+    [Fact]
+    public void GetPendingRecoveryJournal_NoPendingRecovery_ReturnsNull()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Null(controller.GetPendingRecoveryJournal());
+    }
+
+    [Fact]
+    public void GetPendingRecoveryJournal_PendingRecoveryExists_ReturnsItsJournal()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewControllerWithPendingRecovery(new FakePenumbraOperations(), new FakeClock(), dir.FullName, out var journalId);
+
+            var journal = controller.GetPendingRecoveryJournal();
+
+            Assert.NotNull(journal);
+            Assert.Equal(journalId, journal!.OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
     }
 
     [Fact]
@@ -193,8 +229,11 @@ Add both new accessors right after the existing `public bool IsBlockedByMultiple
     public (ArtifactCheckStatus Plan, ArtifactCheckStatus Snapshot)? GetPendingRecoveryArtifactStatus() =>
         _pendingRecovery is { } pending ? (pending.PlanCheckStatus, pending.SnapshotCheckStatus) : null;
 
-    // Only AuthoritativeOperationIds (the leaves - the ones actually independently resolvable), not
-    // AllOperationIds - a non-leaf ancestor isn't independently actionable; it gets folded in
+    public OperationJournal? GetPendingRecoveryJournal() => _pendingRecovery?.Journal;
+
+    // Only AuthoritativeOperationIds (the ones actually independently resolvable - for disconnected
+    // roots these are literal graph leaves, but for a cycle every member is authoritative), not
+    // AllOperationIds - a non-authoritative ancestor isn't independently actionable; it gets folded in
     // automatically once its authoritative descendant resolves and discovery re-runs (Task 3).
     public IReadOnlyList<(Guid OperationId, OperationJournal Journal)> GetBlockedOperations() =>
         _blockedMultiRootGraph is not { } graph || _blockedMultiRootJournals is not { } journals
@@ -208,13 +247,14 @@ Add both new accessors right after the existing `public bool IsBlockedByMultiple
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `dotnet test --filter OperationControllerTests`
-Expected: PASS — all pre-existing tests plus the four new ones.
+Expected: PASS — all pre-existing tests plus the seven new ones (two `GetPendingRecoveryJournal` tests
+plus the five `GetPendingRecoveryArtifactStatus`/`GetBlockedOperations` tests above).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add PenumbraOrganizer.Plugin/Organizer/Operations/OperationController.cs PenumbraOrganizer.Plugin.Tests/Organizer/Operations/OperationControllerTests.cs
-git commit -m "feat: add GetPendingRecoveryArtifactStatus/GetBlockedOperations query accessors"
+git commit -m "feat: add GetPendingRecoveryArtifactStatus/GetPendingRecoveryJournal/GetBlockedOperations query accessors"
 ```
 
 ---
@@ -573,7 +613,54 @@ Add to `OperationControllerTests.cs`. This test file already has `NewControllerW
 
             Assert.False(controller.IsBlockedByMultipleRoots);
             Assert.True(controller.State.RequiresRecovery); // now an ordinary single pending recovery, not still blocked
-            Assert.True(Directory.Exists(OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idC))); // C is the sole remaining authoritative operation
+            // Directory presence alone wouldn't distinguish "C is correctly authoritative" from "the
+            // controller latched onto the wrong id while C incidentally still sits under active/" -
+            // assert via the controller's own authoritative accessor, not disk state.
+            var pendingJournal = controller.GetPendingRecoveryJournal();
+            Assert.NotNull(pendingJournal);
+            Assert.Equal(idC, pendingJournal!.OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOneMultiRootOperation_RetriedAfterAlreadyResolved_SucceedsWithoutResolvingTwice()
+    {
+        // Stands in as the regression test for the failure-atomicity property (design doc section 5):
+        // RunStartupDiscovery itself can't practically be forced to throw in a plain filesystem test
+        // (every read failure it can hit - missing directory, corrupt/locked journal - is already
+        // caught and treated as "skip this entry" one layer down), so this test instead exercises the
+        // retry path the atomicity guarantee exists to make safe. Simulates the recovery path from a
+        // prior partial failure: idA's journal is already resolved-and-relocated to completed/ (as if
+        // a previous call got as far as resolving it, and this is a retry), but the controller's
+        // in-memory blocked state still lists it as blocked - exactly the state the atomicity fix is
+        // designed to leave behind if rediscovery didn't complete last time. The retry must not throw
+        // or attempt to re-resolve an already-terminal journal - TryResolveJournalAsKeepCurrent's
+        // AlreadyResolved outcome (proven by the existing AcceptAllAndCloseInterruptedOperations retry
+        // test, unchanged by Task 2's extraction) makes this a normal, successful path.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var idA = Guid.NewGuid();
+            var idB = Guid.NewGuid();
+            var controller = NewControllerWithBlockedMultiRoot(new FakePenumbraOperations(), new FakeClock(), dir.FullName, [idA, idB]);
+            // idA: already resolved and relocated, as if by a prior partial attempt - nothing under
+            // active/ for it.
+            var completedDirA = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, idA);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(completedDirA), InterruptedJournal(idA) with { Resolution = OperationResolution.AcceptedCurrentState, Stage = OperationStage.Completed });
+            // idB: still genuinely active.
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: true, idB)), InterruptedJournal(idB));
+
+            controller.ResolveOneMultiRootOperation(idA);
+
+            Assert.False(controller.IsBlockedByMultipleRoots);
+            Assert.True(controller.State.RequiresRecovery); // idB is now the ordinary single pending recovery
+            var pendingJournal = controller.GetPendingRecoveryJournal();
+            Assert.NotNull(pendingJournal);
+            Assert.Equal(idB, pendingJournal!.OperationId);
         }
         finally
         {
@@ -611,11 +698,40 @@ Add to `OperationControllerTests.cs`. This test file already has `NewControllerW
 Run: `dotnet test --filter OperationControllerTests`
 Expected: build failure (`ResolveOneMultiRootOperation` doesn't exist yet)
 
-- [ ] **Step 3: Implement `ResolveOneMultiRootOperation`**
+- [ ] **Step 3: Implement `ResolveOneMultiRootOperation`, failure-atomically**
+
+**Why the obvious ordering is wrong:** clearing `_blockedMultiRootGraph`/`_blockedMultiRootJournals`
+*before* calling `RunStartupDiscovery`, then registering whatever it returns, looks natural but isn't
+safe. If `RunStartupDiscovery` throws, the selected journal has already been durably resolved and
+relocated to `completed/` (that part already happened, in the line above), but the controller has
+discarded its blocked-graph fields with nothing having replaced them yet — `State` still reports the
+stale blocked snapshot while the fields backing it are gone, and there's no way to tell a caller what
+actually happened. The fix: don't clear the old fields until a fresh discovery result is in hand to
+replace them with. If discovery throws, the old (now slightly stale but coherent) blocked-graph fields
+stay in place; a retry on the same operation id is safe because `TryResolveJournalAsKeepCurrent`
+reports `AlreadyResolved` for it, not `Failed`, on a second attempt.
 
 In `OperationController.cs`, add right after `AcceptAllAndCloseInterruptedOperations`:
 
 ```csharp
+    // Clears every recovery-related field and re-registers a fresh discovery result in one place, so
+    // a multi-root-to-single-root or multi-root-to-none transition can't leave a stale field from the
+    // previous state behind. Called only once RunStartupDiscovery has already succeeded (see
+    // ResolveOneMultiRootOperation below) - never call this before a fresh OperationDiscoveryResult is
+    // in hand.
+    private void ReplaceDiscoveredRecovery(OperationDiscoveryResult discovery)
+    {
+        _pendingRecovery = null;
+        _blockedMultiRootGraph = null;
+        _blockedMultiRootJournals = null;
+        RegisterDiscoveredRecovery(discovery);
+
+        // RegisterDiscoveredRecovery's NoRecoveryNeeded branch returns without calling PublishState()
+        // (correct at startup, where State already defaults to Idle) - here we may be transitioning
+        // OUT of a non-Idle blocked state, so publish unconditionally regardless of which branch fired.
+        PublishState();
+    }
+
     public void ResolveOneMultiRootOperation(Guid operationId)
     {
         if (_blockedMultiRootGraph is not { } graph)
@@ -626,20 +742,15 @@ In `OperationController.cs`, add right after `AcceptAllAndCloseInterruptedOperat
         if (TryResolveJournalAsKeepCurrent(operationId) == JournalResolutionOutcome.Failed)
             throw new InvalidOperationException($"Failed to resolve {operationId} - see the plugin log.");
 
-        // Re-run discovery over whatever remains on disk now that operationId has dropped out
-        // (either just resolved above, or already resolved by a prior partial attempt) - the same
-        // startup discovery path Plugin.cs's constructor uses, reused here rather than hand-rolling
-        // a second graph derivation. Cleared first so RegisterDiscoveredRecovery's NoRecoveryNeeded/
-        // SingleAuthoritative branches don't see stale blocked-graph state while re-registering.
-        _blockedMultiRootGraph = null;
-        _blockedMultiRootJournals = null;
+        // Re-run discovery over whatever remains on disk now that operationId has dropped out (either
+        // just resolved above, or already resolved by a prior partial attempt) - the same startup
+        // discovery path Plugin.cs's constructor uses, reused here rather than hand-rolling a second
+        // graph derivation. Deliberately NOT cleared before this call: if RunStartupDiscovery throws,
+        // the old _blockedMultiRootGraph/_blockedMultiRootJournals stay exactly as they were rather
+        // than being discarded with nothing to replace them - the journal we just resolved is already
+        // durably terminal regardless of whether this line succeeds, so a retry is always safe.
         var discovery = OperationBundleDiscovery.RunStartupDiscovery(_operationsRoot);
-        RegisterDiscoveredRecovery(discovery);
-
-        // RegisterDiscoveredRecovery's NoRecoveryNeeded branch returns without calling PublishState()
-        // (correct at startup, where State already defaults to Idle) - here we may be transitioning
-        // OUT of a non-Idle blocked state, so publish unconditionally regardless of which branch fired.
-        PublishState();
+        ReplaceDiscoveredRecovery(discovery);
     }
 ```
 
@@ -676,7 +787,10 @@ git commit -m "feat: add ResolveOneMultiRootOperation for incremental multi-root
 Design doc §6/§7. Reads `completed/*/journal.json`, newest-first by `UpdatedAt`, capped at `take`.
 Matches `LoadNonTerminalActiveJournals`'s own established "corrupt journal excluded, not fatal"
 pattern and `OperationBundleRetention.RunRetentionPass`'s own "no completed/ directory yet" early
-return.
+return. Contract: `take <= 0` returns `[]` (no negative or zero-length reads); only journals with
+`IsTerminal == true` are included — a defensive check against a non-terminal journal somehow present
+under `completed/`, mirroring the same "don't trust the directory over the journal's own state"
+posture `LoadNonTerminalActiveJournals` already takes toward `active/`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -759,6 +873,58 @@ Add to `OperationBundleDiscoveryTests.cs`:
             dir.Delete(recursive: true);
         }
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void LoadRecentCompletedJournals_TakeZeroOrNegative_ReturnsEmpty(int take)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var id = Guid.NewGuid();
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, id)),
+                CompletedJournal(id, DateTimeOffset.UtcNow));
+
+            Assert.Empty(OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadRecentCompletedJournals_NonTerminalJournalPresentUnderCompleted_Excluded()
+    {
+        // Shouldn't happen given how relocation works, but the read function shouldn't trust the
+        // directory it's found in over the journal's own IsTerminal state - same defensive posture
+        // LoadNonTerminalActiveJournals already takes toward active/.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var terminalId = Guid.NewGuid();
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, terminalId)),
+                CompletedJournal(terminalId, DateTimeOffset.UtcNow));
+
+            var nonTerminalId = Guid.NewGuid();
+            var nonTerminalJournal = CompletedJournal(nonTerminalId, DateTimeOffset.UtcNow) with { Stage = OperationStage.Mutating, Resolution = OperationResolution.None };
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, nonTerminalId)),
+                nonTerminalJournal);
+
+            var result = OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take: 10);
+
+            Assert.Single(result);
+            Assert.Equal(terminalId, result[0].OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -773,6 +939,9 @@ In `OperationBundleDiscovery.cs`, add after `LoadNonTerminalActiveJournals`:
 ```csharp
     public static IReadOnlyList<OperationJournal> LoadRecentCompletedJournals(string operationsRoot, int take)
     {
+        if (take <= 0)
+            return [];
+
         var completedDir = OperationBundlePaths.CompletedDirectory(operationsRoot);
         if (!Directory.Exists(completedDir))
             return [];
@@ -780,7 +949,7 @@ In `OperationBundleDiscovery.cs`, add after `LoadNonTerminalActiveJournals`:
         var journals = new List<OperationJournal>();
         foreach (var bundleDir in Directory.GetDirectories(completedDir))
         {
-            if (OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(bundleDir), out var journal) && journal is not null)
+            if (OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(bundleDir), out var journal) && journal is not null && journal.IsTerminal)
                 journals.Add(journal);
         }
 
@@ -817,7 +986,13 @@ git commit -m "feat: add OperationBundleDiscovery.LoadRecentCompletedJournals"
 Design doc §3/§5/§7. Not unit-testable — Dalamud-coupled, same documented limitation as every prior
 plan's `Plugin.cs` changes.
 
-- [ ] **Step 1: Wire the retention pass into the constructor**
+- [ ] **Step 1: Wire the retention pass into the constructor, isolated so it can't block startup**
+
+Retention is maintenance, not a startup precondition — a permissions issue, locked directory, or
+unexpected filesystem failure inside `RunRetentionPass` must not prevent the plugin from finishing
+construction, especially since recovery discovery (the thing that actually matters for correctness) has
+already completed on the line above. `RunRetentionPass` isn't verified to guarantee no exceptions
+escape it, so this call site needs its own boundary.
 
 In `Plugin.cs`, immediately after the existing discovery wiring:
 
@@ -831,7 +1006,14 @@ add:
 ```csharp
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
-        Organizer.Operations.OperationBundleRetention.RunRetentionPass(OperationsRoot, DateTimeOffset.UtcNow);
+        try
+        {
+            Organizer.Operations.OperationBundleRetention.RunRetentionPass(OperationsRoot, DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Operation bundle retention failed; plugin startup will continue.");
+        }
 ```
 
 - [ ] **Step 2: Add the Cancel and multi-root wrapper methods**
@@ -844,7 +1026,13 @@ Immediately after the existing `AcceptAllAndCloseInterruptedOperations()` wrappe
     internal void ResolveOneMultiRootOperation(Guid operationId)
     {
         OperationController.ResolveOneMultiRootOperation(operationId);
-        RunScan(); // matches ResolveKeepCurrent/AcceptAll's own pattern - this resolves synchronously, no successor operation starts
+        // Resolving one root can just as easily leave an ordinary single pending recovery (two roots
+        // -> one) or a smaller blocked set (three roots -> two) as it can reach Idle (the last root
+        // resolved) - in the first two outcomes CanScan is still false, so an unconditional RunScan()
+        // would throw or record a misleading error while a recovery is still outstanding. Only scan
+        // once recovery has actually cleared.
+        if (!OperationController.State.RequiresRecovery)
+            RunScan();
     }
 ```
 
@@ -852,8 +1040,10 @@ Immediately after the existing `AcceptAllAndCloseInterruptedOperations()` wrappe
 `OperationController.RequestCancellation()` is itself a no-op guarded internally by `Stage ==
 Mutating`) and no try/catch (it cannot throw). `ResolveOneMultiRootOperation` resolves synchronously
 (same as `ResolveKeepCurrent`/`AcceptAllAndCloseInterruptedOperations` — no new async operation
-starts), so it follows their `RunScan()`-after pattern, not `ResolveContinue`/
-`ResolveRestorePreviousState`'s `_operationInProgress`-guarded async pattern.
+starts), so it follows their "no `_operationInProgress` guard" pattern, not `ResolveContinue`/
+`ResolveRestorePreviousState`'s `_operationInProgress`-guarded async pattern — but unlike
+`ResolveKeepCurrent`/`AcceptAll` (which always fully clear recovery), it cannot assume `RunScan()` is
+always safe to call afterward, hence the `RequiresRecovery` check above.
 
 - [ ] **Step 3: Build**
 
@@ -1004,6 +1194,10 @@ with:
             ImGui.BeginDisabled(_selectedOrphans.Count == 0 || !operationState.CanRunFolderCleanup);
             var cleanClicked = ImGui.Button("Clean Up Selected Folders");
             ImGui.EndDisabled();
+            // Gated on _selectedOrphans.Count > 0 so this tooltip only claims the reason is "another
+            // operation" when that's actually why the button is disabled - with no selection at all,
+            // the button is disabled for an unrelated, pre-existing reason (nothing chosen yet), and
+            // this tooltip must not claim an operation is blocking it when none is.
             if (_selectedOrphans.Count > 0 && !operationState.CanRunFolderCleanup && ImGui.IsItemHovered())
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 ```
@@ -1115,7 +1309,7 @@ with:
         if (operationState.Stage is not null && operationState.Kind == Organizer.Operations.OperationType.Apply)
         {
             if (!operationState.CanStartApply && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Applying");
+                DrawOperationProgress(operationState, "Applying", null, "##cancel-apply"); // Task 8 wires the real cancel callback
             else if (operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
             else
@@ -1143,7 +1337,7 @@ with:
         if (_restoreOperationActive)
         {
             if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Restoring");
+                DrawOperationProgress(operationState, "Restoring", null, "##cancel-restore"); // Task 8 wires the real cancel callback
             else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
         }
@@ -1152,21 +1346,54 @@ with:
 - [ ] **Step 3: Add the shared `DrawOperationProgress` helper**
 
 Add a new private method near `DrawWrappingButtonRow` (the other small shared ImGui drawing helper in
-this file):
+this file). It takes an `onCancel` delegate up front (`null` from this task's two call sites — Task 8
+passes the real callback) so the layout math for reserving room next to a full-width progress bar lives
+in one place rather than being duplicated at both call sites:
 
 ```csharp
     // Target-based, not step-based: a cycle-breaking plan has more execution steps than recovery
     // targets (a temporary hop plus a final move both count as steps for one target), so a
     // step-based fraction misrepresents "how many mods are done" to a user whose mental model is
-    // mods, not steps (design doc section 2). SuccessfulTargets, not ProcessedTargets, drives the
-    // fraction - ProcessedTargets includes attempted-and-failed targets, which would make the bar
-    // appear to complete even on a run with real failures.
-    private static void DrawOperationProgress(Organizer.Operations.OperationStateSnapshot operationState, string verb)
+    // mods, not steps (design doc section 2). ProcessedTargets, not SuccessfulTargets, drives the
+    // fraction - SuccessfulTargets is a subset of ProcessedTargets (attempted-and-succeeded, not
+    // attempted), so a run with even one failure would otherwise leave the bar permanently short of
+    // full even after the operation finishes processing everything. Completion (how much work is
+    // done) and outcome (whether it succeeded) are separate concerns, shown on separate lines.
+    //
+    // onCancel is null from Task 7's two call sites (no cancel affordance yet) - Task 8 passes the
+    // real callback. Cancel is drawn here, not at each call site, so the "reserve width for the
+    // button before the full-width progress bar claims it" math isn't duplicated for Apply and
+    // Restore separately. cancelButtonId carries a distinct ##-suffix per call site (ImGui requires
+    // unique widget IDs across the whole window, not just within one tab, matching this file's own
+    // established per-row uniqueness convention documented in DrawHistoryTab).
+    private static void DrawOperationProgress(Organizer.Operations.OperationStateSnapshot operationState, string verb, Action? onCancel, string cancelButtonId)
     {
         var fraction = operationState.TotalTargets > 0
-            ? (float)operationState.SuccessfulTargets / operationState.TotalTargets
+            ? (float)operationState.ProcessedTargets / operationState.TotalTargets
             : 1f;
-        ImGui.ProgressBar(fraction, new Vector2(-1, 0), $"{operationState.SuccessfulTargets}/{operationState.TotalTargets} mods");
+
+        var showCancel = onCancel is not null && operationState.CanRequestCancellation;
+        var barWidth = -1f;
+        var buttonWidth = 0f;
+        if (showCancel)
+        {
+            buttonWidth = ImGui.CalcTextSize("Cancel").X + ImGui.GetStyle().FramePadding.X * 2;
+            var spacing = ImGui.GetStyle().ItemSpacing.X;
+            barWidth = MathF.Max(1f, ImGui.GetContentRegionAvail().X - buttonWidth - spacing);
+        }
+
+        ImGui.ProgressBar(fraction, new Vector2(barWidth, 0), $"{operationState.ProcessedTargets}/{operationState.TotalTargets} processed");
+        if (showCancel)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button($"Cancel{cancelButtonId}", new Vector2(buttonWidth, 0)))
+                onCancel!();
+        }
+
+        var failedTargets = operationState.ProcessedTargets - operationState.SuccessfulTargets;
+        ImGui.TextDisabled(failedTargets > 0
+            ? $"{operationState.SuccessfulTargets} succeeded, {failedTargets} failed"
+            : $"{operationState.SuccessfulTargets} succeeded");
         if (operationState.LastProcessedDisplayName is { } name)
             ImGui.TextDisabled($"{verb}: {name}");
         ImGui.TextDisabled($"{operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage})");
@@ -1201,38 +1428,42 @@ tab, gated on `CanRequestCancellation`, deliberately **no confirmation popup** (
 §3 — cancellation is the one genuinely low-stakes, reversible-in-intent action in this whole UI). Not
 unit-testable — pure ImGui UI code.
 
+Task 7 already built `DrawOperationProgress` with an `onCancel` slot and the width-reservation layout
+math, called with `null` from both tabs (no cancel affordance yet). This task only needs to flip that
+`null` to the real callback at each of the two call sites — the button itself, its layout, and its ID
+uniqueness are already handled by the shared helper.
+
 - [ ] **Step 1: Apply tab**
 
-In `DrawReviewTab`, immediately after the `DrawOperationProgress(operationState, "Applying");` call
-added in Task 7:
+In `DrawReviewTab`, change the `DrawOperationProgress` call Task 7 added:
 
 ```csharp
-                DrawOperationProgress(operationState, "Applying");
-                if (operationState.CanRequestCancellation)
-                {
-                    ImGui.SameLine();
-                    if (ImGui.Button("Cancel##cancel-apply"))
-                        _plugin.RequestCancellation();
-                }
+                DrawOperationProgress(operationState, "Applying", null, "##cancel-apply");
+```
+
+to:
+
+```csharp
+                DrawOperationProgress(operationState, "Applying", _plugin.RequestCancellation, "##cancel-apply");
 ```
 
 - [ ] **Step 2: Restore/History tab**
 
-Immediately after the `DrawOperationProgress(operationState, "Restoring");` call added in Task 7:
+Change the `DrawOperationProgress` call Task 7 added:
 
 ```csharp
-                DrawOperationProgress(operationState, "Restoring");
-                if (operationState.CanRequestCancellation)
-                {
-                    ImGui.SameLine();
-                    if (ImGui.Button("Cancel##cancel-restore"))
-                        _plugin.RequestCancellation();
-                }
+                DrawOperationProgress(operationState, "Restoring", null, "##cancel-restore");
 ```
 
-(Two separate `##cancel-apply`/`##cancel-restore` widget IDs since ImGui requires unique IDs across
-the whole window, not just within one tab, matching this file's own established per-row uniqueness
-convention documented in `DrawHistoryTab`.)
+to:
+
+```csharp
+                DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore");
+```
+
+(Passing the delegate unconditionally, not only when `CanRequestCancellation` is true, is safe and
+simpler at the call site — `DrawOperationProgress` itself re-checks `CanRequestCancellation` before
+deciding whether to reserve space for or draw the button.)
 
 - [ ] **Step 3: Build**
 
@@ -1273,16 +1504,23 @@ that closes the single-root branch:
             var artifactStatus = _plugin.OperationController.GetPendingRecoveryArtifactStatus();
             if (artifactStatus is { } status)
             {
-                if (status.Plan != Organizer.Operations.ArtifactCheckStatus.Valid)
-                    ImGui.TextColored(PluginTheme.CollisionBad, $"Interrupted plan is {status.Plan} - Continue is unavailable.");
-                if (status.Snapshot != Organizer.Operations.ArtifactCheckStatus.Valid)
-                    ImGui.TextColored(PluginTheme.CollisionBad, $"Snapshot is {status.Snapshot} - Restore Previous State is unavailable.");
+                DrawArtifactLine(status.Plan, "Interrupted plan", "Continue");
+                DrawArtifactLine(status.Snapshot, "Snapshot", "Restore Previous State");
             }
 
             var assessment = _plugin.OperationController.GetRecoveryAssessment();
             if (assessment is null)
             {
-                ImGui.TextDisabled("Still checking live mod state...");
+                // GetRecoveryAssessment() returning null has two distinct causes needing distinct
+                // messages: classification genuinely hasn't settled yet (RecoveryClassificationPending
+                // true - correct to say "still checking"), or it permanently failed to settle (an
+                // invalid plan/live-read/provider per D2's own non-retryable settling design -
+                // RecoveryClassificationPending is false, and "still checking" would be permanently,
+                // silently wrong).
+                if (operationState.RecoveryClassificationPending)
+                    ImGui.TextDisabled("Still checking live mod state...");
+                else
+                    ImGui.TextColored(PluginTheme.CollisionBad, "Per-mod classification is unavailable - see the artifact status above.");
             }
             else if (assessment.Classifications.Count == 0)
             {
@@ -1313,6 +1551,31 @@ that closes the single-root branch:
                 }
             }
         }
+```
+
+Add a small private static helper alongside `DrawOperationProgress` (Task 7) rendering the per-status
+artifact line. `ArtifactCheckStatus` has four members — `Unchecked`, `Valid`, `Missing`, `Invalid` —
+and `Unchecked` must not be treated as an error: it means the async check simply hasn't run yet, a
+normal transient state early in a recovery's lifetime, not a problem.
+
+```csharp
+    private static void DrawArtifactLine(Organizer.Operations.ArtifactCheckStatus status, string artifactName, string unavailableAction)
+    {
+        switch (status)
+        {
+            case Organizer.Operations.ArtifactCheckStatus.Unchecked:
+                ImGui.TextDisabled($"Checking {artifactName}...");
+                break;
+            case Organizer.Operations.ArtifactCheckStatus.Missing:
+                ImGui.TextColored(PluginTheme.CollisionBad, $"{artifactName} is missing; {unavailableAction} is unavailable.");
+                break;
+            case Organizer.Operations.ArtifactCheckStatus.Invalid:
+                ImGui.TextColored(PluginTheme.CollisionBad, $"{artifactName} is corrupt; {unavailableAction} is unavailable.");
+                break;
+            case Organizer.Operations.ArtifactCheckStatus.Valid:
+                break; // nothing to report
+        }
+    }
 ```
 
 - [ ] **Step 2: Build**
@@ -1387,12 +1650,17 @@ with:
 ```csharp
         if (_plugin.OperationController.IsBlockedByMultipleRoots)
         {
+            // Precise about what clicking one row actually does: it does NOT turn that operation into
+            // an ordinary single recovery - it permanently marks it Keep Current, abandoning it, and
+            // ONE OF THE REMAINING operations may then become the ordinary single recovery. Getting
+            // this wrong in the copy would understate how destructive the per-row action is.
             ImGui.TextWrapped(
-                "Multiple interrupted operations were found. You can resolve them one at a time below " +
-                "(each becomes an ordinary single recovery, or unblocks entirely, once the others are " +
-                "handled), or abandon all of them at once and accept whatever Penumbra currently has as " +
-                "correct - this does not undo or redo any moves for any of them, it only stops the plugin " +
-                "from blocking further actions.");
+                "Multiple interrupted operations were found. You can resolve one at a time below by " +
+                "keeping its current state - the recovery graph is then recalculated for what's left, " +
+                "which may become a smaller blocked set, a single recoverable operation, or fully " +
+                "resolved. You can also abandon all of them at once and accept whatever Penumbra " +
+                "currently has as correct - this does not undo or redo any moves for any of them, it " +
+                "only stops the plugin from blocking further actions.");
 
             ImGui.Spacing();
             var blocked = _plugin.OperationController.GetBlockedOperations();
@@ -1405,7 +1673,8 @@ with:
 
                 if (ImGui.BeginPopupModal($"Keep current state for {operationId}?"))
                 {
-                    ImGui.TextUnformatted("This will mark this one interrupted operation as resolved. Any others found stay blocked until resolved separately.");
+                    ImGui.TextUnformatted("This selected operation cannot later be continued or restored - it will be permanently abandoned.");
+                    ImGui.TextUnformatted("Any other interrupted operations found stay blocked until resolved separately.");
                     if (ImGui.Button("Yes, Keep Current"))
                     {
                         _plugin.ResolveOneMultiRootOperation(operationId);
@@ -1469,12 +1738,15 @@ git commit -m "feat: replace multi-root Accept-All-only panel with a per-operati
 - Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.cs`
 
 **Interfaces:**
-- Consumes: Task 4's `OperationBundleDiscovery.LoadRecentCompletedJournals`, existing
-  `DiagnosticsLog.ReadAll`, existing `OperationController.State`.
+- Consumes: Task 4's `OperationBundleDiscovery.LoadRecentCompletedJournals`, Task 1's
+  `GetPendingRecoveryJournal`/`GetBlockedOperations`, existing `DiagnosticsLog.ReadAll`, existing
+  `OperationController.State`.
 
 Design doc §6. Three new sections in `CreateDiagnosticDump()`. Not unit-testable — reads live
 `OperationController.State` and writes a file via Dalamud's config directory, same limitation as the
-existing dump.
+existing dump. Each section is wrapped in its own try/catch: the dump's entire purpose is helping
+diagnose a problem, so one unreadable source (a locked `completed/` directory, a corrupt diagnostics
+log) must degrade that section's own output, not abort the whole dump.
 
 - [ ] **Step 1: Add the three sections**
 
@@ -1492,40 +1764,87 @@ with:
 
 ```csharp
         sb.AppendLine("== Interrupted operation ==");
-        var operationState = _plugin.OperationController.State;
-        if (operationState.RequiresRecovery)
-            sb.AppendLine($"Stage={operationState.Stage}, {operationState.ProcessedSteps}/{operationState.TotalSteps} steps, last updated (approx.) now - see the recovery panel for details.");
-        else
-            sb.AppendLine("(none)");
+        try
+        {
+            var pendingJournal = _plugin.OperationController.GetPendingRecoveryJournal();
+            if (pendingJournal is not null)
+            {
+                sb.AppendLine($"OperationId={pendingJournal.OperationId}, Type={pendingJournal.Type}, Stage={pendingJournal.Stage}, {pendingJournal.ProcessedStepCount}/{pendingJournal.TotalSteps} steps, UpdatedAt={pendingJournal.UpdatedAt.ToLocalTime():u}");
+            }
+            else
+            {
+                var blocked = _plugin.OperationController.GetBlockedOperations();
+                if (blocked.Count == 0)
+                {
+                    sb.AppendLine("(none)");
+                }
+                else
+                {
+                    foreach (var (_, journal) in blocked)
+                        sb.AppendLine($"  OperationId={journal.OperationId}, Type={journal.Type}, Stage={journal.Stage}, UpdatedAt={journal.UpdatedAt.ToLocalTime():u}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"(failed to read: {ex.Message})");
+            Plugin.Log.Warning(ex, "Diagnostic dump: reading interrupted operation state failed.");
+        }
         sb.AppendLine();
 
         sb.AppendLine("== Recent operations ==");
-        var recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
-        if (recentOperations.Count == 0)
+        try
         {
-            sb.AppendLine("(none)");
+            var recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
+            if (recentOperations.Count == 0)
+            {
+                sb.AppendLine("(none)");
+            }
+            else
+            {
+                foreach (var journal in recentOperations)
+                    sb.AppendLine($"  {journal.UpdatedAt.ToLocalTime():u} - {journal.Type} - {journal.Stage} - {journal.Resolution}");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            foreach (var journal in recentOperations)
-                sb.AppendLine($"  {journal.UpdatedAt.ToLocalTime():u} - {journal.Type} - {journal.Stage} - {journal.Resolution}");
+            sb.AppendLine($"(failed to read: {ex.Message})");
+            Plugin.Log.Warning(ex, "Diagnostic dump: reading recent operations failed.");
         }
         sb.AppendLine();
 
         sb.AppendLine("== Slow calls ==");
-        var diagnosticsLogPath = Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(_plugin.OperationsRoot);
-        var slowCalls = Organizer.Operations.DiagnosticsLog.ReadAll(diagnosticsLogPath)
-            .Where(e => e.Kind == Organizer.Operations.DiagnosticEventKind.SlowCall)
-            .ToList();
-        if (slowCalls.Count == 0)
+        try
         {
-            sb.AppendLine("(none)");
+            var diagnosticsLogPath = Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(_plugin.OperationsRoot);
+            var slowCalls = Organizer.Operations.DiagnosticsLog.ReadAll(diagnosticsLogPath)
+                .Where(e => e.Kind == Organizer.Operations.DiagnosticEventKind.SlowCall)
+                .ToList();
+            if (slowCalls.Count == 0)
+            {
+                sb.AppendLine("(none)");
+            }
+            else
+            {
+                // Grouped by identifier, not just the five longest raw events - five slow calls to the
+                // same identifier would otherwise crowd out four other identifiers that are each slow
+                // exactly once. Ranked by worst (max) duration per identifier.
+                var grouped = slowCalls
+                    .GroupBy(e => e.Identifier, StringComparer.Ordinal)
+                    .Select(g => new { Identifier = g.Key, Count = g.Count(), WorstMs = g.Max(e => e.DurationMilliseconds), TotalMs = g.Sum(e => e.DurationMilliseconds) })
+                    .OrderByDescending(x => x.WorstMs)
+                    .ThenByDescending(x => x.Count)
+                    .Take(5)
+                    .ToList();
+                sb.AppendLine($"{slowCalls.Count} recorded slow calls across {grouped.Count} displayed identifiers (ranked by worst duration):");
+                foreach (var item in grouped)
+                    sb.AppendLine($"  {item.Identifier}: {item.Count} calls, worst {item.WorstMs}ms, total {item.TotalMs}ms");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            sb.AppendLine($"{slowCalls.Count} recorded slow calls. Worst 5 by duration:");
-            foreach (var evt in slowCalls.OrderByDescending(e => e.DurationMilliseconds).Take(5))
-                sb.AppendLine($"  {evt.Identifier}: {evt.DurationMilliseconds}ms at {evt.RecordedAt.ToLocalTime():u}");
+            sb.AppendLine($"(failed to read: {ex.Message})");
+            Plugin.Log.Warning(ex, "Diagnostic dump: reading slow-call log failed.");
         }
         sb.AppendLine();
 
@@ -1569,7 +1888,51 @@ Design doc §7. A new collapsed-by-default "Recent Operations" section in the Hi
 visually distinct from and below the existing `RollbackSnapshot` list. Not unit-testable — pure ImGui
 UI code.
 
-- [ ] **Step 1: Add the section**
+**Must not re-read the filesystem every rendered frame.** `ImGui.CollapsingHeader`'s body runs on
+every frame the section is expanded — a naive call to `LoadRecentCompletedJournals` from inside it
+would enumerate `completed/`, open and parse every retained journal, sort, and allocate a new list
+continuously at 60+ FPS while the header stays open, exactly the per-frame-disk-read pattern this
+codebase has already deliberately avoided elsewhere (the Restore-preview computation is captured once,
+on click, not recomputed every frame the confirmation popup is open — Task 6, Step 2). Cache the result
+in fields, reload only when the section transitions from collapsed to expanded (not on every frame it
+stays expanded), and give the user an explicit "Refresh" button for the case where they want the list
+current without collapsing and reopening the section first.
+
+- [ ] **Step 1: Add caching fields and the `RefreshRecentOperations` helper**
+
+Add near this file's other per-window cached-state fields (e.g. `_pendingRestorePreview`):
+
+```csharp
+    private IReadOnlyList<Organizer.Operations.OperationJournal> _recentOperations = [];
+    private bool _recentOperationsLoaded;
+    private string? _recentOperationsError;
+    private bool _recentOperationsSectionWasOpen;
+```
+
+Add a private helper method:
+
+```csharp
+    private void RefreshRecentOperations()
+    {
+        try
+        {
+            _recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
+            _recentOperationsError = null;
+        }
+        catch (Exception ex)
+        {
+            _recentOperations = [];
+            _recentOperationsError = $"Could not load recent operations: {ex.Message}";
+            Plugin.Log.Warning(ex, "Loading recent operations failed.");
+        }
+        finally
+        {
+            _recentOperationsLoaded = true;
+        }
+    }
+```
+
+- [ ] **Step 2: Add the section**
 
 In `DrawHistoryTab`, immediately before the closing brace of the method (after the existing
 `_restoreOperationActive` progress block):
@@ -1577,10 +1940,24 @@ In `DrawHistoryTab`, immediately before the closing brace of the method (after t
 ```csharp
         ImGui.Spacing();
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Recent Operations"))
+        var recentOperationsOpen = ImGui.CollapsingHeader("Recent Operations");
+        // Reload only on a collapsed -> expanded transition (or the very first expansion), not every
+        // frame the header stays open - the naive "load every frame it's expanded" version is exactly
+        // the per-frame-disk-read pattern this section must avoid.
+        if (recentOperationsOpen && (!_recentOperationsLoaded || !_recentOperationsSectionWasOpen))
+            RefreshRecentOperations();
+        _recentOperationsSectionWasOpen = recentOperationsOpen;
+
+        if (recentOperationsOpen)
         {
-            var recentOperations = Organizer.Operations.OperationBundleDiscovery.LoadRecentCompletedJournals(_plugin.OperationsRoot, take: 20);
-            if (recentOperations.Count == 0)
+            if (ImGui.Button("Refresh##recent-operations"))
+                RefreshRecentOperations();
+
+            if (_recentOperationsError is { } error)
+            {
+                ImGui.TextColored(PluginTheme.CollisionBad, error);
+            }
+            else if (_recentOperations.Count == 0)
             {
                 ImGui.TextDisabled("No completed operations yet.");
             }
@@ -1594,7 +1971,7 @@ In `DrawHistoryTab`, immediately before the closing brace of the method (after t
                     ImGui.TableSetupColumn("Stage");
                     ImGui.TableSetupColumn("Resolution");
                     ImGui.TableHeadersRow();
-                    foreach (var journal in recentOperations)
+                    foreach (var journal in _recentOperations)
                     {
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn();
@@ -1611,12 +1988,17 @@ In `DrawHistoryTab`, immediately before the closing brace of the method (after t
         }
 ```
 
-- [ ] **Step 2: Build**
+Note this section's own `RefreshRecentOperations` call is independent of Task 11's diagnostics-dump
+call to the same `LoadRecentCompletedJournals` function — the dump runs once per explicit "Create
+Diagnostic Dump" click (never per-frame), so its direct, uncached call is fine as-is and needs no
+caching of its own.
+
+- [ ] **Step 3: Build**
 
 Run: `dotnet build`
 Expected: no new errors/warnings
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add PenumbraOrganizer.Plugin/Windows/MainWindow.cs
@@ -1646,30 +2028,45 @@ following checklist for a human to run in-game before this plan is considered ve
 attempt to run it yourself — no game client is available in this environment):
 
 1. With another operation already active (e.g. mid-Apply), confirm the Scan/Create Backup/Restore/
-   Folder Cleanup/Rollback buttons are greyed out with a tooltip explaining why on hover.
+   Folder Cleanup/Rollback buttons are greyed out with a tooltip explaining why on hover — and confirm
+   the Folder Cleanup button, when disabled purely because no folders are selected (no operation
+   active), shows no misleading "another operation" tooltip.
 2. Start an Apply on a real multi-mod library. Confirm the progress bar fills proportionally by mod
    count (not step count — a mod involved in a swap should not make the bar jump by more than its own
-   share), the "Applying: <mod name>" line updates, and a Cancel button appears and disappears
-   correctly around the Mutating stage.
+   share) and continues advancing even if a target fails partway through (processed count keeps
+   climbing; only the separate succeeded/failed line reflects the failure), the "Applying: <mod name>"
+   line updates, and a Cancel button appears and disappears correctly around the Mutating stage without
+   clipping or overlapping the progress bar.
 3. Click Cancel mid-Apply. Confirm the operation stops at the next safe boundary and settles as
    `Cancelled`, with no confirmation popup needed.
 4. Force an interrupted single-root recovery (per D1/D2's own manual checklists). Confirm the new
-   "Details" section shows the correct per-mod classification colors and, if the plan or snapshot is
-   corrupted, the correct artifact-status warning text.
+   "Details" section shows the correct per-mod classification colors, distinguishes "still checking"
+   from "classification permanently unavailable" correctly, and — if the plan or snapshot is corrupted —
+   shows the correct artifact-status warning text (and shows "Checking..." rather than an error while
+   the artifact check is still `Unchecked`, early in the recovery's lifetime).
 5. Hand-construct (or otherwise produce) a multi-root/cycle blocked state. Confirm each blocked
-   operation gets its own row with type/stage/timestamp, resolving one via its own "Keep Current
-   State" button correctly shrinks the list (or, if it was the last one, unblocks entirely and shows
-   the ordinary single-root panel or nothing at all), and "Accept Current State and Close All" still
-   works as the bulk fallback.
-6. Create a Diagnostic Dump. Confirm the new "Interrupted operation," "Recent operations," and "Slow
-   calls" sections appear with real data (or "(none)" where appropriate) rather than throwing or
-   silently omitting.
+   operation gets its own row with type/stage/timestamp, the warning copy correctly describes resolving
+   one row as permanently abandoning that one operation, resolving one via its own "Keep Current State"
+   button correctly shrinks the list (or, if it was the last one, unblocks entirely and shows the
+   ordinary single-root panel or nothing at all), and "Accept Current State and Close All" still works
+   as the bulk fallback.
+6. Create a Diagnostic Dump. Confirm the new "Interrupted operation" section shows the real interruption
+   timestamp (not the dump's own creation time), "Recent operations" and "Slow calls" (grouped by
+   identifier with count/worst/total, not five raw events) appear with real data (or "(none)" where
+   appropriate) rather than throwing or silently omitting.
 7. Open the History tab's new "Recent Operations" section. Confirm it lists real completed Apply/
    Restore/Continue/Restore-Previous-State operations with correct type/stage/resolution, stays
-   collapsed by default, and is visually distinct from the snapshot list above it.
+   collapsed by default, is visually distinct from the snapshot list above it, does not visibly
+   re-query or flicker while left open across many frames, and the "Refresh" button updates the list
+   after a new operation completes without needing to collapse and re-expand the section.
 8. Restart the plugin (or the game) with more than 50 completed operation bundles on disk (or an
    artificially-lowered retention count for testing). Confirm `completed/` is pruned to the retention
-   window on the next startup and the plugin doesn't error.
+   window on the next startup and the plugin doesn't error — including simulating a retention failure
+   (e.g. a locked file under `completed/`) and confirming the plugin still starts normally with a
+   warning logged, not a crash.
+9. Click a Restore row to open its confirmation popup, then (in another window/instance, or by editing
+   files on disk to simulate a race) cause `CanStartRestore` to become false before confirming. Confirm
+   the confirm handler's own admission recheck rejects the stale confirmation rather than proceeding.
 
 - [ ] **Step 4: Report the test count and baseline comparison**
 
