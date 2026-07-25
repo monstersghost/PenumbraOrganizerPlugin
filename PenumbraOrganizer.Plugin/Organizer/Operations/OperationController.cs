@@ -28,6 +28,8 @@ public sealed record OperationStateSnapshot(
     bool CanRunFolderCleanupRollback,
     bool CanCreateBackup,
     bool CanResolveRecovery,
+    bool CanContinueRecovery,
+    bool CanRestorePreviousState,
     bool CanRequestCancellation)
 {
     public static OperationStateSnapshot Idle { get; } = new(
@@ -37,7 +39,8 @@ public sealed record OperationStateSnapshot(
         RequiresRecovery: false, RecoveryClassificationPending: false,
         CanStartApply: true, CanStartRestore: true, CanScan: true, CanIndex: true,
         CanRunFolderCleanup: true, CanRunFolderCleanupRollback: true, CanCreateBackup: true,
-        CanResolveRecovery: false, CanRequestCancellation: false);
+        CanResolveRecovery: false, CanContinueRecovery: false, CanRestorePreviousState: false,
+        CanRequestCancellation: false);
 }
 
 /// <summary>
@@ -66,6 +69,8 @@ public sealed class OperationController
 
     public enum RecoveryClassificationStatus { WaitingForProvider, Classified, ClassificationUnavailable }
 
+    public enum RecoveryLiveReadStatus { WaitingForProvider, Available, Unavailable }
+
     private sealed class PendingRecoveryContext
     {
         public required OperationJournal Journal { get; set; }
@@ -78,6 +83,10 @@ public sealed class OperationController
         public RecoveryClassificationStatus ClassificationStatus { get; set; } = RecoveryClassificationStatus.WaitingForProvider;
         public RecoveryAssessment? Assessment { get; set; }
         public long? LastClassificationAttemptTimestamp { get; set; }
+        public LiveModSnapshot? LiveSnapshot { get; set; }
+        public RecoveryLiveReadStatus LiveReadStatus { get; set; } = RecoveryLiveReadStatus.WaitingForProvider;
+        public bool CanContinueRecovery { get; set; }
+        public bool CanRestorePreviousState { get; set; }
     }
 
     private static readonly TimeSpan ClassificationRetryInterval = TimeSpan.FromSeconds(1);
@@ -348,7 +357,9 @@ public sealed class OperationController
 
     public void Update()
     {
-        if (_pendingRecovery is { ClassificationStatus: RecoveryClassificationStatus.WaitingForProvider } pending)
+        if (_pendingRecovery is { } pending &&
+            (pending.ClassificationStatus == RecoveryClassificationStatus.WaitingForProvider ||
+             pending.LiveReadStatus == RecoveryLiveReadStatus.WaitingForProvider))
         {
             try
             {
@@ -361,6 +372,7 @@ public sealed class OperationController
                 // Plugin.cs's Framework.Update subscription doesn't wrap it either), and must not leave
                 // classification stuck retrying the same throw every second indefinitely.
                 pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+                pending.LiveReadStatus = RecoveryLiveReadStatus.Unavailable;
                 PublishState();
             }
         }
@@ -410,11 +422,36 @@ public sealed class OperationController
             stateChanged = true;
         }
 
-        // Classification needs a valid Plan only - a missing/invalid Snapshot does not block it.
+        // Classification (Continue) needs a valid Plan only - a missing/invalid Snapshot does not
+        // block it. Restore Previous State's own availability depends only on the live read below,
+        // never on plan validity (design doc section 2).
         if (pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
-        {
             pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
-            PublishState();
+
+        // If NEITHER artifact is valid, no resolution could ever consume a live read - settle
+        // LiveReadStatus permanently here too (mirroring ClassificationStatus's own permanent settle
+        // just above), rather than leaving it WaitingForProvider forever. Without this, Update()'s
+        // outer gate (ClassificationStatus == WaitingForProvider || LiveReadStatus ==
+        // WaitingForProvider) would stay true indefinitely once ClassificationStatus alone had
+        // already settled, calling this method every tick forever for no purpose (review point 4).
+        var anyLiveConsumerAvailable = pending.PlanCheckStatus == ArtifactCheckStatus.Valid || pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid;
+        if (!anyLiveConsumerAvailable)
+        {
+            pending.LiveReadStatus = RecoveryLiveReadStatus.Unavailable;
+            RecomputeResolutionAvailability(pending);
+            if (stateChanged)
+                PublishState();
+            return;
+        }
+
+        // The live read backs both Continue's classification and Restore Previous State's own
+        // availability - attempt it whenever either resolution could still use it, but only if it
+        // hasn't already settled (a prior attempt may have resolved it to Available/Unavailable while
+        // ClassificationStatus was still the one field keeping Update()'s gate open).
+        if (pending.LiveReadStatus != RecoveryLiveReadStatus.WaitingForProvider)
+        {
+            if (stateChanged)
+                PublishState();
             return;
         }
 
@@ -431,24 +468,48 @@ public sealed class OperationController
         switch (liveResult.Status)
         {
             case LiveModReadStatus.Success when liveResult.Snapshot is not null:
-                pending.Assessment = RecoveryAssessmentBuilder.Build(pending.Plan!, liveResult.Snapshot);
-                pending.ClassificationStatus = RecoveryClassificationStatus.Classified;
+                pending.LiveSnapshot = liveResult.Snapshot;
+                pending.LiveReadStatus = RecoveryLiveReadStatus.Available;
+                if (pending.PlanCheckStatus == ArtifactCheckStatus.Valid)
+                {
+                    pending.Assessment = RecoveryAssessmentBuilder.Build(pending.Plan!, liveResult.Snapshot);
+                    pending.ClassificationStatus = RecoveryClassificationStatus.Classified;
+                }
                 break;
 
             case LiveModReadStatus.TemporarilyUnavailable:
             case LiveModReadStatus.ProviderUnavailable:
                 // Retryable at startup specifically - Penumbra may simply not have finished loading
-                // yet. pending.ClassificationStatus already is WaitingForProvider; nothing to change.
+                // yet. Both statuses already WaitingForProvider; nothing to change.
                 break;
 
             case LiveModReadStatus.InvalidData:
             default:
                 // A response that parsed but doesn't make sense won't be fixed by asking again.
-                pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
+                pending.LiveReadStatus = RecoveryLiveReadStatus.Unavailable;
+                if (pending.PlanCheckStatus == ArtifactCheckStatus.Valid)
+                    pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
                 break;
         }
 
+        RecomputeResolutionAvailability(pending);
         PublishState();
+    }
+
+    // Cached once here (called only when classification/live-read state actually changes), not
+    // recomputed on every PublishState() call - design doc section 5, review points 10/11. These
+    // booleans are advisory for UI button-enablement only: ResolveContinue/ResolveRestorePreviousState
+    // (Task 4) always take their own fresh read and re-derive everything from it before committing.
+    private static void RecomputeResolutionAvailability(PendingRecoveryContext pending)
+    {
+        pending.CanContinueRecovery = pending.ClassificationStatus == RecoveryClassificationStatus.Classified
+            && pending.Assessment is not null
+            && pending.LiveSnapshot!.DuplicateIdentifiers.Count == 0
+            && ContinuationPlanner.TryBuildResidualMoves(pending.Plan!, pending.Assessment).Status == ContinuationPlanStatus.Ready;
+
+        pending.CanRestorePreviousState = pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid
+            && pending.LiveReadStatus == RecoveryLiveReadStatus.Available
+            && pending.LiveSnapshot!.DuplicateIdentifiers.Count == 0;
     }
 
     private void AdvanceActiveOperation()
@@ -598,6 +659,8 @@ public sealed class OperationController
                 RequiresRecovery = true,
                 RecoveryClassificationPending = pending.ClassificationStatus == RecoveryClassificationStatus.WaitingForProvider,
                 CanResolveRecovery = true, // Keep Current needs neither classification nor a valid plan/snapshot
+                CanContinueRecovery = pending.CanContinueRecovery,
+                CanRestorePreviousState = pending.CanRestorePreviousState,
                 CanStartApply = false, CanStartRestore = false, CanScan = false, CanIndex = false,
                 CanRunFolderCleanup = false, CanRunFolderCleanupRollback = false, CanCreateBackup = false,
             };
@@ -622,6 +685,7 @@ public sealed class OperationController
             CanStartApply: canStartNew, CanStartRestore: canStartNew, CanScan: canStartNew, CanIndex: canStartNew,
             CanRunFolderCleanup: canStartNew, CanRunFolderCleanupRollback: canStartNew, CanCreateBackup: canStartNew,
             CanResolveRecovery: _active.RequiresRecovery,
+            CanContinueRecovery: false, CanRestorePreviousState: false,
             CanRequestCancellation: journal.Stage == OperationStage.Mutating && !_active.RequiresRecovery);
     }
 }

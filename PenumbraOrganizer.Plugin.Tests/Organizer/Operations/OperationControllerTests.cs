@@ -512,6 +512,185 @@ public class OperationControllerTests
     }
 
     [Fact]
+    public void Update_PlanInvalidSnapshotValid_PopulatesLiveSnapshotButNotAssessment()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            // plan.json intentionally not written - PlanCheckStatus becomes Missing
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.Update();
+
+            Assert.Null(controller.GetRecoveryAssessment()); // no valid plan - Assessment stays null
+            Assert.True(controller.State.CanRestorePreviousState);
+            Assert.False(controller.State.CanContinueRecovery);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_PlanInvalidSnapshotValid_LiveReadKeepsRetryingAfterClassificationSettlesPermanently()
+    {
+        // Review point 3: an earlier draft of this test tried to write snapshot.json AFTER a first
+        // Update() call and expected a later Update() to discover it - impossible against the real
+        // implementation, since ArtifactStatusChecker only ever runs once per artifact
+        // (SnapshotCheckStatus/PlanCheckStatus permanently leave Unchecked on their first check,
+        // matching ArtifactStatusChecker's own documented "checked at most once" contract). What this
+        // test actually needs to prove - that Update()'s outer gate keeps retrying the live read after
+        // ClassificationStatus alone has already settled - doesn't need the artifact files to change
+        // at all; only the live read itself needs to fail once, then succeed on retry.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var clock = new FakeClock();
+            var controller = NewControllerWithPendingRecovery(adapter, clock, dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            // plan.json intentionally not written - PlanCheckStatus becomes Missing, ClassificationStatus
+            // settles permanently to ClassificationUnavailable on the first Update() call below.
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.TemporarilyUnavailable, null));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([])));
+
+            controller.Update(); // PlanCheckStatus=Missing -> ClassificationUnavailable; SnapshotCheckStatus=Valid; live read attempted -> TemporarilyUnavailable, LiveReadStatus stays WaitingForProvider
+            Assert.False(controller.State.CanContinueRecovery);
+            Assert.False(controller.State.CanRestorePreviousState);
+
+            clock.Advance(TimeSpan.FromSeconds(1));
+            controller.Update(); // ClassificationStatus already settled, but LiveReadStatus is still WaitingForProvider - if Update()'s outer gate incorrectly stopped calling TryAdvanceClassification once ClassificationStatus alone settled, this queued response would never be consumed and the test would fail with "no queued result"
+
+            Assert.False(controller.State.CanContinueRecovery);
+            Assert.True(controller.State.CanRestorePreviousState);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_BothPlanAndSnapshotInvalid_SettlesPermanentlyAndNeverCallsGetLiveMods()
+    {
+        // Review point 4: LiveReadStatus must settle to Unavailable here, not stay WaitingForProvider
+        // forever - otherwise Update()'s outer gate (ClassificationStatus == WaitingForProvider ||
+        // LiveReadStatus == WaitingForProvider) never closes, and TryAdvanceClassification keeps
+        // getting called every single tick indefinitely even though it can do no useful work. Proven
+        // two ways: many repeated Update() calls never reach the adapter at all (FakePenumbraOperations
+        // throws if GetLiveMods() is called with nothing queued, matching
+        // Update_CalledManyTimesWithinSameSecond_CallsGetLiveModsAtMostOnce's own established pattern),
+        // and the clock is advanced past the retry throttle between calls so a still-open gate would
+        // have every opportunity to attempt a (would-throw) IPC call.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations(); // nothing enqueued - a GetLiveMods() call would throw
+            var clock = new FakeClock();
+            var controller = NewControllerWithPendingRecovery(adapter, clock, dir.FullName, out _);
+            // Neither plan.json nor snapshot.json written - both artifact checks resolve to Missing.
+
+            for (var i = 0; i < 20; i++)
+            {
+                controller.Update();
+                clock.Advance(TimeSpan.FromSeconds(1));
+            }
+
+            Assert.False(controller.State.CanContinueRecovery);
+            Assert.False(controller.State.CanRestorePreviousState);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_ValidPlanAndSnapshotClassifiedReady_CanContinueRecoveryBecomesTrue()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)]))); // AtIntended - a valid, empty Continue
+
+            controller.Update();
+
+            Assert.True(controller.State.CanContinueRecovery);
+            Assert.True(controller.State.CanRestorePreviousState);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_ValidPlanButBlockingClassification_CanContinueRecoveryStaysFalse()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([]))); // mod-a missing live -> MissingLive, blocking
+
+            controller.Update();
+
+            Assert.NotNull(controller.GetRecoveryAssessment()); // classification itself still succeeded
+            Assert.False(controller.State.CanContinueRecovery);
+            Assert.True(controller.State.CanRestorePreviousState); // Restore Previous State is unaffected by Continue's blocking rule
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Update_DuplicateLiveIdentifiers_BothCanContinueAndCanRestoreStayFalse()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            var duplicateSnapshot = new LiveModSnapshot(
+                new Dictionary<string, LiveMod> { ["mod-a"] = new("mod-a", "mod-a", "Weapons/A", false) },
+                new HashSet<string> { "mod-a" }); // DuplicateIdentifiers non-empty
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, duplicateSnapshot));
+
+            controller.Update();
+
+            Assert.False(controller.State.CanContinueRecovery);
+            Assert.False(controller.State.CanRestorePreviousState);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void StartApply_SetsCanStartApplyFalseAndStageMutating()
     {
         var dir = Directory.CreateTempSubdirectory();
