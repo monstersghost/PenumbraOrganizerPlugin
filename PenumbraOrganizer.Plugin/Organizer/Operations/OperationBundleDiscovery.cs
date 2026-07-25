@@ -68,4 +68,23 @@ public static class OperationBundleDiscovery
 
         return result;
     }
+
+    public static IReadOnlyList<OperationJournal> LoadRecentCompletedJournals(string operationsRoot, int take)
+    {
+        if (take <= 0)
+            return [];
+
+        var completedDir = OperationBundlePaths.CompletedDirectory(operationsRoot);
+        if (!Directory.Exists(completedDir))
+            return [];
+
+        var journals = new List<OperationJournal>();
+        foreach (var bundleDir in Directory.GetDirectories(completedDir))
+        {
+            if (OperationJournalCodec.TryLoad(OperationBundlePaths.JournalPath(bundleDir), out var journal) && journal is not null && journal.IsTerminal)
+                journals.Add(journal);
+        }
+
+        return journals.OrderByDescending(j => j.UpdatedAt).Take(take).ToList();
+    }
 }

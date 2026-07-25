@@ -155,4 +155,133 @@ public class OperationBundleDiscoveryTests
             dir.Delete(recursive: true);
         }
     }
+
+    private static OperationJournal CompletedJournal(Guid id, DateTimeOffset updatedAt) => new(
+        SchemaVersion: OperationJournal.CurrentSchemaVersion, OperationId: id, Type: OperationType.Apply,
+        Stage: OperationStage.Completed, Resolution: OperationResolution.None, SuccessorOperationId: null,
+        CancellationRequested: false, StartedAt: updatedAt.AddSeconds(-5), TotalSteps: 1, ProcessedStepCount: 1,
+        LastCompletedIdentifier: "mod-a", SnapshotId: Guid.NewGuid(), PlanId: Guid.NewGuid(), TargetHash: "irrelevant",
+        RecoveryOfOperationId: null, UpdatedAt: updatedAt);
+
+    [Fact]
+    public void LoadRecentCompletedJournals_NoCompletedDirectory_ReturnsEmpty()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            Assert.Empty(OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take: 10));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadRecentCompletedJournals_ReturnsNewestFirstRespectingTake()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var ids = new List<Guid>();
+            for (var i = 0; i < 5; i++)
+            {
+                var id = Guid.NewGuid();
+                ids.Add(id);
+                var journal = CompletedJournal(id, now.AddMinutes(-i)); // i=0 is newest
+                var bundleDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, id);
+                OperationJournalCodec.Save(OperationBundlePaths.JournalPath(bundleDir), journal);
+            }
+
+            var result = OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take: 3);
+
+            Assert.Equal(3, result.Count);
+            Assert.Equal(ids[0], result[0].OperationId);
+            Assert.Equal(ids[1], result[1].OperationId);
+            Assert.Equal(ids[2], result[2].OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadRecentCompletedJournals_CorruptJournal_ExcludedNotFatal()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var validId = Guid.NewGuid();
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, validId)),
+                CompletedJournal(validId, DateTimeOffset.UtcNow));
+
+            var corruptBundleDir = OperationBundlePaths.BundleDirectory(dir.FullName, active: false, Guid.NewGuid());
+            Directory.CreateDirectory(corruptBundleDir);
+            File.WriteAllText(OperationBundlePaths.JournalPath(corruptBundleDir), "{ not valid json");
+
+            var result = OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take: 10);
+
+            Assert.Single(result);
+            Assert.Equal(validId, result[0].OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void LoadRecentCompletedJournals_TakeZeroOrNegative_ReturnsEmpty(int take)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var id = Guid.NewGuid();
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, id)),
+                CompletedJournal(id, DateTimeOffset.UtcNow));
+
+            Assert.Empty(OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadRecentCompletedJournals_NonTerminalJournalPresentUnderCompleted_Excluded()
+    {
+        // Shouldn't happen given how relocation works, but the read function shouldn't trust the
+        // directory it's found in over the journal's own IsTerminal state - same defensive posture
+        // LoadNonTerminalActiveJournals already takes toward active/.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var terminalId = Guid.NewGuid();
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, terminalId)),
+                CompletedJournal(terminalId, DateTimeOffset.UtcNow));
+
+            var nonTerminalId = Guid.NewGuid();
+            var nonTerminalJournal = CompletedJournal(nonTerminalId, DateTimeOffset.UtcNow) with { Stage = OperationStage.Mutating, Resolution = OperationResolution.None };
+            OperationJournalCodec.Save(
+                OperationBundlePaths.JournalPath(OperationBundlePaths.BundleDirectory(dir.FullName, active: false, nonTerminalId)),
+                nonTerminalJournal);
+
+            var result = OperationBundleDiscovery.LoadRecentCompletedJournals(dir.FullName, take: 10);
+
+            Assert.Single(result);
+            Assert.Equal(terminalId, result[0].OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 }
