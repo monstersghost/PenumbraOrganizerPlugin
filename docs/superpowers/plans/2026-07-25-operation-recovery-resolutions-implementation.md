@@ -209,8 +209,52 @@ public class ContinuationPlannerTests
         Assert.Equal(ContinuationPlanStatus.Blocked, result.Status);
         Assert.Equal(ContinuationBlockReason.InconsistentRecoveryTargets, result.Reason);
     }
+
+    [Fact]
+    public void DuplicateClassificationForSameIdentifier_BlocksWithInconsistentRecoveryTargetsRatherThanThrowing()
+    {
+        // Review point 5: two classifications for the same identifier would (indirectly) collide in
+        // ApplyPlanner.OrderMovesForApply's own CurrentPath dictionary since both produce an identical
+        // NamedModMove - but that's an indirect guarantee this method's own totality shouldn't depend
+        // on another method's internals for. Checked explicitly instead.
+        var target = new OperationRecoveryTarget("mod-a", "Gear/A", "Weapons/A", "mod-a");
+        var plan = Plan(target);
+        var mods = new Dictionary<string, LiveMod> { ["mod-a"] = new("mod-a", "mod-a", "Gear/A", false) };
+        var assessment = Assessment(mods,
+            new ItemRecoveryClassification("mod-a", ItemRecoveryState.AtSnapshot),
+            new ItemRecoveryClassification("mod-a", ItemRecoveryState.AtSnapshot)); // duplicate
+
+        var exception = Record.Exception(() => ContinuationPlanner.TryBuildResidualMoves(plan, assessment));
+        var result = ContinuationPlanner.TryBuildResidualMoves(plan, assessment);
+
+        Assert.Null(exception);
+        Assert.Equal(ContinuationPlanStatus.Blocked, result.Status);
+        Assert.Equal(ContinuationBlockReason.InconsistentRecoveryTargets, result.Reason);
+    }
+
+    [Fact]
+    public void OutOfRangeClassificationState_BlocksRatherThanBeingTreatedLikeAtIntended()
+    {
+        // Not reachable from real RecoveryClassifier.Classify output (a closed 6-value enum), but the
+        // per-item switch must be an explicit, exhaustive decision rather than an implicit fallthrough
+        // that silently treats any unrecognized value the same as AtIntended/AtBoth (skip, no move).
+        var target = new OperationRecoveryTarget("mod-a", "Gear/A", "Weapons/A", "mod-a");
+        var plan = Plan(target);
+        var mods = new Dictionary<string, LiveMod> { ["mod-a"] = new("mod-a", "mod-a", "Gear/A", false) };
+        var assessment = Assessment(mods, new ItemRecoveryClassification("mod-a", (ItemRecoveryState)99));
+
+        var exception = Record.Exception(() => ContinuationPlanner.TryBuildResidualMoves(plan, assessment));
+        var result = ContinuationPlanner.TryBuildResidualMoves(plan, assessment);
+
+        Assert.Null(exception);
+        Assert.Equal(ContinuationPlanStatus.Blocked, result.Status);
+        Assert.Equal(ContinuationBlockReason.InconsistentRecoveryTargets, result.Reason);
+    }
 }
 ```
+
+(9 test cases across these 8 methods: 7 `[Fact]`s each contributing 1, plus `BlockingClassification_
+BlocksTheWholeResultNotJustThatIdentifier`'s `[Theory]` contributing 2 via its two `InlineData` rows.)
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -242,11 +286,9 @@ public static class ContinuationPlanner
 {
     public static ContinuationPlanResult TryBuildResidualMoves(OperationPlan interruptedPlan, RecoveryAssessment assessment)
     {
-        var hasBlockingClassification = assessment.Classifications.Any(c =>
-            c.State is ItemRecoveryState.AtNeither or ItemRecoveryState.MissingLive);
-        if (hasBlockingClassification)
-            return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.BlockingClassificationPresent);
-
+        // "Any blocking classification present" is enforced by the per-item switch below returning
+        // Blocked immediately (discarding whatever candidateMoves had accumulated so far) rather than
+        // by a separate upfront scan - one pass, same all-or-nothing result.
         var targetByIdentifier = new Dictionary<string, OperationRecoveryTarget>(StringComparer.Ordinal);
         foreach (var target in interruptedPlan.RecoveryTargets)
         {
@@ -254,11 +296,34 @@ public static class ContinuationPlanner
                 return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.InconsistentRecoveryTargets);
         }
 
+        // A duplicate identifier in Classifications would indirectly collide in
+        // ApplyPlanner.OrderMovesForApply's own CurrentPath dictionary below (both duplicate entries
+        // resolve to the identical live path/target path), but checking explicitly keeps this
+        // method's totality independent of that other method's internals.
+        var classifiedIdentifiers = new HashSet<string>(StringComparer.Ordinal);
         var candidateMoves = new List<NamedModMove>();
         foreach (var classification in assessment.Classifications)
         {
-            if (classification.State is not (ItemRecoveryState.AtSnapshot or ItemRecoveryState.AtKnownIntermediate))
-                continue; // AtIntended/AtBoth: already at the final target, nothing to queue
+            if (!classifiedIdentifiers.Add(classification.Identifier))
+                return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.InconsistentRecoveryTargets);
+
+            // Exhaustive (defensive - RecoveryClassifier.Classify only ever produces these six named
+            // values, so `default` is not reachable from real classification output today, but an
+            // explicit switch makes that an enumerated decision, not an implicit fallthrough).
+            switch (classification.State)
+            {
+                case ItemRecoveryState.AtIntended:
+                case ItemRecoveryState.AtBoth:
+                    continue; // already at the final target, nothing to queue
+                case ItemRecoveryState.AtSnapshot:
+                case ItemRecoveryState.AtKnownIntermediate:
+                    break;
+                case ItemRecoveryState.AtNeither:
+                case ItemRecoveryState.MissingLive:
+                    return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.BlockingClassificationPresent);
+                default:
+                    return new ContinuationPlanResult(ContinuationPlanStatus.Blocked, [], ContinuationBlockReason.InconsistentRecoveryTargets);
+            }
 
             if (!targetByIdentifier.TryGetValue(classification.Identifier, out var target) ||
                 !assessment.LiveSnapshot.Mods.TryGetValue(classification.Identifier, out var live))
@@ -568,8 +633,16 @@ Add to `OperationControllerTests.cs` (uses the existing `NewControllerWithPendin
     }
 
     [Fact]
-    public void Update_PlanInvalid_KeepsAttemptingTheLiveReadAfterClassificationSettlesPermanently()
+    public void Update_PlanInvalidSnapshotValid_LiveReadKeepsRetryingAfterClassificationSettlesPermanently()
     {
+        // Review point 3: an earlier draft of this test tried to write snapshot.json AFTER a first
+        // Update() call and expected a later Update() to discover it - impossible against the real
+        // implementation, since ArtifactStatusChecker only ever runs once per artifact
+        // (SnapshotCheckStatus/PlanCheckStatus permanently leave Unchecked on their first check,
+        // matching ArtifactStatusChecker's own documented "checked at most once" contract). What this
+        // test actually needs to prove - that Update()'s outer gate keeps retrying the live read after
+        // ClassificationStatus alone has already settled - doesn't need the artifact files to change
+        // at all; only the live read itself needs to fail once, then succeed on retry.
         var dir = Directory.CreateTempSubdirectory();
         try
         {
@@ -577,22 +650,20 @@ Add to `OperationControllerTests.cs` (uses the existing `NewControllerWithPendin
             var clock = new FakeClock();
             var controller = NewControllerWithPendingRecovery(adapter, clock, dir.FullName, out var journalId);
             var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
-            // plan.json intentionally not written; snapshot.json intentionally not written either -
-            // the first call only needs to prove classification permanently settles to
-            // ClassificationUnavailable without ever attempting the (pointless, since nothing needs
-            // it yet) live read.
-            controller.Update(); // ClassificationStatus -> ClassificationUnavailable, no adapter call
-
-            // Now write a valid snapshot so a later attempt WOULD have something to use, and enqueue
-            // a live read - if Update()'s outer gate incorrectly stopped calling
-            // TryAdvanceClassification once ClassificationStatus settled, this would never be consumed
-            // and the test would fail with "no queued result."
+            // plan.json intentionally not written - PlanCheckStatus becomes Missing, ClassificationStatus
+            // settles permanently to ClassificationUnavailable on the first Update() call below.
             OperationSnapshotCodec.Save(OperationBundlePaths.SnapshotPath(bundleDirectory), new RollbackSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, null, "auto", new Dictionary<string, string>()));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.TemporarilyUnavailable, null));
             adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([])));
+
+            controller.Update(); // PlanCheckStatus=Missing -> ClassificationUnavailable; SnapshotCheckStatus=Valid; live read attempted -> TemporarilyUnavailable, LiveReadStatus stays WaitingForProvider
+            Assert.False(controller.State.CanContinueRecovery);
+            Assert.False(controller.State.CanRestorePreviousState);
+
             clock.Advance(TimeSpan.FromSeconds(1));
+            controller.Update(); // ClassificationStatus already settled, but LiveReadStatus is still WaitingForProvider - if Update()'s outer gate incorrectly stopped calling TryAdvanceClassification once ClassificationStatus alone settled, this queued response would never be consumed and the test would fail with "no queued result"
 
-            controller.Update();
-
+            Assert.False(controller.State.CanContinueRecovery);
             Assert.True(controller.State.CanRestorePreviousState);
         }
         finally
@@ -602,17 +673,30 @@ Add to `OperationControllerTests.cs` (uses the existing `NewControllerWithPendin
     }
 
     [Fact]
-    public void Update_BothPlanAndSnapshotInvalid_NeverCallsGetLiveMods()
+    public void Update_BothPlanAndSnapshotInvalid_SettlesPermanentlyAndNeverCallsGetLiveMods()
     {
+        // Review point 4: LiveReadStatus must settle to Unavailable here, not stay WaitingForProvider
+        // forever - otherwise Update()'s outer gate (ClassificationStatus == WaitingForProvider ||
+        // LiveReadStatus == WaitingForProvider) never closes, and TryAdvanceClassification keeps
+        // getting called every single tick indefinitely even though it can do no useful work. Proven
+        // two ways: many repeated Update() calls never reach the adapter at all (FakePenumbraOperations
+        // throws if GetLiveMods() is called with nothing queued, matching
+        // Update_CalledManyTimesWithinSameSecond_CallsGetLiveModsAtMostOnce's own established pattern),
+        // and the clock is advanced past the retry throttle between calls so a still-open gate would
+        // have every opportunity to attempt a (would-throw) IPC call.
         var dir = Directory.CreateTempSubdirectory();
         try
         {
             var adapter = new FakePenumbraOperations(); // nothing enqueued - a GetLiveMods() call would throw
-            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out _);
+            var clock = new FakeClock();
+            var controller = NewControllerWithPendingRecovery(adapter, clock, dir.FullName, out _);
             // Neither plan.json nor snapshot.json written - both artifact checks resolve to Missing.
 
-            controller.Update();
-            controller.Update();
+            for (var i = 0; i < 20; i++)
+            {
+                controller.Update();
+                clock.Advance(TimeSpan.FromSeconds(1));
+            }
 
             Assert.False(controller.State.CanContinueRecovery);
             Assert.False(controller.State.CanRestorePreviousState);
@@ -836,13 +920,27 @@ Replace `TryAdvanceClassification` in full (currently lines 398-452):
         if (pending.PlanCheckStatus != ArtifactCheckStatus.Valid)
             pending.ClassificationStatus = RecoveryClassificationStatus.ClassificationUnavailable;
 
-        // The live read backs both Continue's classification and Restore Previous State's own
-        // availability - attempt it whenever either resolution could still use it. If neither
-        // artifact is valid, no resolution is reachable and the read would be wasted IPC traffic.
-        var liveReadNeeded = pending.LiveReadStatus == RecoveryLiveReadStatus.WaitingForProvider &&
-            (pending.PlanCheckStatus == ArtifactCheckStatus.Valid || pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid);
+        // If NEITHER artifact is valid, no resolution could ever consume a live read - settle
+        // LiveReadStatus permanently here too (mirroring ClassificationStatus's own permanent settle
+        // just above), rather than leaving it WaitingForProvider forever. Without this, Update()'s
+        // outer gate (ClassificationStatus == WaitingForProvider || LiveReadStatus ==
+        // WaitingForProvider) would stay true indefinitely once ClassificationStatus alone had
+        // already settled, calling this method every tick forever for no purpose (review point 4).
+        var anyLiveConsumerAvailable = pending.PlanCheckStatus == ArtifactCheckStatus.Valid || pending.SnapshotCheckStatus == ArtifactCheckStatus.Valid;
+        if (!anyLiveConsumerAvailable)
+        {
+            pending.LiveReadStatus = RecoveryLiveReadStatus.Unavailable;
+            RecomputeResolutionAvailability(pending);
+            if (stateChanged)
+                PublishState();
+            return;
+        }
 
-        if (!liveReadNeeded)
+        // The live read backs both Continue's classification and Restore Previous State's own
+        // availability - attempt it whenever either resolution could still use it, but only if it
+        // hasn't already settled (a prior attempt may have resolved it to Available/Unavailable while
+        // ClassificationStatus was still the one field keeping Update()'s gate open).
+        if (pending.LiveReadStatus != RecoveryLiveReadStatus.WaitingForProvider)
         {
             if (stateChanged)
                 PublishState();
@@ -1308,8 +1406,9 @@ Add to `OperationControllerTests.cs`:
         // Not reachable through the real engine today (an active, non-terminal operation and a
         // pending recovery are mutually exclusive in practice - recovery is only ever registered at
         // startup, before anything is active), but StartRecoverySuccessor's own admission guard
-        // (StartOperation's "_active is not null && !CanStartNext" check, which bypassRecoveryLockout
-        // does NOT exempt) must still correctly reject this shape, and its failure-cleanup path must
+        // (StartOperation's "_active is not null && !CanStartNext" check, which
+        // bypassPendingRecoveryLockout does NOT exempt) must still correctly reject this shape, and
+        // its failure-cleanup path must
         // still run - forced here using the same "not reachable via the engine but must still be
         // correct on its own terms" pattern this file already uses for
         // CanStartNext_TerminalStageButRequiresRecovery_IsFalse.
@@ -1348,6 +1447,55 @@ Add to `OperationControllerTests.cs`:
             dir.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public void StartRecoverySuccessor_BlockedMultiRootGraphPresent_StillRejects()
+    {
+        // Review point 1 (critical): the private bypass must exempt only _pendingRecovery, never
+        // _blockedMultiRootGraph - D2 explicitly does not resolve the multi-root/cycle case (design
+        // doc section 7), so a recovery successor must never be able to start while that lockout is
+        // in effect. Not reachable through the real engine today (two separate
+        // RegisterDiscoveredRecovery calls, one setting _blockedMultiRootGraph and another setting
+        // _pendingRecovery, don't occur within one real startup discovery pass), but the guard must
+        // still be correct on its own terms.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewController(adapter, new FakeClock(), operationsRoot: dir.FullName);
+
+            var blockedIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+            var blockedDiscovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, blockedIds, blockedIds),
+                blockedIds.ToDictionary(id => id, InterruptedJournal));
+            controller.RegisterDiscoveredRecovery(blockedDiscovery); // sets _blockedMultiRootGraph
+
+            var journalId = Guid.NewGuid();
+            var pendingDiscovery = new OperationDiscoveryResult(
+                new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.SingleAuthoritative, [journalId], [journalId]),
+                new Dictionary<Guid, OperationJournal> { [journalId] = InterruptedJournal(journalId) });
+            controller.RegisterDiscoveredRecovery(pendingDiscovery); // ALSO sets _pendingRecovery, alongside the still-set _blockedMultiRootGraph
+            Assert.True(controller.IsBlockedByMultipleRoots);
+
+            var interruptedBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(interruptedBundleDirectory), interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+
+            var exception = Record.Exception(() => controller.ResolveContinue());
+
+            Assert.IsType<InvalidOperationException>(exception);
+            Assert.True(controller.IsBlockedByMultipleRoots); // both lockouts remain exactly as they were
+            Assert.True(Directory.Exists(interruptedBundleDirectory));
+            var activeDir = OperationBundlePaths.ActiveDirectory(dir.FullName);
+            Assert.Equal(1, Directory.GetDirectories(activeDir).Length); // only the interrupted bundle - no orphaned successor left behind
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1377,20 +1525,24 @@ In `OperationController.cs`, replace `StartApply`/`StartRestore`/`StartOperation
     public static bool CanStartNext(OperationJournal journal, bool requiresRecovery) =>
         journal.IsTerminal && !requiresRecovery;
 
-    // bypassRecoveryLockout is intentionally unreachable from StartApply/StartRestore's public
+    // bypassPendingRecoveryLockout is intentionally unreachable from StartApply/StartRestore's public
     // surface - only StartRecoverySuccessor (below) ever passes true, and only Task 4's
     // ResolveContinue/ResolveRestorePreviousState ever call that. An ordinary Apply/Restore must keep
     // being rejected while a recovery is pending; only the controlled recovery-resolution path itself
-    // is allowed to bypass that lockout.
+    // is allowed to bypass that lockout. Note this bypasses ONLY the _pendingRecovery half of the
+    // guard - _blockedMultiRootGraph is never bypassable, by anything: D2 explicitly does not resolve
+    // the multi-root/cycle case (design doc section 7), so a recovery successor must never be able to
+    // start while that lockout is in effect.
     private void StartOperation(
         OperationPlan plan, Guid snapshotId, string bundleDirectory, OperationType expectedType,
-        bool bypassRecoveryLockout = false)
+        bool bypassPendingRecoveryLockout = false)
     {
         if (plan.Type != expectedType)
             throw new ArgumentException($"This entry point requires a {expectedType}-type plan; got {plan.Type}.", nameof(plan));
 
-        var recoveryLocked = !bypassRecoveryLockout && (_pendingRecovery is not null || _blockedMultiRootGraph is not null);
-        if ((_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery)) || recoveryLocked)
+        var pendingRecoveryLocked = !bypassPendingRecoveryLockout && _pendingRecovery is not null;
+        var blockedGraphLocked = _blockedMultiRootGraph is not null;
+        if ((_active is not null && !CanStartNext(_active.Journal, _active.RequiresRecovery)) || pendingRecoveryLocked || blockedGraphLocked)
             throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
 
         var checkpointer = new OperationCheckpointer(_clock, bundleDirectory);
@@ -1424,8 +1576,18 @@ In `OperationController.cs`, replace `StartApply`/`StartRestore`/`StartOperation
     }
 
     private void StartRecoverySuccessor(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
-        StartOperation(plan, snapshotId, bundleDirectory, plan.Type, bypassRecoveryLockout: true);
+        StartOperation(plan, snapshotId, bundleDirectory, plan.Type, bypassPendingRecoveryLockout: true);
 ```
+
+**Verified, not restructured (review point 6): `StartOperation`'s tail cannot throw after `_active` is
+assigned, for a validly-constructed plan.** The only code after `_active = new ActiveOperationContext
+{...}` is `_stopRequested = false; PublishState();`. `PublishState()` reads only already-in-memory data
+(no I/O, no external calls); its one collision-prone call, `_active.Plan.RecoveryTargets.ToDictionary(t
+=> t.Identifier, ...)`, can only throw on a duplicate identifier — an input shape `OperationPlan.
+Create`'s own `Validate()` already rejects for every plan `newPlan` can be here (`OperationPlanBuilder.
+BuildOperationPlan` always constructs it via `OperationPlan.Create`). This tail is unchanged from its
+already-shipped Plan B1/C form — this plan only adds the guard parameter above it — so restructuring it
+is out of scope; the invariant is documented here instead.
 
 Add `ResolveContinue`, `ResolveRestorePreviousState`, `ReadFreshLiveModsOrThrow`,
 `StartRecoverySuccessorOrThrow`, and `TryDeleteBundleDirectory` right after `ResolveKeepCurrent`
@@ -1542,7 +1704,7 @@ side-effect-free file read):
             OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
             TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // The successor is already durably running - the user's Continue/Restore request already
             // succeeded. Failing to decorate the parent journal is a housekeeping gap, not a
@@ -1550,6 +1712,13 @@ side-effect-free file read):
             // not the stale parent, authoritative in OperationRecoveryGraph.Analyze regardless of
             // whether this write landed - nothing is silently lost, just not yet tidied up. Must not
             // rethrow: that would report "Continue failed" for a Continue that actually started.
+            // Must not stay completely silent either though (review point 7) - logged via the same
+            // Plugin.Log?.Warning pattern TryRelocateToCompleted already uses for its own best-effort
+            // failures, below.
+            Plugin.Log?.Warning(ex,
+                $"{parentResolution} successor {newPlan.OperationId} started, but resolving the interrupted " +
+                $"journal {interruptedJournal.OperationId} failed. It will be correctly picked up on next " +
+                "startup via the successor's own RecoveryOfOperationId.");
         }
     }
 
@@ -1649,12 +1818,62 @@ In `Plugin.cs`, immediately after `ResolveKeepCurrent()` (currently lines 534-53
     }
 ```
 
-- [ ] **Step 2: Build**
+- [ ] **Step 2: Broaden `_operationInProgress`'s auto-clear condition**
+
+Review point 2: today `_operationInProgress` only auto-clears once `OperationController.State.
+CanStartApply` becomes true (an ordinary terminal completion). If the successor Continue/Restore
+Previous State just started itself hits `RequiresRecovery` in-session (the same IPC-failure category
+D1's `ResolveKeepCurrent` already handles for `_active` — `ResolveContinue`/`ResolveRestorePreviousState`
+only ever target `_pendingRecovery`, never `_active.RequiresRecovery`, the same asymmetry D1 established:
+Keep Current is the universal in-session fallback, Continue/Restore Previous State are not),
+`CanStartApply` never becomes true on its own and `_operationInProgress` stays stuck until the user
+resolves that in-session failure via Keep Current. While stuck, `CreateBackup`/`DeleteHistorySnapshot`
+are incorrectly blocked for that same window even though the controller itself doesn't need them
+blocked. `_operationInProgress` should mean "an operation is currently executing," not "some unresolved
+operation history exists" — broaden the clear condition to match:
+
+In `Plugin.cs`, in `OnFrameworkUpdate` (currently lines 118-128), replace:
+
+```csharp
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        OperationController.Update();
+        if (_operationInProgress && OperationController.State.CanStartApply)
+            _operationInProgress = false; // any async organizer operation (Apply or Restore) just reached
+                                           // a terminal, non-recovery stage - CanStartApply/CanStartRestore
+                                           // are guaranteed equal today (PublishState derives both from one
+                                           // shared canStartNew), so checking either detects completion of
+                                           // either operation type. If a future plan ever splits them apart
+                                           // per-type, this check must be revisited.
+    }
+```
+
+with:
+
+```csharp
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        OperationController.Update();
+        if (_operationInProgress && (OperationController.State.CanStartApply || OperationController.State.RequiresRecovery))
+            _operationInProgress = false; // any async organizer operation (Apply or Restore) just reached
+                                           // a terminal, non-recovery stage - CanStartApply/CanStartRestore
+                                           // are guaranteed equal today (PublishState derives both from one
+                                           // shared canStartNew), so checking either detects completion of
+                                           // either operation type. If a future plan ever splits them apart
+                                           // per-type, this check must be revisited. Also clears on
+                                           // RequiresRecovery (Plan D2, review point 2) - an operation that
+                                           // needs recovery has stopped executing even though it isn't
+                                           // terminal, and _operationInProgress should track "is something
+                                           // executing," not "is there unresolved history."
+    }
+```
+
+- [ ] **Step 3: Build**
 
 Run: `dotnet build`
 Expected: no new errors/warnings
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add PenumbraOrganizer.Plugin/Plugin.cs
@@ -1683,8 +1902,13 @@ Verified manually per Task 7's checklist.
 In `MainWindow.cs`, immediately after `RestoreSnapshot` (currently ends around line 971, right before
 `CreateBackup`):
 
+Review point 8: these return `bool` rather than `void`, and the popup only closes on success — a
+fresh-read rejection at click time (the button was enabled from a cached availability check, but the
+revalidation done inside `ResolveContinue`/`ResolveRestorePreviousState` found a blocking condition)
+should keep the confirmation dialog open with `_lastError` visible, not silently close it.
+
 ```csharp
-    private void ContinueRecovery()
+    private bool ContinueRecovery()
     {
         try
         {
@@ -1698,26 +1922,30 @@ In `MainWindow.cs`, immediately after `RestoreSnapshot` (currently ends around l
                 _applyOperationActive = true;
             else if (kind == Organizer.Operations.OperationType.Restore)
                 _restoreOperationActive = true;
+            return true;
         }
         catch (Exception ex)
         {
             _lastError = $"Continue failed: {ex.Message}";
             Plugin.Log.Error(ex, "Continue failed.");
+            return false;
         }
     }
 
-    private void RestorePreviousState()
+    private bool RestorePreviousState()
     {
         try
         {
             _plugin.ResolveRestorePreviousState();
             _lastError = null;
             _restoreOperationActive = true; // always Restore-type regardless of the interrupted operation's own type
+            return true;
         }
         catch (Exception ex)
         {
             _lastError = $"Restore Previous State failed: {ex.Message}";
             Plugin.Log.Error(ex, "Restore Previous State failed.");
+            return false;
         }
     }
 ```
@@ -1791,11 +2019,8 @@ with:
         if (ImGui.BeginPopupModal("Continue interrupted operation?"))
         {
             ImGui.TextUnformatted("This will finish the interrupted operation from where it left off.");
-            if (ImGui.Button("Yes, Continue"))
-            {
-                ContinueRecovery();
+            if (ImGui.Button("Yes, Continue") && ContinueRecovery())
                 ImGui.CloseCurrentPopup();
-            }
             ImGui.SameLine();
             if (ImGui.Button("Cancel"))
                 ImGui.CloseCurrentPopup();
@@ -1811,11 +2036,8 @@ with:
         if (ImGui.BeginPopupModal("Restore to state before the interrupted operation?"))
         {
             ImGui.TextUnformatted("This will roll every mod back to how it was before the interrupted operation started.");
-            if (ImGui.Button("Yes, Restore"))
-            {
-                RestorePreviousState();
+            if (ImGui.Button("Yes, Restore") && RestorePreviousState())
                 ImGui.CloseCurrentPopup();
-            }
             ImGui.SameLine();
             if (ImGui.Button("Cancel"))
                 ImGui.CloseCurrentPopup();
