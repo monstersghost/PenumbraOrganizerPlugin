@@ -1822,4 +1822,116 @@ public class OperationControllerTests
             dir.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public void GetPendingRecoveryArtifactStatus_NoPendingRecovery_ReturnsNull()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Null(controller.GetPendingRecoveryArtifactStatus());
+    }
+
+    [Fact]
+    public void GetPendingRecoveryJournal_NoPendingRecovery_ReturnsNull()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Null(controller.GetPendingRecoveryJournal());
+    }
+
+    [Fact]
+    public void GetPendingRecoveryJournal_PendingRecoveryExists_ReturnsItsJournal()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewControllerWithPendingRecovery(new FakePenumbraOperations(), new FakeClock(), dir.FullName, out var journalId);
+
+            var journal = controller.GetPendingRecoveryJournal();
+
+            Assert.NotNull(journal);
+            Assert.Equal(journalId, journal!.OperationId);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void GetPendingRecoveryArtifactStatus_PendingRecoveryWithValidPlanMissingSnapshot_ReturnsBothStatuses()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var controller = NewControllerWithPendingRecovery(adapter, new FakeClock(), dir.FullName, out var journalId);
+            var bundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            var plan = OperationPlan.Create(OperationType.Apply, [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            OperationPlanCodec.Save(OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            // snapshot.json intentionally not written
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.Update(); // populates PlanCheckStatus/SnapshotCheckStatus
+
+            var status = controller.GetPendingRecoveryArtifactStatus();
+
+            Assert.NotNull(status);
+            Assert.Equal(ArtifactCheckStatus.Valid, status!.Value.Plan);
+            Assert.Equal(ArtifactCheckStatus.Missing, status.Value.Snapshot);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void GetBlockedOperations_NoBlockedGraph_ReturnsEmpty()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Empty(controller.GetBlockedOperations());
+    }
+
+    [Fact]
+    public void GetBlockedOperations_BlockedMultiRoot_ReturnsOnlyAuthoritativeOperationsWithTheirJournals()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var journalA = InterruptedJournal(idA);
+        var journalB = InterruptedJournal(idB);
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, [idA, idB], [idA, idB]),
+            new Dictionary<Guid, OperationJournal> { [idA] = journalA, [idB] = journalB });
+
+        controller.RegisterDiscoveredRecovery(discovery);
+        var blocked = controller.GetBlockedOperations();
+
+        Assert.Equal(2, blocked.Count);
+        Assert.Contains(blocked, b => b.OperationId == idA && b.Journal == journalA);
+        Assert.Contains(blocked, b => b.OperationId == idB && b.Journal == journalB);
+    }
+
+    [Fact]
+    public void GetBlockedOperations_OnlyListsAuthoritativeIdsNotNonLeafAncestors()
+    {
+        // A cycle's AuthoritativeOperationIds is the full cycle-member set (OperationRecoveryGraph's
+        // own semantics, unchanged by this plan) - this test just proves GetBlockedOperations
+        // faithfully mirrors whatever the graph names as authoritative, not a hand-picked subset.
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var idC = Guid.NewGuid(); // not authoritative - simulates a non-leaf ancestor present in Journals but absent from AuthoritativeOperationIds
+        var discovery = new OperationDiscoveryResult(
+            new OperationRecoveryGraphResult(OperationRecoveryGraphStatus.MultipleDisconnectedRoots, [idA, idB], [idA, idB, idC]),
+            new Dictionary<Guid, OperationJournal> { [idA] = InterruptedJournal(idA), [idB] = InterruptedJournal(idB), [idC] = InterruptedJournal(idC) });
+
+        controller.RegisterDiscoveredRecovery(discovery);
+        var blocked = controller.GetBlockedOperations();
+
+        Assert.Equal(2, blocked.Count);
+        Assert.DoesNotContain(blocked, b => b.OperationId == idC);
+    }
 }

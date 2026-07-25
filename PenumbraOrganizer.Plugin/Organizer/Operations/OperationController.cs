@@ -99,6 +99,7 @@ public sealed class OperationController
     private ActiveOperationContext? _active;
     private PendingRecoveryContext? _pendingRecovery;
     private OperationRecoveryGraphResult? _blockedMultiRootGraph;
+    private IReadOnlyDictionary<Guid, OperationJournal>? _blockedMultiRootJournals;
     private bool _stopRequested;
 
     public OperationStateSnapshot State { get; private set; } = OperationStateSnapshot.Idle;
@@ -199,6 +200,7 @@ public sealed class OperationController
             case OperationRecoveryGraphStatus.MultipleDisconnectedRoots:
             case OperationRecoveryGraphStatus.CycleDetected:
                 _blockedMultiRootGraph = discovery.Graph;
+                _blockedMultiRootJournals = discovery.Journals;
                 PublishState();
                 return;
 
@@ -221,6 +223,23 @@ public sealed class OperationController
     public RecoveryAssessment? GetRecoveryAssessment() => _pendingRecovery?.Assessment;
 
     public bool IsBlockedByMultipleRoots => _blockedMultiRootGraph is not null;
+
+    public (ArtifactCheckStatus Plan, ArtifactCheckStatus Snapshot)? GetPendingRecoveryArtifactStatus() =>
+        _pendingRecovery is { } pending ? (pending.PlanCheckStatus, pending.SnapshotCheckStatus) : null;
+
+    public OperationJournal? GetPendingRecoveryJournal() => _pendingRecovery?.Journal;
+
+    // Only AuthoritativeOperationIds (the ones actually independently resolvable - for disconnected
+    // roots these are literal graph leaves, but for a cycle every member is authoritative), not
+    // AllOperationIds - a non-authoritative ancestor isn't independently actionable; it gets folded in
+    // automatically once its authoritative descendant resolves and discovery re-runs (Task 3).
+    public IReadOnlyList<(Guid OperationId, OperationJournal Journal)> GetBlockedOperations() =>
+        _blockedMultiRootGraph is not { } graph || _blockedMultiRootJournals is not { } journals
+            ? []
+            : graph.AuthoritativeOperationIds
+                .Where(journals.ContainsKey)
+                .Select(id => (id, journals[id]))
+                .ToList();
 
     public enum KeepCurrentResolutionResult { ResolvedAndArchived, ResolvedArchiveDeferred }
 
