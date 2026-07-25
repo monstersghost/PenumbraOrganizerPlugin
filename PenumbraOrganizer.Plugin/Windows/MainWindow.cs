@@ -131,13 +131,44 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_plugin.OperationController.IsBlockedByMultipleRoots)
         {
+            // Precise about what clicking one row actually does: it does NOT turn that operation into
+            // an ordinary single recovery - it permanently marks it Keep Current, abandoning it, and
+            // ONE OF THE REMAINING operations may then become the ordinary single recovery. Getting
+            // this wrong in the copy would understate how destructive the per-row action is.
             ImGui.TextWrapped(
-                "Multiple interrupted operations were found, and picking which one to recover isn't " +
-                "supported yet in this version. You can abandon all of them and accept whatever Penumbra " +
-                "currently has as correct - this does not undo or redo any moves for any of them, it only " +
-                "stops the plugin from blocking further actions. This is destructive: none of the " +
-                "interrupted operations can be revisited afterward.");
+                "Multiple interrupted operations were found. You can resolve one at a time below by " +
+                "keeping its current state - the recovery graph is then recalculated for what's left, " +
+                "which may become a smaller blocked set, a single recoverable operation, or fully " +
+                "resolved. You can also abandon all of them at once and accept whatever Penumbra " +
+                "currently has as correct - this does not undo or redo any moves for any of them, it " +
+                "only stops the plugin from blocking further actions.");
 
+            ImGui.Spacing();
+            var blocked = _plugin.OperationController.GetBlockedOperations();
+            foreach (var (operationId, journal) in blocked.OrderByDescending(b => b.Journal.UpdatedAt))
+            {
+                ImGui.TextUnformatted($"{journal.Type} - {journal.Stage} - interrupted {journal.UpdatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
+                ImGui.SameLine();
+                if (ImGui.Button($"Keep Current State##multiroot-{operationId}"))
+                    ImGui.OpenPopup($"Keep current state for {operationId}?");
+
+                if (ImGui.BeginPopupModal($"Keep current state for {operationId}?"))
+                {
+                    ImGui.TextUnformatted("This selected operation cannot later be continued or restored - it will be permanently abandoned.");
+                    ImGui.TextUnformatted("Any other interrupted operations found stay blocked until resolved separately.");
+                    if (ImGui.Button("Yes, Keep Current"))
+                    {
+                        _plugin.ResolveOneMultiRootOperation(operationId);
+                        ImGui.CloseCurrentPopup();
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.Button("Cancel"))
+                        ImGui.CloseCurrentPopup();
+                    ImGui.EndPopup();
+                }
+            }
+
+            ImGui.Spacing();
             if (ImGui.Button("Accept Current State and Close All Interrupted Operations"))
                 ImGui.OpenPopup("Close all interrupted operations?");
 
