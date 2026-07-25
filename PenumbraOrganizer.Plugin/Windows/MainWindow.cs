@@ -222,7 +222,79 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        if (ImGui.CollapsingHeader("Details"))
+        {
+            var artifactStatus = _plugin.OperationController.GetPendingRecoveryArtifactStatus();
+            if (artifactStatus is { } status)
+            {
+                DrawArtifactLine(status.Plan, "Interrupted plan", "Continue");
+                DrawArtifactLine(status.Snapshot, "Snapshot", "Restore Previous State");
+            }
+
+            var assessment = _plugin.OperationController.GetRecoveryAssessment();
+            if (assessment is null)
+            {
+                // GetRecoveryAssessment() returning null has two distinct causes needing distinct
+                // messages: classification genuinely hasn't settled yet (RecoveryClassificationPending
+                // true - correct to say "still checking"), or it permanently failed to settle (an
+                // invalid plan/live-read/provider per D2's own non-retryable settling design -
+                // RecoveryClassificationPending is false, and "still checking" would be permanently,
+                // silently wrong).
+                if (operationState.RecoveryClassificationPending)
+                    ImGui.TextDisabled("Still checking live mod state...");
+                else
+                    ImGui.TextColored(PluginTheme.CollisionBad, "Per-mod classification is unavailable - see the artifact status above.");
+            }
+            else if (assessment.Classifications.Count == 0)
+            {
+                ImGui.TextDisabled("No mods to classify.");
+            }
+            else
+            {
+                using var table = ImRaii.Table("RecoveryClassificationTable", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV);
+                if (table)
+                {
+                    ImGui.TableSetupColumn("Mod");
+                    ImGui.TableSetupColumn("State");
+                    ImGui.TableHeadersRow();
+                    foreach (var classification in assessment.Classifications.OrderBy(c => c.Identifier, StringComparer.Ordinal))
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(classification.Identifier);
+                        ImGui.TableNextColumn();
+                        var color = classification.State switch
+                        {
+                            Organizer.Operations.ItemRecoveryState.AtNeither or Organizer.Operations.ItemRecoveryState.MissingLive => PluginTheme.CollisionBad,
+                            Organizer.Operations.ItemRecoveryState.AtIntended or Organizer.Operations.ItemRecoveryState.AtBoth => ImGuiColors.HealerGreen,
+                            _ => ImGuiColors.DalamudYellow,
+                        };
+                        ImGui.TextColored(color, classification.State.ToString());
+                    }
+                }
+            }
+        }
+
+        ImGui.Spacing();
         ImGui.Separator();
+    }
+
+    private static void DrawArtifactLine(Organizer.Operations.ArtifactCheckStatus status, string artifactName, string unavailableAction)
+    {
+        switch (status)
+        {
+            case Organizer.Operations.ArtifactCheckStatus.Unchecked:
+                ImGui.TextDisabled($"Checking {artifactName}...");
+                break;
+            case Organizer.Operations.ArtifactCheckStatus.Missing:
+                ImGui.TextColored(PluginTheme.CollisionBad, $"{artifactName} is missing; {unavailableAction} is unavailable.");
+                break;
+            case Organizer.Operations.ArtifactCheckStatus.Invalid:
+                ImGui.TextColored(PluginTheme.CollisionBad, $"{artifactName} is corrupt; {unavailableAction} is unavailable.");
+                break;
+            case Organizer.Operations.ArtifactCheckStatus.Valid:
+                break; // nothing to report
+        }
     }
 
     private void DrawScanTab()
