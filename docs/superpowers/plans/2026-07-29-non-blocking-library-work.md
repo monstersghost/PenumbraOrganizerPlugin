@@ -4,7 +4,9 @@
 
 **Goal:** Move the Scan tab's mod walk and the Search tab's index build off the game's render thread, so neither can freeze FFXIV on a large or slow-disk mod library.
 
-**Architecture:** A shared `LibraryWorkCoordinator<TSeed, TResult>` runs both jobs in three phases: a single framework-thread frame that copies plain strings out of the Penumbra IPC adapters, a background `Task` that does all classification and disk I/O against those strings, and a framework-thread publish that hands a fully-materialized result list to `OrganizerState.LoadScan` or `LibraryIndex`. Phase-2 code lives in a `LibraryWork.Pure` namespace that an architecture test forbids from referencing Dalamud or Penumbra types.
+**Architecture:** A shared `LibraryWorkCoordinator<TSeed, TResult>` runs both jobs in three phases: a single framework-thread frame that copies plain strings out of the Penumbra IPC adapters, a background `Task` that does all classification and disk I/O against those strings, and a framework-thread publish that commits atomically via `OrganizerState.ReplaceScanAtomically` or a single `LibraryIndex` assignment. Phase-2 code lives in a `LibraryWork.Pure` namespace that an architecture test forbids from referencing Dalamud or Penumbra types. Mutual exclusion across Scan, Index, and `OperationController` is a domain invariant enforced in `Plugin`, not a consequence of disabled buttons.
+
+**Revision note:** this plan was returned for correction after its first review. Six blocking changes are folded in: domain-level admission control (Task 8), atomic publish separated from post-commit side effects (Tasks 3 and 9), cancellation honoured when it arrives after the background task completed (Tasks 4 and 5), synchronous scheduler failure handled (Tasks 4 and 5), disposal semantics and a `_disposed` flag (Tasks 4 and 5), and recursive purity enforcement covering result DTOs (Task 7). Two new tasks were inserted and the rest renumbered.
 
 **Tech Stack:** C# / .NET 10 (`net10.0-windows7.0`), Dalamud.NET.Sdk 15.0.0, Penumbra.Api 5.15.1, xunit 2.5.3.
 
@@ -16,7 +18,7 @@
 - Test framework is xunit 2.5.3 with `<Using Include="Xunit" />` in the test csproj, so `[Fact]` and `Assert` need no `using`. Test namespaces mirror folder structure (`PenumbraOrganizer.Plugin.Tests.<Folder>`).
 - Temp-directory test convention, copied from `HeliosphereDetectorTests`: `new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()))`, cleaned up in a `finally` with `Delete(recursive: true)`.
 - `OperationController.cs` must not be modified by any task in this plan. Coordination with it is read-only, through its published `State` snapshot.
-- No type in namespace `PenumbraOrganizer.Plugin.LibraryWork.Pure` may reference a type from the `Dalamud` or `Penumbra.Api` assemblies. Task 6 enforces this.
+- No type in namespace `PenumbraOrganizer.Plugin.LibraryWork.Pure` may reference a type from the `Dalamud` or `Penumbra.Api` assemblies, and neither may the `TSeed`/`TResult` types that cross the thread boundary. Task 7 enforces this.
 - Build and test command used throughout: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`. Verified working; a filtered run of `HeliosphereDetectorTests` passes 3 tests in ~200 ms.
 - Work happens on branch `feat/non-blocking-library-work`, which already exists and already contains the spec commit.
 
@@ -145,11 +147,25 @@ public sealed class EventLogBuffer
     /// <summary>Framework thread only.</summary>
     public IReadOnlyList<string> Lines => _lines;
 
-    /// <summary>Framework thread only. Moves queued lines into <see cref="Lines"/>, newest first.</summary>
+    /// <summary>
+    /// Framework thread only. Moves queued lines into <see cref="Lines"/>, most recently arrived
+    /// first. Note this is queue ARRIVAL order, not a chronological ordering of when the events
+    /// fired: callbacks on different threads have no meaningful universal order. Timestamps are
+    /// captured at callback time in the line text itself.
+    /// </summary>
     public void Drain()
     {
+        var drained = new List<string>();
         while (_incoming.TryDequeue(out var line))
-            _lines.Insert(0, line);
+            drained.Add(line);
+
+        if (drained.Count == 0)
+            return;
+
+        // One InsertRange of a reversed batch rather than repeated Insert(0, ...), which is O(n)
+        // per line. Harmless at a 200-line cap either way; the batch form is simply clearer.
+        drained.Reverse();
+        _lines.InsertRange(0, drained);
 
         if (_lines.Count > MaxLines)
             _lines.RemoveRange(MaxLines, _lines.Count - MaxLines);
@@ -182,8 +198,9 @@ Delete the `MaxEventLogLines` constant (its value now lives on `EventLogBuffer.M
 Replace `LogEvent` at lines 98-103:
 
 ```csharp
-    // Called from Penumbra's IPC subscribers, which may be on any thread. The timestamp is taken
-    // here rather than at drain time so ordering reflects when the event actually fired.
+    // Called from Penumbra's IPC subscribers, which may be on any thread. The timestamp is captured
+    // here rather than at drain time so it records when the callback fired; display order is queue
+    // arrival order, which is not the same thing and does not claim to be.
     internal void LogEvent(string message) =>
         _eventLog.Add($"{DateTime.Now:HH:mm:ss} {message}");
 
@@ -356,6 +373,39 @@ Replace the three subscriber registrations at lines 84-87:
         });
 ```
 
+Three subscribers are **not enough**. Seeds carry absolute `ModDirectoryPath` strings, so a mod-root change mid-run makes every one of them wrong and every Gear mod resolve to `DirectoryMissing` — a wrong-but-plausible published result, which is worse than a failure because nothing looks broken. Add two more subscribers alongside the existing three, and matching `EventSubscriber` fields next to `_modMoved` (`Plugin.cs:47-49`):
+
+```csharp
+    private readonly EventSubscriber<string> _modDirectoryChanged;
+    private readonly EventSubscriber _penumbraDisposed;
+```
+
+Check the exact generic arity against `Penumbra.Api.IpcSubscribers.ModDirectoryChanged` and `Disposed` before compiling; `ModDirectoryChanged` carries the new directory, `Disposed` carries nothing. Register them with the others:
+
+```csharp
+        _modDirectoryChanged = ModDirectoryChanged.Subscriber(PluginInterface, dir =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod directory changed: {dir}");
+        });
+        // Penumbra's own docs for GetChangedItemAdapterDictionary say to clear it on Disposed, so a
+        // run holding one across this event is working from storage that is no longer valid.
+        _penumbraDisposed = Disposed.Subscriber(PluginInterface, () =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent("Penumbra unloaded.");
+        });
+```
+
+Dispose both in `Plugin.Dispose()` next to the existing three (`Plugin.cs:111-113`):
+
+```csharp
+        _modDirectoryChanged.Dispose();
+        _penumbraDisposed.Dispose();
+```
+
+`Initialized` deliberately does not bump the epoch: a run cannot have started before Penumbra existed, and a run in flight when Penumbra initialises was already invalidated by the `Disposed` that preceded it.
+
 - [ ] **Step 6: Build and run the full suite**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`
@@ -371,7 +421,174 @@ git commit -m "feat: count Penumbra mod-list changes for staleness detection"
 
 ---
 
-## Task 3: Coordinator contracts and happy path
+## Task 3: Atomic scan replacement in OrganizerState
+
+`LoadScan` calls `_mods.Clear()` (`OrganizerState.cs:50`) and then fills. Anything throwing after that line leaves the state half-replaced while the caller reports failure. Passing a fully-materialized list does not fix this — it only removes deferred-enumeration risk. Build-then-swap does.
+
+**Files:**
+- Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs:8-11` (field modifiers), `:44-72` (`LoadScan`)
+- Modify: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateTests.cs` (append)
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `OrganizerState.ReplaceScanAtomically(IEnumerable<OrganizerModRow> scanned, IReadOnlySet<string> previouslyProtectedIdentifiers, IReadOnlySet<string>? previouslyProtectedFolders = null)`. `LoadScan` keeps its exact current signature and delegates, so Apply, Restore, Protect, and Folder Cleanup are untouched.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateTests.cs` (match the file's existing helpers for constructing an `OrganizerModRow`; read it first):
+
+```csharp
+    [Fact]
+    public void ReplaceScanAtomically_ThrowingDuringDerivation_LeavesPreviousStateIntact()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [new OrganizerModRow { Identifier = "a", Name = "A", Author = "x", CurrentPath = "Gear/A", ProposedPath = "Gear/A" }],
+            new HashSet<string>(StringComparer.Ordinal));
+
+        // A row whose enumeration throws part-way: the first item is fine, the second blows up
+        // during derivation, exactly like a malformed path would.
+        IEnumerable<OrganizerModRow> Exploding()
+        {
+            yield return new OrganizerModRow { Identifier = "b", Name = "B", Author = "y", CurrentPath = "Gear/B", ProposedPath = "Gear/B" };
+            throw new InvalidOperationException("derivation failed");
+        }
+
+        Assert.Throws<InvalidOperationException>(() =>
+            state.ReplaceScanAtomically(Exploding(), new HashSet<string>(StringComparer.Ordinal)));
+
+        // The previous scan must still be entirely present and uncontaminated.
+        var mods = state.Mods;
+        Assert.Single(mods);
+        Assert.Equal("a", mods[0].Identifier);
+        Assert.Contains("Gear", state.KnownFolders);
+    }
+
+    [Fact]
+    public void ReplaceScanAtomically_OnSuccess_BehavesExactlyLikeLoadScan()
+    {
+        var viaLoadScan = new OrganizerState();
+        var viaReplace = new OrganizerState();
+        OrganizerModRow[] Rows() =>
+        [
+            new() { Identifier = "a", Name = "A", Author = "x", CurrentPath = "Gear/Feet/A", ProposedPath = "somewhere/else" },
+        ];
+        var protectedIds = new HashSet<string>(["a"], StringComparer.Ordinal);
+
+        viaLoadScan.LoadScan(Rows(), protectedIds);
+        viaReplace.ReplaceScanAtomically(Rows(), protectedIds);
+
+        Assert.Equal(viaLoadScan.Mods.Select(m => m.Identifier), viaReplace.Mods.Select(m => m.Identifier));
+        Assert.Equal(viaLoadScan.Mods[0].Protected, viaReplace.Mods[0].Protected);
+        Assert.Equal(viaLoadScan.Mods[0].ProposedPath, viaReplace.Mods[0].ProposedPath);
+        Assert.Equal(viaLoadScan.KnownFolders, viaReplace.KnownFolders);
+        Assert.True(viaReplace.HasScanned);
+    }
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~OrganizerStateTests" --nologo`
+
+Expected: FAIL to compile, `CS1061: 'OrganizerState' does not contain a definition for 'ReplaceScanAtomically'`.
+
+- [ ] **Step 3: Drop readonly from the four state fields**
+
+In `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs`, lines 8-11:
+
+```csharp
+    // Not readonly: ReplaceScanAtomically swaps these references only after every replacement
+    // collection has been built successfully, so a throw during derivation cannot leave the state
+    // half-replaced. Nothing else reassigns them.
+    private Dictionary<string, OrganizerModRow> _mods = new();
+    private HashSet<string> _protectedModIdentifiers = new(StringComparer.Ordinal);
+    private HashSet<string> _protectedFolders = new(StringComparer.Ordinal);
+    private List<string> _knownFolders = [];
+```
+
+- [ ] **Step 4: Add ReplaceScanAtomically and make LoadScan delegate**
+
+Replace the body of `LoadScan` (lines 44-72) with a delegation, and add the new method beside it:
+
+```csharp
+    // previouslyProtectedFolders defaults to null (treated as empty) so every existing call
+    // site across this test project that predates folder protection keeps compiling unchanged.
+    public void LoadScan(
+        IEnumerable<OrganizerModRow> scanned,
+        IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlySet<string>? previouslyProtectedFolders = null) =>
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolders);
+
+    /// <summary>
+    /// Whole-state replacement that either fully happens or does not happen at all. Every
+    /// replacement collection is built first; the field references are swapped only once all
+    /// derivation has succeeded. A background scan publishes through this, so a throw here must
+    /// leave the previously published scan exactly as it was rather than half-replaced.
+    /// </summary>
+    public void ReplaceScanAtomically(
+        IEnumerable<OrganizerModRow> scanned,
+        IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlySet<string>? previouslyProtectedFolders = null)
+    {
+        var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
+        var replacementProtectedFolders = new HashSet<string>(
+            previouslyProtectedFolders ?? new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal);
+
+        var replacementMods = new Dictionary<string, OrganizerModRow>();
+        foreach (var row in scanned)
+        {
+            // Protection is derived against the REPLACEMENT sets, not the live fields, so this loop
+            // reads nothing it is about to overwrite.
+            row.Protected = IsEffectivelyProtected(row, replacementProtectedIdentifiers, replacementProtectedFolders);
+            row.ProposedPath = row.CurrentPath;
+            replacementMods[row.Identifier] = row;
+        }
+
+        var replacementKnownFolders = replacementMods.Values
+            .Select(m => OrganizationCleanupPlanner.GetVirtualParent(m.CurrentPath))
+            .Where(f => f is not null)
+            .Select(f => f!)
+            .SelectMany(AncestorChain)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+
+        // COMMIT. Nothing above this point has touched published state.
+        _protectedModIdentifiers = replacementProtectedIdentifiers;
+        _protectedFolders = replacementProtectedFolders;
+        _mods = replacementMods;
+        _knownFolders = replacementKnownFolders;
+        HasScanned = true;
+    }
+```
+
+Read the existing `IsEffectivelyProtectedFull` before writing this: it currently reads the `_protectedModIdentifiers`/`_protectedFolders` fields directly. Add an overload (named `IsEffectivelyProtected` above) taking the two sets as parameters, and have the existing field-reading version delegate to it so no other caller changes.
+
+- [ ] **Step 5: Run to verify it passes**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~OrganizerStateTests" --nologo`
+
+Expected: PASS, including every pre-existing `OrganizerStateTests` fact. Those passing unchanged is the proof that `LoadScan`'s behaviour is identical after delegating.
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`
+
+Expected: PASS with no new failures. `OrganizerState` is shared with Apply, Restore, Protect, and Folder Cleanup, so a regression here would surface across several unrelated test classes.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateTests.cs
+git commit -m "feat: make whole-scan replacement atomic
+
+Build every replacement collection first, swap references only once all
+derivation succeeded. LoadScan keeps its signature and delegates."
+```
+
+---
+
+## Task 4: Coordinator contracts and happy path
 
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/LibraryWorkContracts.cs`
@@ -455,7 +672,7 @@ public sealed record LibraryWorkBatch<TSeed, TResult>(
 
 - [ ] **Step 2: Write the failing happy-path test**
 
-Create `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryWorkCoordinatorTests.cs`. This file grows in Task 4; write it now with the shared fakes plus the happy-path facts.
+Create `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryWorkCoordinatorTests.cs`. This file grows in Task 5; write it now with the shared fakes plus the happy-path facts.
 
 ```csharp
 using PenumbraOrganizer.Plugin.LibraryWork;
@@ -653,6 +870,8 @@ Expected: FAIL to compile, `CS0246: The type or namespace name 'LibraryWorkCoord
 Create `PenumbraOrganizer.Plugin/LibraryWork/LibraryWorkCoordinator.cs`:
 
 ```csharp
+using System.Diagnostics;
+
 namespace PenumbraOrganizer.Plugin.LibraryWork;
 
 /// <summary>
@@ -670,11 +889,12 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     public delegate Task<IReadOnlyList<TResult>> BackgroundScheduler(
         Func<IReadOnlyList<TResult>> work, CancellationToken ct);
 
-    private static readonly TimeSpan DisposeWait = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan MaterializeWarningThreshold = TimeSpan.FromMilliseconds(100);
 
     private readonly Func<long> _readEpoch;
     private readonly BackgroundScheduler _scheduler;
     private readonly Action<string>? _logWarning;
+    private readonly TimeSpan _disposeWait;
 
     private ILibraryWorkJob<TSeed, TResult>? _job;
     private CancellationTokenSource? _cts;
@@ -682,19 +902,28 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     private long _startEpoch;
     private int _processed;
     private int _total;
+    private bool _disposed;
 
     public LibraryWorkStateSnapshot State { get; private set; } = LibraryWorkStateSnapshot.Idle;
 
     public LibraryWorkCoordinator(
-        Func<long> readEpoch, BackgroundScheduler? scheduler = null, Action<string>? logWarning = null)
+        Func<long> readEpoch,
+        BackgroundScheduler? scheduler = null,
+        Action<string>? logWarning = null,
+        TimeSpan? disposeWait = null)
     {
         _readEpoch = readEpoch;
         _scheduler = scheduler ?? ((work, ct) => Task.Run(work, ct));
         _logWarning = logWarning;
+        _disposeWait = disposeWait ?? TimeSpan.FromSeconds(2);
     }
 
     public void Start(ILibraryWorkJob<TSeed, TResult> job)
     {
+        // Without this, anything calling RunScan during teardown schedules fresh background work
+        // into a plugin that is going away.
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (State.IsRunning)
             throw new InvalidOperationException($"{State.JobDisplayName} is already running.");
 
@@ -705,6 +934,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         PublishRunning(LibraryWorkPhase.Materializing);
 
         LibraryWorkBatch<TSeed, TResult> batch;
+        var materializeStarted = Stopwatch.GetTimestamp();
         try
         {
             batch = job.Materialize();
@@ -715,11 +945,35 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
             return;
         }
 
+        // Materialize is the last unbounded piece of per-run work still on the render thread, and
+        // render-thread latency is the entire point of this design - so it is measured rather than
+        // assumed. 100ms is roughly six frames at 60fps: long enough not to fire on a healthy
+        // library, short enough to catch a hitch a user would notice. A starting value to revise
+        // once real numbers exist, not a claim about what is achievable.
+        var materializeElapsed = Stopwatch.GetElapsedTime(materializeStarted);
+        if (materializeElapsed > MaterializeWarningThreshold)
+            _logWarning?.Invoke(
+                $"{job.DisplayName}: materializing {batch.Items.Count} mods held the framework "
+                + $"thread for {materializeElapsed.TotalMilliseconds:F0}ms.");
+
         _total = batch.Items.Count;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         PublishRunning(LibraryWorkPhase.Computing);
-        _task = _scheduler(() => RunBatch(batch, ct), ct);
+
+        // A scheduler that throws synchronously (or hands back null) would otherwise leave
+        // Phase == Computing with _task == null - a state Update() can never settle, permanently
+        // gating Scan, Index, Apply, Restore, cleanup and backup with no recovery short of
+        // reloading the plugin. Unreachable with Task.Run; the scheduler is an injectable boundary.
+        try
+        {
+            _task = _scheduler(() => RunBatch(batch, ct), ct)
+                ?? throw new InvalidOperationException("The background scheduler returned no task.");
+        }
+        catch (Exception ex)
+        {
+            Settle(LibraryWorkOutcome.Failed, ex.Message);
+        }
     }
 
     // Background thread. Everything reachable from here is in LibraryWork.Pure.
@@ -742,6 +996,9 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     /// <summary> Framework thread, once per update. </summary>
     public void Update()
     {
+        if (_disposed)
+            return;
+
         if (_task is not { IsCompleted: true })
         {
             // Only republish when the counter actually moved, so an idle frame allocates nothing.
@@ -762,6 +1019,16 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         if (task.IsFaulted)
         {
             Settle(LibraryWorkOutcome.Failed, task.Exception!.GetBaseException().Message);
+            return;
+        }
+
+        // Checked BEFORE the epoch and before Publish. The background task can finish in the same
+        // frame the user clicks Cancel, leaving a RanToCompletion task and a cancellation the UI has
+        // already acknowledged. Discarding a finished, valid result is safe precisely because these
+        // runs are read-only: the cost is one wasted scan, versus the UI lying about what it did.
+        if (_cts?.IsCancellationRequested == true)
+        {
+            Settle(LibraryWorkOutcome.Cancelled, null);
             return;
         }
 
@@ -791,14 +1058,25 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+            return;
+        _disposed = true;
+
         _cts?.Cancel();
         try
         {
             // Bounded, not indefinite: Dalamud unloads our AssemblyLoadContext on plugin unload, and
             // a background task still executing our code through that unload is a real crash risk.
             // Per-item work is one file read, so the token is observed quickly in practice.
-            if (_task is { } task && !task.Wait(DisposeWait))
-                _logWarning?.Invoke("A library work run did not stop within 2s of plugin shutdown.");
+            //
+            // This REDUCES the hazard; it does not remove it. If the wait expires the task is still
+            // running, still holding its batch and processor, and still executing plugin assembly
+            // code - clearing the fields below does not stop it. A synchronous filesystem call
+            // blocked on an unresponsive network share cannot be interrupted at all.
+            if (_task is { } task && !task.Wait(_disposeWait))
+                _logWarning?.Invoke(
+                    "Teardown integrity: a library work run was still executing when the plugin "
+                    + "unloaded. This is unmanaged risk, not merely a slow run.");
         }
         catch (AggregateException)
         {
@@ -847,13 +1125,13 @@ git commit -m "feat: add the three-phase library work coordinator"
 
 ---
 
-## Task 4: Coordinator cancellation, staleness, failure, and disposal
+## Task 5: Coordinator cancellation, staleness, failure, and disposal
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryWorkCoordinatorTests.cs` (append facts)
 
 **Interfaces:**
-- Consumes: everything Task 3 produced. No production code changes are expected; Task 3's coordinator already implements these paths. If a test fails, fix the coordinator, not the test.
+- Consumes: everything Task 4 produced. No production code changes are expected; Task 4's coordinator already implements these paths. If a test fails, fix the coordinator, not the test.
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -1003,10 +1281,91 @@ Add these facts to `LibraryWorkCoordinatorTests` (inside the existing class, aft
     }
 
     [Fact]
+    public void CancellationRequestedAfterComputeButBeforeUpdate_DiscardsTheCompletedResult()
+    {
+        // The one-frame race the first draft published through: the task finished, then the user
+        // clicked Cancel, then Update() ran. Honouring the cancel is free here because these runs
+        // are read-only - the cost is one wasted scan, versus the UI lying about what it did.
+        var job = new FakeJob { Items = ["a", "b"], Processor = new FakeProcessor() };
+        var (coordinator, scheduler, _) = NewCoordinator();
+
+        coordinator.Start(job);
+        scheduler.RunToCompletion();
+        coordinator.RequestCancellation();
+        coordinator.Update();
+
+        Assert.Empty(job.Published);
+        Assert.Equal(LibraryWorkOutcome.Cancelled, coordinator.State.LastOutcome);
+    }
+
+    [Fact]
+    public void SchedulerThrowingSynchronously_FailsInsteadOfWedging()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, (_, _) => throw new InvalidOperationException("no thread available"));
+
+        coordinator.Start(job);
+
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+        Assert.Equal("no thread available", coordinator.State.LastError);
+    }
+
+    [Fact]
+    public void SchedulerReturningNull_FailsInsteadOfWedging()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var coordinator = new LibraryWorkCoordinator<string, string>(() => 0L, (_, _) => null!);
+
+        coordinator.Start(job);
+
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+    }
+
+    [Fact]
+    public void AfterSchedulerFailure_StartIsAllowedAgain()
+    {
+        var thrown = true;
+        var scheduler = new ManualScheduler();
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L,
+            (work, ct) => thrown ? throw new InvalidOperationException("boom") : scheduler.Schedule(work, ct));
+
+        coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+
+        thrown = false;
+        coordinator.Start(new FakeJob { Items = ["b"], Processor = new FakeProcessor() });
+
+        Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
+    }
+
+    [Fact]
+    public void EmptyBatch_PublishesAnEmptyResultAndCompletes()
+    {
+        var job = new FakeJob { Items = [], Processor = new FakeProcessor() };
+        var (coordinator, scheduler, _) = NewCoordinator();
+
+        coordinator.Start(job);
+        scheduler.RunToCompletion();
+        coordinator.Update();
+
+        Assert.Empty(Assert.Single(job.Published));
+        Assert.Equal(LibraryWorkOutcome.Completed, coordinator.State.LastOutcome);
+        Assert.Equal(0, coordinator.State.TotalItems);
+    }
+
+    [Fact]
     public void Dispose_DuringARun_DoesNotPublish()
     {
         var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
-        var (coordinator, scheduler, _) = NewCoordinator();
+        var scheduler = new ManualScheduler();
+        // Zero dispose timeout: the real 2s wait belongs in the one test that covers the warning,
+        // not in every test that happens to dispose.
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, scheduler.Schedule, disposeWait: TimeSpan.Zero);
         coordinator.Start(job);
 
         coordinator.Dispose();
@@ -1014,15 +1373,58 @@ Add these facts to `LibraryWorkCoordinatorTests` (inside the existing class, aft
 
         Assert.Empty(job.Published);
     }
+
+    [Fact]
+    public void StartAfterDispose_IsRejected()
+    {
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, new ManualScheduler().Schedule, disposeWait: TimeSpan.Zero);
+        coordinator.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() =>
+            coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() }));
+    }
+
+    [Fact]
+    public void UpdateAfterDispose_DoesNotPublish()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var scheduler = new ManualScheduler();
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, scheduler.Schedule, disposeWait: TimeSpan.Zero);
+        coordinator.Start(job);
+        scheduler.RunToCompletion();
+
+        coordinator.Dispose();
+        coordinator.Update();
+
+        Assert.Empty(job.Published);
+    }
+
+    [Fact]
+    public void Dispose_WhenTheRunDoesNotStop_LogsATeardownWarning()
+    {
+        var warnings = new List<string>();
+        var scheduler = new ManualScheduler();
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, scheduler.Schedule,
+            logWarning: warnings.Add, disposeWait: TimeSpan.FromMilliseconds(50));
+        coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
+
+        coordinator.Dispose(); // the manual scheduler's task never completes
+
+        Assert.Single(warnings);
+        Assert.Contains("teardown", warnings[0], StringComparison.OrdinalIgnoreCase);
+    }
 ```
 
 - [ ] **Step 2: Run the tests**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~LibraryWorkCoordinatorTests" --nologo`
 
-Expected: PASS, `Failed: 0, Passed: 15`.
+Expected: PASS, `Failed: 0, Passed: 24`.
 
-If `Dispose_DuringARun_DoesNotPublish` hangs, the `Task.Wait(DisposeWait)` in `Dispose` is blocking on a `ManualScheduler` task that has not been run yet; that is the 2-second bounded wait doing exactly its job, and the test should complete after it expires. If any other test fails, fix `LibraryWorkCoordinator`, not the test.
+No test should take more than ~50 ms of wall clock; every dispose path injects a short or zero timeout. If a test hangs, the injected `disposeWait` is not being honoured. If any test fails, fix `LibraryWorkCoordinator`, not the test.
 
 - [ ] **Step 3: Commit**
 
@@ -1033,7 +1435,7 @@ git commit -m "test: cover coordinator cancel, staleness, failure, and disposal 
 
 ---
 
-## Task 5: Scan seed and processor
+## Task 6: Scan seed and processor
 
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanSeed.cs`
@@ -1041,7 +1443,7 @@ git commit -m "test: cover coordinator cancel, staleness, failure, and disposal 
 - Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/ScanProcessorTests.cs`
 
 **Interfaces:**
-- Consumes: `ILibraryWorkProcessor<TSeed, TResult>` from Task 3.
+- Consumes: `ILibraryWorkProcessor<TSeed, TResult>` from Task 4.
 - Produces: `PenumbraOrganizer.Plugin.LibraryWork.Pure.ScanSeed(string Identifier, string Name, string Author, string CurrentPath, string ModDirectoryPath, IReadOnlyList<string> ChangedItemKeys)` and `ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerModRow>` with constructor `(string npcNameListPath, string npcNameSeedJson)` and `IReadOnlyList<string> Warnings { get; }`.
 
 - [ ] **Step 1: Write the seed type**
@@ -1316,14 +1718,14 @@ git commit -m "feat: add the pure scan processor"
 
 ---
 
-## Task 6: Purity architecture test
+## Task 7: Purity architecture test
 
 **Files:**
 - Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryWorkPurityTests.cs`
 
 **Interfaces:**
-- Consumes: `PenumbraOrganizer.Plugin.LibraryWork.Pure.ScanProcessor` from Task 5, used only as an assembly anchor.
-- Produces: nothing consumed by later tasks. Guards Task 5 and Task 8.
+- Consumes: `ScanProcessor`, `ScanSeed` from Task 6; `OrganizerModRow` and `IndexedMod` as additional roots.
+- Produces: nothing consumed by later tasks. Guards Tasks 6 and 10.
 
 - [ ] **Step 1: Write the test**
 
@@ -1353,25 +1755,51 @@ public class LibraryWorkPurityTests
     private static readonly string[] ForbiddenAssemblies = ["Dalamud", "Penumbra.Api"];
 
     [Fact]
-    public void PureTypes_DoNotReferenceDalamudOrPenumbraInTheirSignatures()
+    public void PureTypesAndCrossThreadDtos_DoNotReferenceDalamudOrPenumbra()
     {
-        var pureTypes = typeof(ScanProcessor).Assembly.GetTypes()
+        var assembly = typeof(ScanProcessor).Assembly;
+
+        var roots = assembly.GetTypes()
             .Where(t => t.Namespace is { } ns
                 && (ns == PureNamespace || ns.StartsWith(PureNamespace + ".", StringComparison.Ordinal)))
             .ToList();
 
         // Guards against the check silently passing because the namespace was renamed or emptied.
-        Assert.NotEmpty(pureTypes);
+        Assert.NotEmpty(roots);
 
-        var violations = pureTypes
-            .SelectMany(type => SignatureTypes(type).Select(referenced => (type, referenced)))
-            .Where(pair => IsForbidden(pair.referenced))
-            .Select(pair => $"{pair.type.FullName} references {pair.referenced.FullName} "
-                + $"from {pair.referenced.Assembly.GetName().Name}")
-            .Distinct()
-            .ToList();
+        // The DTOs that cross the thread boundary but live OUTSIDE the Pure namespace. Without
+        // these as explicit roots, a Penumbra-typed field on OrganizerModRow or IndexedMod would
+        // violate the rule and still pass - which is exactly the regression the rule exists to stop.
+        roots.Add(typeof(PenumbraOrganizer.Plugin.Organizer.OrganizerModRow));
+        roots.Add(typeof(PenumbraOrganizer.Plugin.LibrarySearch.IndexedMod));
 
-        Assert.Empty(violations);
+        var violations = new List<string>();
+        var visited = new HashSet<Type>();
+        var queue = new Queue<Type>(roots);
+
+        while (queue.Count > 0)
+        {
+            var type = queue.Dequeue();
+            if (!visited.Add(type))
+                continue;
+
+            foreach (var referenced in SignatureTypes(type))
+            {
+                if (IsForbidden(referenced))
+                {
+                    violations.Add($"{type.FullName} references {referenced.FullName} "
+                        + $"from {referenced.Assembly.GetName().Name}");
+                    continue;
+                }
+
+                // Recurse only into our own types; stop at BCL and third-party boundaries so the
+                // walk terminates and stays meaningful.
+                if (referenced.Assembly == assembly && !visited.Contains(referenced))
+                    queue.Enqueue(referenced);
+            }
+        }
+
+        Assert.Empty(violations.Distinct());
     }
 
     private static bool IsForbidden(Type type)
@@ -1436,19 +1864,25 @@ Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.
 
 Expected: PASS, `Failed: 0, Passed: 1`.
 
-- [ ] **Step 3: Verify the test actually catches a violation**
+- [ ] **Step 3: Verify the test actually catches both kinds of violation**
 
-A guard test that cannot fail is worthless. Temporarily add this field to `ScanProcessor`:
+A guard test that cannot fail is worthless, and the recursive DTO walk is the part most likely to be subtly broken. Check both.
+
+First, a direct violation. Temporarily add this field to `ScanProcessor`:
 
 ```csharp
     private Dalamud.Plugin.IDalamudPluginInterface? _deliberateViolation;
 ```
 
-Add `using Dalamud.Plugin;` if needed. Re-run the command from Step 2.
+Re-run the command from Step 2. Expected: FAIL, naming `ScanProcessor references Dalamud.Plugin.IDalamudPluginInterface from Dalamud`. **Remove the field.**
 
-Expected: FAIL, with the assertion message naming `ScanProcessor references Dalamud.Plugin.IDalamudPluginInterface from Dalamud`.
+Second, the reachable-DTO violation the namespace-only version would have missed. Temporarily add this property to `OrganizerModRow` (in `PenumbraOrganizer.Plugin/Organizer/OrganizerModRow.cs`):
 
-**Now remove that field again** and re-run to confirm PASS.
+```csharp
+    public Dalamud.Plugin.IDalamudPluginInterface? DeliberateViolation { get; init; }
+```
+
+Re-run. Expected: FAIL, naming `OrganizerModRow`. If this one passes, the extra roots or the recursion are not wired correctly — fix the test before continuing. **Remove the property** and re-run to confirm PASS.
 
 - [ ] **Step 4: Commit**
 
@@ -1459,16 +1893,164 @@ git commit -m "test: forbid Dalamud and Penumbra types in the background work na
 
 ---
 
-## Task 7: ScanJob, rewiring, and dead code removal
+## Task 8: Admission control
+
+Mutual exclusion across Scan, Index, and `OperationController` must be a domain invariant, not a consequence of disabled buttons. Nothing today prevents `plugin.RunScan(); plugin.BuildChangedItemIndex();` from running both at once, and `StartApplyOperation` (`Plugin.cs:447-452`) has no knowledge of library work at all.
+
+**Files:**
+- Create: `PenumbraOrganizer.Plugin/LibraryWork/ActivityAdmission.cs`
+- Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/ActivityAdmissionTests.cs`
+
+**Interfaces:**
+- Consumes: `LibraryWorkStateSnapshot` (Task 4), `OperationStateSnapshot`.
+- Produces: `ActivityAdmission.Check(operation, scan, index)` returning `string?` — null when admission is allowed, otherwise the reason to put in the exception message. `Plugin.EnsureNoConflictingActivity()` and `Plugin.TryRequestScan()` are added in Task 9.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `PenumbraOrganizer.Plugin.Tests/LibraryWork/ActivityAdmissionTests.cs`:
+
+```csharp
+using PenumbraOrganizer.Plugin.LibraryWork;
+using PenumbraOrganizer.Plugin.Organizer.Operations;
+
+namespace PenumbraOrganizer.Plugin.Tests.LibraryWork;
+
+public class ActivityAdmissionTests
+{
+    private static LibraryWorkStateSnapshot Running(string name) => new(
+        LibraryWorkPhase.Computing, name, 1, 10, null, null, CanCancel: true);
+
+    private static LibraryWorkStateSnapshot Idle => LibraryWorkStateSnapshot.Idle;
+
+    [Fact]
+    public void NothingRunning_IsAdmitted()
+    {
+        Assert.Null(ActivityAdmission.Check(OperationStateSnapshot.Idle, Idle, Idle));
+    }
+
+    [Fact]
+    public void ScanRunning_BlocksAdmission_AndNamesTheJob()
+    {
+        var reason = ActivityAdmission.Check(OperationStateSnapshot.Idle, Running("Scan"), Idle);
+
+        Assert.NotNull(reason);
+        Assert.Contains("Scan", reason);
+    }
+
+    [Fact]
+    public void IndexRunning_BlocksAdmission_AndNamesTheJob()
+    {
+        var reason = ActivityAdmission.Check(OperationStateSnapshot.Idle, Idle, Running("Search index"));
+
+        Assert.NotNull(reason);
+        Assert.Contains("Search index", reason);
+    }
+
+    [Fact]
+    public void OperationLockout_BlocksAdmission()
+    {
+        var operation = OperationStateSnapshot.Idle with { CanScan = false };
+
+        Assert.NotNull(ActivityAdmission.Check(operation, Idle, Idle));
+    }
+
+    [Fact]
+    public void RecoveryRequired_BlocksAdmission()
+    {
+        var operation = OperationStateSnapshot.Idle with { RequiresRecovery = true, CanScan = false };
+
+        var reason = ActivityAdmission.Check(operation, Idle, Idle);
+
+        Assert.NotNull(reason);
+        Assert.Contains("recovery", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LibraryWorkIsReportedBeforeOperationLockout()
+    {
+        // Both blocked: the library run is the more actionable message, since the user can cancel it.
+        var operation = OperationStateSnapshot.Idle with { CanScan = false };
+
+        var reason = ActivityAdmission.Check(operation, Running("Scan"), Idle);
+
+        Assert.Contains("Scan", reason);
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ActivityAdmissionTests" --nologo`
+
+Expected: FAIL to compile, `CS0246: The type or namespace name 'ActivityAdmission' could not be found`.
+
+- [ ] **Step 3: Write the policy**
+
+Create `PenumbraOrganizer.Plugin/LibraryWork/ActivityAdmission.cs`:
+
+```csharp
+using PenumbraOrganizer.Plugin.Organizer.Operations;
+
+namespace PenumbraOrganizer.Plugin.LibraryWork;
+
+/// <summary>
+/// The single admission rule shared by every activity that must not overlap another: Scan, Index,
+/// Apply, Restore, folder cleanup, cleanup rollback, and backup.
+///
+/// This is the invariant. ActivityGates is the presentation of it. Disabling a button prevents a
+/// click; it does not prevent a slash command, a test hook, or an existing code path that predates
+/// the gate - and three recovery paths (Plugin.cs:549, :590, :604) already call RunScan() directly.
+/// </summary>
+public static class ActivityAdmission
+{
+    /// <summary> Null when admission is allowed; otherwise the reason, for an exception message. </summary>
+    public static string? Check(
+        OperationStateSnapshot operation,
+        LibraryWorkStateSnapshot scan,
+        LibraryWorkStateSnapshot index)
+    {
+        // Reported first because it is the more actionable of the two: the user can cancel a library
+        // run, whereas an operation lockout has to resolve on its own terms.
+        if (scan.IsRunning)
+            return $"{scan.JobDisplayName ?? "A scan"} is already running.";
+        if (index.IsRunning)
+            return $"{index.JobDisplayName ?? "An index build"} is already running.";
+
+        if (operation.RequiresRecovery)
+            return "An interrupted operation requires recovery before anything else can run.";
+        if (!operation.CanScan)
+            return "An Apply or Restore operation is currently active.";
+
+        return null;
+    }
+}
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ActivityAdmissionTests" --nologo`
+
+Expected: PASS, `Failed: 0, Passed: 6`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add PenumbraOrganizer.Plugin/LibraryWork/ActivityAdmission.cs PenumbraOrganizer.Plugin.Tests/LibraryWork/ActivityAdmissionTests.cs
+git commit -m "feat: add the shared activity admission rule"
+```
+
+---
+
+## Task 9: ScanJob, rewiring, and dead code removal
 
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/ScanJob.cs`
-- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — `RunScan` (`:142-202`), `OnFrameworkUpdate` (`:126`), `Dispose` (`:104-120`), field block (`~:38-45`); delete `ApplyChanges()` (`:373-443`) and `Restore(Guid)` (`:608-693`)
+- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — `RunScan` (`:142-202`), `OnFrameworkUpdate` (`:126`), `Dispose` (`:104-120`), field block (`~:38-45`), `CreateBackup` (`:322`), `StartApplyOperation` (`:445`), `StartRestoreOperation` (`:490`), `ResolveKeepCurrent` (`:549`), `AcceptAllAndCloseInterruptedOperations` (`:590`), `ResolveOneMultiRootOperation` (`:604`), `CleanUpFolders` (`:787`), `RollbackFolderCleanup` (`:807`); delete `ApplyChanges()` (`:373-443`) and `Restore(Guid)` (`:608-693`)
 - Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.cs` — `RunScan` (`:1613-1629`), delete the unused `_lastApplyResults` field (`:35`)
 
 **Interfaces:**
-- Consumes: `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>`, `ScanSeed`, `ScanProcessor`, `ModEventEpoch`.
-- Produces: `Plugin.ScanWork` of type `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>`; `Plugin.RunScan()` now starts a run instead of completing one; `MainWindow.OnScanPublished()`.
+- Consumes: `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>` (Task 4), `ScanSeed`/`ScanProcessor` (Task 6), `ModEventEpoch` (Task 2), `ActivityAdmission` (Task 8), `OrganizerState.ReplaceScanAtomically` (Task 3).
+- Produces: `Plugin.ScanWork` of type `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>`; `Plugin.RunScan()` now starts a run instead of completing one; `Plugin.EnsureNoConflictingActivity()`; `Plugin.TryRequestScan()`; `Plugin.RunPostScanSideEffects()`; `MainWindow.OnScanPublished()`.
 
 - [ ] **Step 1: Write ScanJob**
 
@@ -1529,9 +2111,14 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
         foreach (var warning in _processor?.Warnings ?? [])
             Plugin.Log.Warning(warning);
 
-        _plugin.OrganizerState.LoadScan(results, _plugin.Config.ProtectedModIdentifiers, _plugin.Config.ProtectedFolderPaths);
-        _plugin.SaveProtectionState();
-        _plugin.OnScanPublished();
+        // THE COMMIT. Build-then-swap: either the whole new state is installed or none of it is.
+        // Anything above this line that throws leaves the previous scan completely intact.
+        _plugin.OrganizerState.ReplaceScanAtomically(
+            results, _plugin.Config.ProtectedModIdentifiers, _plugin.Config.ProtectedFolderPaths);
+
+        // POST-COMMIT. The new data is already live, so a failure here is a warning, never a failed
+        // run - reporting Failed would tell the UI to say nothing was published when it was.
+        _plugin.RunPostScanSideEffects();
     }
 }
 ```
@@ -1546,10 +2133,32 @@ In `PenumbraOrganizer.Plugin/Plugin.cs`, change the accessibility of the members
     internal static string ReadEmbeddedNpcNameSeed()
 ```
 
-Add an internal hook that routes scan completion to the window, placed next to `ToggleMainUi` (line 124):
+Add the post-commit side effects, placed next to `ToggleMainUi` (line 124). These belong to `Plugin`, not to a window: refreshing orphaned folders is a consequence of new scan data, and routing it through `MainWindow` would invert the dependency and hide the fact that these run *after* the commit point.
 
 ```csharp
-    internal void OnScanPublished() => _mainWindow.OnScanPublished();
+    // Everything that must happen once new scan data is live, none of which can be rolled back.
+    // Each is isolated: one failing must not skip the others, and none may fail the run - the data
+    // is already published by the time this is called.
+    internal void RunPostScanSideEffects()
+    {
+        try
+        {
+            SaveProtectionState();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Saving protection state after a scan failed; the scan itself succeeded.");
+        }
+
+        try
+        {
+            _mainWindow.OnScanPublished();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Post-scan refresh failed; the scan itself succeeded.");
+        }
+    }
 ```
 
 - [ ] **Step 3: Replace RunScan and add the coordinator**
@@ -1572,10 +2181,39 @@ Replace the entire body of `RunScan()` (lines 142-202) with:
 ```csharp
     /// <summary>
     /// Starts a scan. Returns as soon as the Penumbra reads are done; classification and the
-    /// per-mod disk walk run on a background thread and publish through ScanJob.Publish. Throws
-    /// InvalidOperationException if a library run is already in flight.
+    /// per-mod disk walk run on a background thread and publish through ScanJob.Publish.
+    /// Throws InvalidOperationException if any conflicting activity is running.
     /// </summary>
-    public void RunScan() => ScanWork.Start(new ScanJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+    public void RunScan()
+    {
+        EnsureNoConflictingActivity();
+        ScanWork.Start(new ScanJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+    }
+
+    /// <summary>
+    /// Best-effort scan for callers that must not fail if one cannot start right now - specifically
+    /// the recovery-resolution paths, whose scan is a refresh after the fact, not a correctness
+    /// requirement. Returns false and logs rather than throwing out of a committed recovery.
+    /// </summary>
+    internal bool TryRequestScan()
+    {
+        if (ActivityAdmission.Check(OperationController.State, ScanWork.State, IndexWork.State) is { } reason)
+        {
+            Log.Information($"Post-recovery scan skipped: {reason} Use Refresh mod list when it clears.");
+            return false;
+        }
+
+        RunScan();
+        return true;
+    }
+
+    // The single admission point every long-running activity shares. See ActivityAdmission for why
+    // this is a domain invariant rather than something the UI can be trusted to enforce.
+    internal void EnsureNoConflictingActivity()
+    {
+        if (ActivityAdmission.Check(OperationController.State, ScanWork.State, IndexWork.State) is { } reason)
+            throw new InvalidOperationException(reason);
+    }
 ```
 
 Add `ScanWork.Update();` to `OnFrameworkUpdate` (line 126), after the `DrainEventLog` call added in Task 1:
@@ -1591,6 +2229,39 @@ Add disposal to `Dispose()` (line 104), before `WindowSystem.RemoveAllWindows()`
 ```
 
 Add `using PenumbraOrganizer.Plugin.LibraryWork;` and `using PenumbraOrganizer.Plugin.LibraryWork.Pure;` to the file's using block, or fully qualify as shown above.
+
+- [ ] **Step 3b: Apply admission to every other starting wrapper, and fix the recovery paths**
+
+Add `EnsureNoConflictingActivity();` as the **first** statement of `StartApplyOperation` (`:445`), `StartRestoreOperation` (`:490`), `CleanUpFolders` (`:787`), `RollbackFolderCleanup` (`:807`), and `CreateBackup` (`:322`). It goes before their existing `_operationInProgress` checks, so a library run blocks them the same way an operation does.
+
+Then change the three unguarded recovery call sites, which would otherwise throw out of a committed recovery resolution:
+
+`Plugin.cs:549` in `ResolveKeepCurrent`:
+
+```csharp
+    internal void ResolveKeepCurrent()
+    {
+        OperationController.ResolveKeepCurrent();
+        TryRequestScan();
+    }
+```
+
+`Plugin.cs:590` in `AcceptAllAndCloseInterruptedOperations`:
+
+```csharp
+    internal void AcceptAllAndCloseInterruptedOperations()
+    {
+        OperationController.AcceptAllAndCloseInterruptedOperations();
+        TryRequestScan();
+    }
+```
+
+`Plugin.cs:604` in `ResolveOneMultiRootOperation` — keep its existing `RequiresRecovery` guard and swap only the call:
+
+```csharp
+        if (!OperationController.State.RequiresRecovery)
+            TryRequestScan();
+```
 
 - [ ] **Step 4: Rewire MainWindow**
 
@@ -1649,7 +2320,7 @@ operation controller took over, and the unused _lastApplyResults field."
 
 ---
 
-## Task 8: Index seed, processor, job, and rewiring
+## Task 10: Index seed, processor, job, and rewiring
 
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/Pure/IndexSeed.cs`
@@ -1660,7 +2331,7 @@ operation controller took over, and the unused _lastApplyResults field."
 - Modify: `PenumbraOrganizer.Plugin/LibrarySearch/ChangedItemIndexBuilder.cs` — split the per-mod body out
 
 **Interfaces:**
-- Consumes: everything from Tasks 3, 5, 6.
+- Consumes: everything from Tasks 4, 6, 7, 8.
 - Produces: `Plugin.IndexWork` of type `LibraryWorkCoordinator<IndexSeed, IndexedMod>`.
 
 - [ ] **Step 1: Read the existing builder before changing it**
@@ -1987,8 +2658,11 @@ Replace the entire body of `BuildChangedItemIndex()` (lines 204-239) with:
     /// leaves the previous LibraryIndex untouched. Throws InvalidOperationException if a library run
     /// is already in flight.
     /// </summary>
-    public void BuildChangedItemIndex() =>
+    public void BuildChangedItemIndex()
+    {
+        EnsureNoConflictingActivity();
         IndexWork.Start(new IndexJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+    }
 ```
 
 Add `IndexWork.Update();` to `OnFrameworkUpdate` next to `ScanWork.Update();`, and `IndexWork.Dispose();` to `Dispose()` next to `ScanWork.Dispose();`.
@@ -2008,45 +2682,227 @@ git commit -m "feat: run the Search index build off the render thread"
 
 ---
 
-## Task 9: UI gating, progress, and cancel
+## Task 11: ActivityGates as a testable policy
+
+The lockout matrix must be a pure function with its own tests. As a private `MainWindow` helper it would be verified only by "the UI still compiles", which makes a missed call site invisible.
+
+**Files:**
+- Create: `PenumbraOrganizer.Plugin/Windows/ActivityGates.cs`
+- Create: `PenumbraOrganizer.Plugin.Tests/Windows/ActivityGatesTests.cs`
+
+**Interfaces:**
+- Consumes: `OperationStateSnapshot`, `LibraryWorkStateSnapshot`.
+- Produces: `ActivityGates.Build(operation, scan, index)` returning an `ActivityGates` with `CanScan`, `CanIndex`, `CanStartApply`, `CanStartRestore`, `CanRunFolderCleanup`, `CanRunFolderCleanupRollback`, `CanCreateBackup`, `CanStageProposals`.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `PenumbraOrganizer.Plugin.Tests/Windows/ActivityGatesTests.cs`:
+
+```csharp
+using PenumbraOrganizer.Plugin.LibraryWork;
+using PenumbraOrganizer.Plugin.Organizer.Operations;
+using PenumbraOrganizer.Plugin.Windows;
+
+namespace PenumbraOrganizer.Plugin.Tests.Windows;
+
+public class ActivityGatesTests
+{
+    private static LibraryWorkStateSnapshot Running => new(
+        LibraryWorkPhase.Computing, "Scan", 1, 10, null, null, CanCancel: true);
+
+    private static LibraryWorkStateSnapshot Finished(LibraryWorkOutcome outcome) => new(
+        LibraryWorkPhase.Idle, null, 10, 10, outcome, null, CanCancel: false);
+
+    private static LibraryWorkStateSnapshot Idle => LibraryWorkStateSnapshot.Idle;
+
+    [Fact]
+    public void EverythingIdle_AllowsEverything()
+    {
+        var gates = ActivityGates.Build(OperationStateSnapshot.Idle, Idle, Idle);
+
+        Assert.True(gates.CanScan);
+        Assert.True(gates.CanIndex);
+        Assert.True(gates.CanStartApply);
+        Assert.True(gates.CanStartRestore);
+        Assert.True(gates.CanRunFolderCleanup);
+        Assert.True(gates.CanRunFolderCleanupRollback);
+        Assert.True(gates.CanCreateBackup);
+        Assert.True(gates.CanStageProposals);
+    }
+
+    [Fact]
+    public void ScanRunning_BlocksEverythingIncludingStaging()
+    {
+        var gates = ActivityGates.Build(OperationStateSnapshot.Idle, Running, Idle);
+
+        Assert.False(gates.CanScan);
+        Assert.False(gates.CanIndex);
+        Assert.False(gates.CanStartApply);
+        Assert.False(gates.CanStartRestore);
+        Assert.False(gates.CanRunFolderCleanup);
+        Assert.False(gates.CanRunFolderCleanupRollback);
+        Assert.False(gates.CanCreateBackup);
+        Assert.False(gates.CanStageProposals);
+    }
+
+    [Fact]
+    public void IndexRunning_BlocksScan()
+    {
+        var gates = ActivityGates.Build(OperationStateSnapshot.Idle, Idle, Running);
+
+        Assert.False(gates.CanScan);
+        Assert.False(gates.CanIndex);
+    }
+
+    [Fact]
+    public void OperationLockout_BlocksLibraryWork()
+    {
+        var operation = OperationStateSnapshot.Idle with
+        {
+            CanScan = false, CanIndex = false, CanStartApply = false, CanStartRestore = false,
+            CanRunFolderCleanup = false, CanRunFolderCleanupRollback = false, CanCreateBackup = false,
+        };
+
+        var gates = ActivityGates.Build(operation, Idle, Idle);
+
+        Assert.False(gates.CanScan);
+        Assert.False(gates.CanIndex);
+        Assert.False(gates.CanStartApply);
+    }
+
+    [Fact]
+    public void RecoveryRequired_BlocksLibraryWork()
+    {
+        var operation = OperationStateSnapshot.Idle with
+        {
+            RequiresRecovery = true, CanScan = false, CanIndex = false,
+        };
+
+        var gates = ActivityGates.Build(operation, Idle, Idle);
+
+        Assert.False(gates.CanScan);
+        Assert.False(gates.CanIndex);
+    }
+
+    [Theory]
+    [InlineData(LibraryWorkOutcome.Completed)]
+    [InlineData(LibraryWorkOutcome.Cancelled)]
+    [InlineData(LibraryWorkOutcome.StaleModList)]
+    [InlineData(LibraryWorkOutcome.Failed)]
+    public void AnyTerminalOutcome_ReleasesEveryGate(LibraryWorkOutcome outcome)
+    {
+        var gates = ActivityGates.Build(OperationStateSnapshot.Idle, Finished(outcome), Idle);
+
+        Assert.True(gates.CanScan);
+        Assert.True(gates.CanStartApply);
+        Assert.True(gates.CanStageProposals);
+    }
+
+    [Fact]
+    public void StagingIsBlockedOnlyByLibraryWork_NotByOperationLockout()
+    {
+        // Staging edits ProposedPath, which only a completing LoadScan clobbers. An Apply in flight
+        // is already prevented from starting a second Apply by CanStartApply; it has no reason to
+        // stop the user preparing the next batch.
+        var operation = OperationStateSnapshot.Idle with { CanStartApply = false };
+
+        var gates = ActivityGates.Build(operation, Idle, Idle);
+
+        Assert.True(gates.CanStageProposals);
+        Assert.False(gates.CanStartApply);
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ActivityGatesTests" --nologo`
+
+Expected: FAIL to compile, `CS0246: The type or namespace name 'ActivityGates' could not be found`.
+
+- [ ] **Step 3: Write the policy**
+
+Create `PenumbraOrganizer.Plugin/Windows/ActivityGates.cs`:
+
+```csharp
+using PenumbraOrganizer.Plugin.LibraryWork;
+using PenumbraOrganizer.Plugin.Organizer.Operations;
+
+namespace PenumbraOrganizer.Plugin.Windows;
+
+/// <summary>
+/// The whole UI lockout matrix as one pure function. OperationController owns Apply/Restore
+/// lockout; the two library coordinators own scan/index lockout; this merges them so no call site
+/// has to remember to consult all three, and so the rules can be tested without a game process.
+///
+/// This mirrors, but does not replace, Plugin's own admission checks - those are the invariant, this
+/// is the presentation of it.
+/// </summary>
+public readonly record struct ActivityGates(
+    bool CanScan,
+    bool CanIndex,
+    bool CanStartApply,
+    bool CanStartRestore,
+    bool CanRunFolderCleanup,
+    bool CanRunFolderCleanupRollback,
+    bool CanCreateBackup,
+    bool CanStageProposals)
+{
+    public static ActivityGates Build(
+        OperationStateSnapshot operation,
+        LibraryWorkStateSnapshot scan,
+        LibraryWorkStateSnapshot index)
+    {
+        var libraryBusy = scan.IsRunning || index.IsRunning;
+
+        return new ActivityGates(
+            CanScan: operation.CanScan && !libraryBusy,
+            CanIndex: operation.CanIndex && !libraryBusy,
+            CanStartApply: operation.CanStartApply && !libraryBusy,
+            CanStartRestore: operation.CanStartRestore && !libraryBusy,
+            CanRunFolderCleanup: operation.CanRunFolderCleanup && !libraryBusy,
+            CanRunFolderCleanupRollback: operation.CanRunFolderCleanupRollback && !libraryBusy,
+            CanCreateBackup: operation.CanCreateBackup && !libraryBusy,
+            // A library run is read-only, but a completing scan replaces every row and resets every
+            // ProposedPath - so staging must be blocked for its duration or the user's staged work is
+            // silently wiped when it lands. Deliberately NOT gated on the operation snapshot: an
+            // Apply in flight has no reason to stop the user preparing the next batch.
+            CanStageProposals: !libraryBusy);
+    }
+}
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ActivityGatesTests" --nologo`
+
+Expected: PASS, `Failed: 0, Passed: 10` (7 facts, one of which is a 4-case theory).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add PenumbraOrganizer.Plugin/Windows/ActivityGates.cs PenumbraOrganizer.Plugin.Tests/Windows/ActivityGatesTests.cs
+git commit -m "feat: extract the UI lockout matrix into a tested policy"
+```
+
+---
+
+## Task 12: UI wiring, progress, and cancel
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.cs` — `DrawScanTab` (`:363-394`), Search tab button (`:1155-1159`), Apply gate (`:868`), Folder Cleanup gate (`:1463`), Create Backup (`:956`), Restore gates (`~:994`), Sort tab staging (`:728`)
 
 **Interfaces:**
-- Consumes: `Plugin.ScanWork`, `Plugin.IndexWork`, `LibraryWorkStateSnapshot`.
+- Consumes: `ActivityGates.Build` from Task 11, `Plugin.ScanWork`, `Plugin.IndexWork`.
 - Produces: nothing consumed by later tasks. Final task.
 
-- [ ] **Step 1: Add the merged gates helper**
+- [ ] **Step 1: Add the drawing helpers**
 
 In `PenumbraOrganizer.Plugin/Windows/MainWindow.cs`, add near `DrawOperationProgress` (line 620):
 
 ```csharp
-    // OperationController owns Apply/Restore lockout; the two library coordinators own scan/index
-    // lockout. Merged in one place so no call site has to remember to consult all three.
-    private readonly record struct ActivityGates(
-        bool CanScan, bool CanIndex, bool CanStartApply, bool CanStartRestore,
-        bool CanRunFolderCleanup, bool CanRunFolderCleanupRollback, bool CanCreateBackup,
-        bool CanStageProposals);
-
-    private ActivityGates CurrentGates()
-    {
-        var op = _plugin.OperationController.State;
-        // A library run is read-only, but a completing scan calls LoadScan, which resets every
-        // ProposedPath - so staging must be blocked for its duration or the user's staged work is
-        // silently wiped when it lands.
-        var libraryBusy = _plugin.ScanWork.State.IsRunning || _plugin.IndexWork.State.IsRunning;
-
-        return new ActivityGates(
-            CanScan: op.CanScan && !libraryBusy,
-            CanIndex: op.CanIndex && !libraryBusy,
-            CanStartApply: op.CanStartApply && !libraryBusy,
-            CanStartRestore: op.CanStartRestore && !libraryBusy,
-            CanRunFolderCleanup: op.CanRunFolderCleanup && !libraryBusy,
-            CanRunFolderCleanupRollback: op.CanRunFolderCleanupRollback && !libraryBusy,
-            CanCreateBackup: op.CanCreateBackup && !libraryBusy,
-            CanStageProposals: !libraryBusy);
-    }
+    private ActivityGates CurrentGates() => ActivityGates.Build(
+        _plugin.OperationController.State, _plugin.ScanWork.State, _plugin.IndexWork.State);
 
     // Progress bar plus a right-aligned Cancel, reserving the button's width before the bar claims
     // it - same layout approach as DrawOperationProgress, against the library work snapshot.
@@ -2197,5 +3053,7 @@ The test suite has no game process, so these must be checked by hand before rele
 - [ ] Click Rediscover Mods in Penumbra while a scan is running. The scan reports the stale-mod-list message and publishes nothing.
 - [ ] Build/Refresh Index on a full library. Same framerate and progress expectations; the index summary matches a pre-change build.
 - [ ] Confirm Scan, Index, Apply, Restore, Folder Cleanup, Create Backup, and Sort staging are all disabled while either run is in flight, and that the Protect tab still works and its toggles survive the scan landing.
+- [ ] Resolve an interrupted operation (Keep Current, or Accept All) while a scan happens to be running. The recovery must complete normally, with a "post-recovery scan skipped" line in the log rather than an exception — this is the `TryRequestScan` path.
+- [ ] Check the Dalamud log after a full scan for the materialize-duration warning. If it fires on a healthy library, the 100 ms threshold in `LibraryWorkCoordinator.MaterializeWarningThreshold` needs revisiting against the real number it reports.
 - [ ] Unload the plugin while a scan is running. No crash, no hang beyond about two seconds.
 - [ ] After a scan, hit Export in Review Changes and compare the gear-slot breakdown against a pre-change run on the same library. A jump in `ZeroEvidence` would mean the Penumbra update changed the `meta.json` layout, which is a separate issue from this work but is easiest to spot here.
