@@ -32,8 +32,14 @@ public sealed class MainWindow : Window, IDisposable
     private string? _lastWorkbookExportPath;
     private int _workbookStrategyIndex = 2; // "By Type Then Creator" default
     private Organizer.WorkbookImportResultView? _lastWorkbookImportResult;
-    private bool _applyOperationActive;
-    private bool _restoreOperationActive;
+    private long _lastConsumedCompletion;
+
+    // Set by the completion consumer, consumed inside the Review Changes tab's own draw. The
+    // OpenPopup call CANNOT move into the consumer: BeginTabBar pushes an ID override, so the
+    // matching BeginPopupModal inside the tab resolves the popup name against a different ID stack
+    // than Draw()'s root - a root-level OpenPopup would mark a popup open that the tab's
+    // BeginPopupModal never sees. The flag carries the decision across that scope boundary.
+    private bool _pendingApplyReminder;
     private string _createBackupLabelInput = string.Empty;
     private Guid? _pendingRestoreSnapshotId;
     private Organizer.RestorePlan? _pendingRestorePreview;
@@ -104,6 +110,8 @@ public sealed class MainWindow : Window, IDisposable
     {
         using var theme = PluginTheme.Push();
 
+        ConsumeCompletionIfNew();
+
         DrawRecoveryPanelIfNeeded();
 
         if (_lastError != null)
@@ -123,6 +131,46 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         _fileDialogManager.Draw();
+    }
+
+    // The single place an operation completion turns into UI consequences. Guarded by a generation
+    // comparison rather than a per-kind latch, so a terminal snapshot that stays published for many
+    // frames is consumed exactly once, and recovery successors are consumed by the same code as
+    // ordinary operations rather than needing their own polling.
+    //
+    // DELIBERATE BEHAVIOUR CHANGE, the one exception to this plan's behaviour-preserving rule: the
+    // old latches lived inside tab draw methods that early-return when their tab is not selected,
+    // so completion consequences waited until the user visited the right tab. This consumer fires
+    // on the frame completion is first observed, whatever tab is visible. Deferred consumption was
+    // itself a latent staleness bug (a completed Apply's RunScan would not happen until a tab
+    // visit), so immediate consumption is adopted knowingly rather than reproduced.
+    private void ConsumeCompletionIfNew()
+    {
+        var state = _plugin.OperationController.State;
+        if (state.CompletionGeneration <= _lastConsumedCompletion)
+            return;
+
+        _lastConsumedCompletion = state.CompletionGeneration;
+
+        // Every operation appended a pre-operation snapshot before it started, so any completion
+        // means history moved. Invalidating unconditionally is correct and removes the need to
+        // reason about which kinds mutate it.
+        _historyCache = null;
+
+        switch (state.Kind)
+        {
+            case Organizer.Operations.OperationType.Apply:
+                // Penumbra's own tree is now stale relative to what was just written, and
+                // OrganizerState's cached CurrentPath values are stale too - RunScan re-reads both.
+                RunScan();
+                if (state.SuccessfulTargets > 0)
+                    _pendingApplyReminder = true;
+                break;
+
+            case Organizer.Operations.OperationType.Restore:
+                RunScan(); // matches today's Restore completion block: cache null + RunScan, no popup
+                break;
+        }
     }
 
     private void DrawRecoveryPanelIfNeeded()
@@ -845,22 +893,12 @@ public sealed class MainWindow : Window, IDisposable
             .Count(m => !m.Protected && !string.Equals(m.ProposedPath, m.CurrentPath, StringComparison.OrdinalIgnoreCase));
 
         var operationState = _plugin.OperationController.State;
-        if (_applyOperationActive && operationState.Kind == Organizer.Operations.OperationType.Apply && operationState.CanStartApply)
+        if (_pendingApplyReminder)
         {
-            _applyOperationActive = false;
-            _historyCache = null; // StartApplyOperation() also captures a pre-apply snapshot - history changed
-            // The completed Apply moved mods via IPC directly, bypassing OrganizerState - its
-            // cached CurrentPath values are now stale. RunScan() re-reads from Penumbra and
-            // internally calls RefreshOrphanedFolders() itself, matching the same
-            // scan-after-mutation pattern Restore() already relies on.
-            RunScan();
-
-            // Penumbra doesn't always flush organization.json to disk immediately after SetModPath,
-            // so a freshly-emptied folder can still look occupied to Folder Cleanup (and still show
-            // in Penumbra's own tree) until the user triggers Rediscover Mods themselves - real
-            // in-game report, 2026-07-24. Only worth mentioning if the Apply actually moved something.
-            if (operationState.SuccessfulTargets > 0)
-                ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
+            _pendingApplyReminder = false;
+            // In-scope with this tab's BeginPopupModal - see the field's comment for why the
+            // consumer cannot call this itself.
+            ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
         }
 
         ImGui.BeginDisabled(result.HasIssues || !operationState.CanStartApply);
@@ -941,12 +979,6 @@ public sealed class MainWindow : Window, IDisposable
             return;
 
         var operationState = _plugin.OperationController.State;
-        if (_restoreOperationActive && operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.CanStartRestore)
-        {
-            _restoreOperationActive = false;
-            _historyCache = null;
-            RunScan();
-        }
 
         ImGui.InputText("Label (optional)", ref _createBackupLabelInput, 200);
         ImGui.SameLine();
@@ -1065,13 +1097,10 @@ public sealed class MainWindow : Window, IDisposable
             }
         }
 
-        if (_restoreOperationActive)
-        {
-            if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
-                DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore");
-            else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
-                ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
-        }
+        if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
+            DrawOperationProgress(operationState, "Restoring", _plugin.RequestCancellation, "##cancel-restore");
+        else if (operationState.Kind == Organizer.Operations.OperationType.Restore && operationState.RequiresRecovery)
+            ImGui.TextColored(PluginTheme.CollisionBad, "Restore requires recovery - see the plugin log.");
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -1271,7 +1300,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             _plugin.StartRestoreOperation(snapshotId);
             _lastError = null;
-            _restoreOperationActive = true;
+            _historyCache = null; // the pre-operation snapshot was just appended
         }
         catch (Exception ex)
         {
@@ -1286,14 +1315,6 @@ public sealed class MainWindow : Window, IDisposable
         {
             _plugin.ResolveContinue();
             _lastError = null;
-            // The successor's type isn't known until after it's started (an interrupted Apply's
-            // Continue is Apply-type, an interrupted Restore's Continue is Restore-type) - read it
-            // back from the now-active operation rather than guessing from the interrupted one.
-            var kind = _plugin.OperationController.State.Kind;
-            if (kind == Organizer.Operations.OperationType.Apply)
-                _applyOperationActive = true;
-            else if (kind == Organizer.Operations.OperationType.Restore)
-                _restoreOperationActive = true;
             return true;
         }
         catch (Exception ex)
@@ -1310,7 +1331,6 @@ public sealed class MainWindow : Window, IDisposable
         {
             _plugin.ResolveRestorePreviousState();
             _lastError = null;
-            _restoreOperationActive = true; // always Restore-type regardless of the interrupted operation's own type
             return true;
         }
         catch (Exception ex)
@@ -1612,7 +1632,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             _plugin.StartApplyOperation();
             _lastError = null;
-            _applyOperationActive = true;
+            _historyCache = null; // the pre-operation snapshot was just appended
         }
         catch (Exception ex)
         {
