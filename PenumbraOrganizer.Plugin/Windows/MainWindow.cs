@@ -35,7 +35,6 @@ public sealed class MainWindow : Window, IDisposable
     private bool _applyOperationActive;
     private bool _restoreOperationActive;
     private string _createBackupLabelInput = string.Empty;
-    private IReadOnlyList<Organizer.RestoreResult>? _lastRestoreResults;
     private Guid? _pendingRestoreSnapshotId;
     private Organizer.RestorePlan? _pendingRestorePreview;
     private IReadOnlyList<Organizer.Operations.OperationJournal> _recentOperations = [];
@@ -1066,21 +1065,6 @@ public sealed class MainWindow : Window, IDisposable
             }
         }
 
-        if (_lastRestoreResults is not null)
-        {
-            ImGui.Spacing();
-            ImGui.Separator();
-            var moved = _lastRestoreResults.Count(r => r.Outcome == Organizer.RestoreOutcome.Moved);
-            var rootRelocated = _lastRestoreResults.Count(r => r.Outcome == Organizer.RestoreOutcome.RootRelocated);
-            var skippedUninstalled = _lastRestoreResults.Count(r => r.Outcome == Organizer.RestoreOutcome.SkippedUninstalled);
-            var failed = _lastRestoreResults.Count(r => r.Outcome == Organizer.RestoreOutcome.Failed);
-            ImGui.TextUnformatted(
-                $"Restore: {moved} moved, {rootRelocated} relocated to root, {skippedUninstalled} skipped (uninstalled), " +
-                $"{failed} failed.");
-            foreach (var failure in _lastRestoreResults.Where(r => r.Outcome == Organizer.RestoreOutcome.Failed))
-                ImGui.TextColored(PluginTheme.CollisionBad, $"  {failure.Identifier}: {failure.FailureReason}");
-        }
-
         if (_restoreOperationActive)
         {
             if (operationState.Kind == Organizer.Operations.OperationType.Restore && !operationState.CanStartRestore && !operationState.RequiresRecovery)
@@ -1287,11 +1271,6 @@ public sealed class MainWindow : Window, IDisposable
         {
             _plugin.StartRestoreOperation(snapshotId);
             _lastError = null;
-            // Cleared immediately, not left to display a previous restore's results while this one
-            // is in flight - Config.LastRestore/a displayed RestoreResult list are Plan E's job to
-            // populate from the new async path; this plan's job is only making sure the tab doesn't
-            // show stale, misattributed data in the meantime.
-            _lastRestoreResults = null;
             _restoreOperationActive = true;
         }
         catch (Exception ex)
@@ -1695,7 +1674,7 @@ public sealed class MainWindow : Window, IDisposable
         sb.AppendLine();
 
         sb.AppendLine("== Last Restore result ==");
-        sb.AppendLine(Organizer.DiagnosticSummaryFormatter.FormatRestoreSection(_lastRestoreResults, _plugin.Config.LastRestore));
+        sb.AppendLine(Organizer.DiagnosticSummaryFormatter.FormatRestoreSection(null, _plugin.Config.LastRestore));
         sb.AppendLine();
 
         sb.AppendLine("== Last Folder Cleanup result ==");
