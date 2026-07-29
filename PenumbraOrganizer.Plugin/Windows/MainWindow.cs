@@ -32,7 +32,6 @@ public sealed class MainWindow : Window, IDisposable
     private string? _lastWorkbookExportPath;
     private int _workbookStrategyIndex = 2; // "By Type Then Creator" default
     private Organizer.WorkbookImportResultView? _lastWorkbookImportResult;
-    private IReadOnlyList<Organizer.ApplyResult>? _lastApplyResults;
     private bool _applyOperationActive;
     private bool _restoreOperationActive;
     private string _createBackupLabelInput = string.Empty;
@@ -1688,7 +1687,11 @@ public sealed class MainWindow : Window, IDisposable
         sb.AppendLine();
 
         sb.AppendLine("== Last Apply result ==");
-        sb.AppendLine(Organizer.DiagnosticSummaryFormatter.FormatApplySection(_lastApplyResults, _plugin.Config.LastApply));
+        // No session-results argument: the field that used to carry it was never assigned once the
+        // async operation engine replaced the synchronous Apply path, so this section has been
+        // driven entirely by the persisted Config.LastApply summary since then. Reconstructing a
+        // live per-mod result list from the operation bundle is Plan E territory, not this cleanup's.
+        sb.AppendLine(Organizer.DiagnosticSummaryFormatter.FormatApplySection(null, _plugin.Config.LastApply));
         sb.AppendLine();
 
         sb.AppendLine("== Last Restore result ==");

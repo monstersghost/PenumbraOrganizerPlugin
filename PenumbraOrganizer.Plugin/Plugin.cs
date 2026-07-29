@@ -79,8 +79,9 @@ public sealed class Plugin : IDalamudPlugin
         _npcNameRefreshService = new Organizer.NpcNames.NpcNameRefreshService(
             new Organizer.NpcNames.NpcWikiScraper(_npcHttpClient));
 
-        // Observe live changes. SetModPath is now called from ApplyChanges/Restore only,
-        // gated on OrganizerState.Validate() showing no issues (see those methods below).
+        // Observe live changes. SetModPath is now reached only through the operation engine
+        // (StartApplyOperation/StartRestoreOperation -> OperationController -> PathMutationOperation),
+        // gated on OrganizerState.Validate() showing no issues.
         _modAdded = ModAdded.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod added: {dir}"));
         _modDeleted = ModDeleted.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod deleted: {dir}"));
         _modMoved = ModMoved.Subscriber(PluginInterface,
@@ -369,79 +370,6 @@ public sealed class Plugin : IDalamudPlugin
 
     internal bool FolderBackupExists => File.Exists(FolderBackupFilePath);
 
-    [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
-    internal IReadOnlyList<Organizer.ApplyResult> ApplyChanges()
-    {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        _operationInProgress = true;
-        try
-        {
-            var validation = OrganizerState.Validate();
-            if (validation.HasIssues)
-                throw new InvalidOperationException("Cannot Apply while Validate() reports issues.");
-
-            // Equivalence, not raw string equality: a path differing only by a transient " (N)"
-            // duplicate marker (or Penumbra's own name-trimming) is the same persisted location —
-            // moving it would be a no-op write that Penumbra reshuffles on the next reload anyway.
-            var touchedRows = OrganizerState.Mods
-                .Where(m => !m.Protected && !Organizer.PenumbraPathSemantics.AreEquivalent(m.CurrentPath, m.ProposedPath, m.Name))
-                .ToList();
-
-            var folderCollisions = Organizer.ApplyPlanner.FolderPathCollisions(touchedRows, ReadExistingOrganizationFolderPaths());
-            if (folderCollisions.Count > 0)
-                throw new InvalidOperationException(
-                    "Cannot Apply: the proposed path for the following mods matches an existing (likely orphaned) " +
-                    "folder entry in Penumbra's organization.json, which Penumbra's own SetModPath will reject: " +
-                    $"{string.Join(", ", folderCollisions)}. Run Folder Cleanup on the Review Changes tab to prune " +
-                    "orphaned folders, then try Apply again.");
-
-            var currentMods = ReadCurrentMods();
-            var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label: null, $"{touchedRows.Count} mods moved");
-            Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
-
-            // From here on, a snapshot has already been captured - an unexpected exception must
-            // still leave a diagnostic trail behind (tester report: prior-session Apply results
-            // were silently lost on reload), not just bubble up with the outcome unrecorded.
-            List<Organizer.ApplyResult> results;
-            try
-            {
-                var moves = touchedRows
-                    .Select(r => new Organizer.ModMove(r.Identifier, r.CurrentPath, r.ProposedPath))
-                    .ToList();
-                var failureByIdentifier = ExecuteOrderedMoves(moves);
-                results = touchedRows
-                    .Select(r => new Organizer.ApplyResult(
-                        r.Identifier, !failureByIdentifier.ContainsKey(r.Identifier), failureByIdentifier.GetValueOrDefault(r.Identifier)))
-                    .ToList();
-            }
-            catch (Exception)
-            {
-                Config.LastApply = new Organizer.ApplyOperationSummary(
-                    DateTimeOffset.Now, Organizer.OperationCompletionStatus.Failed, Succeeded: 0, Failed: touchedRows.Count);
-                PluginInterface.SavePluginConfig(Config);
-                throw;
-            }
-
-            var applySucceeded = results.Count(r => r.Success);
-            var applyStatus = results.Count == 0 || applySucceeded == results.Count
-                ? Organizer.OperationCompletionStatus.Succeeded
-                : applySucceeded == 0
-                    ? Organizer.OperationCompletionStatus.Failed
-                    : Organizer.OperationCompletionStatus.PartiallySucceeded;
-            Config.LastApply = new Organizer.ApplyOperationSummary(
-                DateTimeOffset.Now, applyStatus, applySucceeded, results.Count - applySucceeded);
-            PluginInterface.SavePluginConfig(Config);
-
-            RunScan();
-            return results;
-        }
-        finally
-        {
-            _operationInProgress = false;
-        }
-    }
-
     internal void StartApplyOperation()
     {
         if (_operationInProgress)
@@ -604,94 +532,6 @@ public sealed class Plugin : IDalamudPlugin
             RunScan();
     }
 
-    [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
-    internal IReadOnlyList<Organizer.RestoreResult> Restore(Guid snapshotId)
-    {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        _operationInProgress = true;
-        try
-        {
-            var history = Organizer.RollbackHistory.Load(HistoryFilePath);
-            var target = history.FirstOrDefault(s => s.Id == snapshotId)
-                ?? throw new InvalidOperationException("Snapshot not found.");
-
-            var currentMods = ReadCurrentMods();
-
-            // Pre-restore snapshot makes the restore itself undoable - captured and persisted
-            // before any moves happen, same as Apply's own pre-operation capture.
-            var preRestoreLabel = target.Label ?? target.CreatedAt.ToString("u");
-            var preRestoreSnapshot = Organizer.RollbackHistory.CaptureSnapshot(
-                currentMods, label: null, autoDescription: $"Snapshot before restoring to \"{preRestoreLabel}\"");
-            Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, preRestoreSnapshot);
-
-            // Current protection state (individual, folder, or Heliosphere) is deliberately
-            // never passed to BuildRestorePlan for mods present in the snapshot - see its doc
-            // comment and this plan's Global Constraints for why (tester report, Bug 3).
-            var plan = Organizer.RollbackHistory.BuildRestorePlan(target, currentMods);
-
-            // From here on, a pre-restore snapshot has already been captured - an unexpected
-            // exception must still leave a diagnostic trail behind, same reasoning as ApplyChanges().
-            List<Organizer.RestoreResult> results;
-            try
-            {
-                var failureByIdentifier = ExecuteOrderedMoves(plan.Moves);
-
-                results = new List<Organizer.RestoreResult>();
-                foreach (var identifier in plan.UnchangedIdentifiers)
-                    results.Add(new Organizer.RestoreResult(identifier, Organizer.RestoreOutcome.Unchanged, null));
-                foreach (var identifier in plan.SkippedUninstalledIdentifiers)
-                    results.Add(new Organizer.RestoreResult(identifier, Organizer.RestoreOutcome.SkippedUninstalled, null));
-
-                var rootRelocatedIds = plan.RootRelocatedIdentifiers.ToHashSet(StringComparer.Ordinal);
-                foreach (var move in plan.Moves)
-                {
-                    var failed = failureByIdentifier.TryGetValue(move.Identifier, out var reason);
-                    var outcome = failed
-                        ? Organizer.RestoreOutcome.Failed
-                        : rootRelocatedIds.Contains(move.Identifier)
-                            ? Organizer.RestoreOutcome.RootRelocated
-                            : Organizer.RestoreOutcome.Moved;
-                    results.Add(new Organizer.RestoreResult(move.Identifier, outcome, failed ? reason : null));
-                }
-            }
-            catch (Exception)
-            {
-                // Failed: plan.Moves.Count is a coarse approximation, not a true per-move outcome -
-                // some moves may have already succeeded before the exception. This diagnostic
-                // summary treats the whole batch as failed rather than tracking a partial count.
-                Config.LastRestore = new Organizer.RestoreOperationSummary(
-                    DateTimeOffset.Now, Organizer.OperationCompletionStatus.Failed,
-                    Moved: 0, Unchanged: 0, SkippedUninstalled: 0, RootRelocated: 0, Failed: plan.Moves.Count);
-                PluginInterface.SavePluginConfig(Config);
-                throw;
-            }
-
-            var failedCount = results.Count(r => r.Outcome == Organizer.RestoreOutcome.Failed);
-            var restoreStatus = failedCount == 0
-                ? Organizer.OperationCompletionStatus.Succeeded
-                : failedCount == plan.Moves.Count
-                    ? Organizer.OperationCompletionStatus.Failed
-                    : Organizer.OperationCompletionStatus.PartiallySucceeded;
-            Config.LastRestore = new Organizer.RestoreOperationSummary(
-                DateTimeOffset.Now,
-                restoreStatus,
-                Moved: results.Count(r => r.Outcome == Organizer.RestoreOutcome.Moved),
-                Unchanged: results.Count(r => r.Outcome == Organizer.RestoreOutcome.Unchanged),
-                SkippedUninstalled: results.Count(r => r.Outcome == Organizer.RestoreOutcome.SkippedUninstalled),
-                RootRelocated: results.Count(r => r.Outcome == Organizer.RestoreOutcome.RootRelocated),
-                Failed: failedCount);
-            PluginInterface.SavePluginConfig(Config);
-
-            RunScan();
-            return results;
-        }
-        finally
-        {
-            _operationInProgress = false;
-        }
-    }
-
     // Read-only: computes what a Restore would do without capturing a snapshot or moving
     // anything, so the confirmation popup can show currently-protected/Heliosphere-managed mods
     // that will nevertheless move under this plan's Bug 3 fix, before the user commits to it.
@@ -702,31 +542,6 @@ public sealed class Plugin : IDalamudPlugin
             ?? throw new InvalidOperationException("Snapshot not found.");
         var currentMods = ReadCurrentMods();
         return Organizer.RollbackHistory.BuildRestorePlan(target, currentMods);
-    }
-
-    // Runs a cycle-safe ordered set of SetModPath calls and reports, per identifier, the first
-    // failure it hit (skipping any later step for an identifier once one of its steps has failed,
-    // since a mod parked mid-cycle can't reach its real target if its own earlier hop failed).
-    [Obsolete("Legacy synchronous path, superseded by the async operation engine. Do not call.", error: true)]
-    private Dictionary<string, string> ExecuteOrderedMoves(IReadOnlyList<Organizer.ModMove> moves)
-    {
-        var steps = Organizer.ApplyPlanner.OrderMovesForApply(moves);
-        var failureByIdentifier = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var step in steps)
-        {
-            if (failureByIdentifier.ContainsKey(step.Identifier))
-                continue;
-            var ec = SetModPathIpc.Invoke(step.Identifier, step.TargetPath, "");
-            if (ec != Penumbra.Api.Enums.PenumbraApiEc.Success)
-                failureByIdentifier[step.Identifier] = ec.ToString();
-        }
-        return failureByIdentifier;
-    }
-
-    private Dictionary<string, string> ReadCurrentModPaths()
-    {
-        using var modList = GetModListAdapterIpc.Invoke();
-        return modList.ToDictionary(m => m.Identifier, m => m.FullPath, StringComparer.Ordinal);
     }
 
     private List<Organizer.LiveMod> ReadCurrentMods()
