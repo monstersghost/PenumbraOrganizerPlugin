@@ -154,6 +154,25 @@ private void ConsumeCompletionIfNew()
 Recovery successors reach terminal through the same path and are consumed by the same code, which is
 what the brief asks for and what the current per-kind latches cannot do.
 
+### A gap this exposes, which the brief does not mention
+
+Completion is not the only moment history changes. `StartApplyOperation` and
+`StartRestoreOperation` append a `RollbackSnapshot` **before** the operation begins
+(`Plugin.cs:470-471`, `:532`). Today's invalidation fires only at completion, so an operation that
+never completes — one that ends in `RequiresRecovery` and is then resolved via `Keep Current`, which
+clears `_active` without ever publishing a terminal state — leaves a real history entry behind an
+unrefreshed cache.
+
+Invalidation therefore happens at **three** points, all in `MainWindow`, all explicit:
+
+1. A new completion generation (the consumer above).
+2. A successful `StartApplyOperation`/`StartRestoreOperation` call, because that is when the
+   pre-operation snapshot is appended.
+3. Manual backup, delete, and relabel, which are synchronous UI actions and already invalidate.
+
+Point 2 is new. It is a pre-existing gap being fixed in passing, not a regression introduced by this
+design, and it is worth a test.
+
 ### Deletions
 
 - `MainWindow._applyOperationActive`, `_restoreOperationActive` (`:36-37`) and the two inference
