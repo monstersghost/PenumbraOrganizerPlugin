@@ -29,6 +29,8 @@ public class OperationControllerTests
         IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink? diagnostics = null, string? operationsRoot = null) =>
         new(adapter, clock, diagnostics ?? new NoOpDiagnosticsSink(), TimeSpan.FromMilliseconds(4), operationsRoot ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
 
+    private static string NewBundleDirectory() => Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
     [Fact]
     public void State_Initially_IdleWithCanStartApplyTrue()
     {
@@ -2152,5 +2154,105 @@ public class OperationControllerTests
 
         Assert.Equal(2, blocked.Count);
         Assert.DoesNotContain(blocked, b => b.OperationId == idC);
+    }
+
+    [Fact]
+    public void TryStart_WhenIdle_StartsTheOperation()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        var result = controller.TryStart(OperationType.Apply,
+            () => new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory()));
+
+        Assert.True(result.Started);
+        Assert.Null(result.RejectionReason);
+        Assert.False(controller.State.CanStartApply);
+    }
+
+    [Fact]
+    public void TryStart_WhileActive_IsRejectedWithoutInvokingPrepare()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        controller.TryStart(OperationType.Apply,
+            () => new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory()));
+
+        var prepareCalls = 0;
+        var result = controller.TryStart(OperationType.Apply, () =>
+        {
+            prepareCalls++;
+            return new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory());
+        });
+
+        Assert.False(result.Started);
+        Assert.NotNull(result.RejectionReason);
+        Assert.Equal(0, prepareCalls);
+    }
+
+    [Fact]
+    public void TryStart_WhenPrepareThrows_PropagatesAndLeavesTheControllerStartable()
+    {
+        // This is the whole point of inverting preparation: a failed plan build must not lock the
+        // controller. _operationInProgress could, which is why it needed a catch at every call site.
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        var thrown = Assert.Throws<InvalidOperationException>(() =>
+            controller.TryStart(OperationType.Apply,
+                () => throw new InvalidOperationException("plan build failed")));
+
+        Assert.Equal("plan build failed", thrown.Message);
+        Assert.True(controller.State.CanStartApply);
+
+        // And a real start still works afterwards.
+        var result = controller.TryStart(OperationType.Apply,
+            () => new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory()));
+        Assert.True(result.Started);
+    }
+
+    [Fact]
+    public void TryStart_FromInsidePrepare_IsRejected()
+    {
+        // The preparation window is exactly what _operationInProgress existed to cover: the
+        // controller is not yet "active", but real, failure-prone work is in flight.
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        OperationStartResult? reentrant = null;
+
+        controller.TryStart(OperationType.Apply, () =>
+        {
+            reentrant = controller.TryStart(OperationType.Restore,
+                () => new PreparedOperation(SinglePlan(type: OperationType.Restore), Guid.NewGuid(), NewBundleDirectory()));
+            return new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory());
+        });
+
+        Assert.NotNull(reentrant);
+        Assert.False(reentrant!.Started);
+    }
+
+    [Fact]
+    public void TryStart_WhenTheExternalGateBlocks_IsRejectedWithTheGatesReason()
+    {
+        var controller = new OperationController(
+            new FakePenumbraOperations(), new FakeClock(), new NoOpDiagnosticsSink(),
+            TimeSpan.FromMilliseconds(4), NewBundleDirectory(),
+            externalActivityGate: () => "A scan is already running.");
+
+        var result = controller.TryStart(OperationType.Apply,
+            () => new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory()));
+
+        Assert.False(result.Started);
+        Assert.Equal("A scan is already running.", result.RejectionReason);
+    }
+
+    [Fact]
+    public void TryStart_WhenTheExternalGateAllows_Starts()
+    {
+        var controller = new OperationController(
+            new FakePenumbraOperations(), new FakeClock(), new NoOpDiagnosticsSink(),
+            TimeSpan.FromMilliseconds(4), NewBundleDirectory(),
+            externalActivityGate: () => null);
+
+        var result = controller.TryStart(OperationType.Apply,
+            () => new PreparedOperation(SinglePlan(), Guid.NewGuid(), NewBundleDirectory()));
+
+        Assert.True(result.Started);
     }
 }

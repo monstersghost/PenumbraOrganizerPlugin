@@ -102,15 +102,28 @@ public sealed class OperationController
     private IReadOnlyDictionary<Guid, OperationJournal>? _blockedMultiRootJournals;
     private bool _stopRequested;
 
+    private readonly Func<string?>? _externalActivityGate;
+
+    // Covers the window between "a caller has been admitted" and "an operation exists". The
+    // preparation step reads live mods over IPC, captures a rollback snapshot, and appends it to
+    // history - real, failure-prone work during which _active is legitimately null. This is the
+    // window Plugin._operationInProgress existed to cover; owning it here is what lets that flag go.
+    // Not a second state machine: no transitions, never published directly, only consulted by
+    // AdmissionRejectionReason.
+    private bool _starting;
+
     public OperationStateSnapshot State { get; private set; } = OperationStateSnapshot.Idle;
 
-    public OperationController(IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink diagnostics, TimeSpan frameBudget, string operationsRoot)
+    public OperationController(
+        IPenumbraOperations adapter, IElapsedTimeSource clock, IDiagnosticsSink diagnostics,
+        TimeSpan frameBudget, string operationsRoot, Func<string?>? externalActivityGate = null)
     {
         _adapter = adapter;
         _clock = clock;
         _diagnostics = diagnostics;
         _frameBudget = frameBudget;
         _operationsRoot = operationsRoot;
+        _externalActivityGate = externalActivityGate;
     }
 
     public void StartApply(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
@@ -118,6 +131,44 @@ public sealed class OperationController
 
     public void StartRestore(OperationPlan plan, Guid snapshotId, string bundleDirectory) =>
         StartOperation(plan, snapshotId, bundleDirectory, OperationType.Restore);
+
+    /// <summary> Null when a new operation may begin; otherwise the reason it may not. </summary>
+    public string? AdmissionRejectionReason()
+    {
+        if (_starting)
+            return "Another organizer operation is already starting.";
+        if (_active is { } active && !CanStartNext(active.Journal, active.RequiresRecovery))
+            return "Another organizer operation is already in progress.";
+        if (_pendingRecovery is not null || _blockedMultiRootGraph is not null)
+            return "An interrupted operation requires recovery before anything else can run.";
+
+        return _externalActivityGate?.Invoke();
+    }
+
+    /// <summary>
+    /// Admission plus failure-atomic startup. The caller's preparation runs INSIDE the admitted
+    /// window, so a second caller cannot slip in while a plan is being built, and a preparation
+    /// that throws releases the window on the way out rather than leaving the controller locked.
+    /// Exceptions from <paramref name="prepare"/> propagate unchanged - callers that already
+    /// translate them into user-facing errors keep working untouched.
+    /// </summary>
+    public OperationStartResult TryStart(OperationType type, Func<PreparedOperation> prepare)
+    {
+        if (AdmissionRejectionReason() is { } reason)
+            return OperationStartResult.Rejected(reason);
+
+        _starting = true;
+        try
+        {
+            var prepared = prepare();
+            StartOperation(prepared.Plan, prepared.SnapshotId, prepared.BundleDirectory, type);
+            return OperationStartResult.Ok;
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
 
     // Shared by PublishState's canStartNew derivation and this admission guard, so the two can never
     // independently drift apart - previously each was written separately as its own inline boolean
