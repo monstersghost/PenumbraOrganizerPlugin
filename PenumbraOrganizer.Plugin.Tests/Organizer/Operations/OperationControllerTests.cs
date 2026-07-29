@@ -2383,6 +2383,67 @@ public class OperationControllerTests
     }
 
     [Fact]
+    public void CompletionGeneration_ResolveContinue_DoesNotIncrementWhileSuccessorIsInFlight()
+    {
+        // Finding 1 of the final review: StartRecoverySuccessorOrThrow used to call
+        // NoteTerminalIfNew on the resolved parent journal even though the successor it just
+        // started is already durably running and non-terminal. That resolution is a hand-off,
+        // not an ending, and must not bump the counter on its own.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, _, _) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+            Assert.Equal(0, controller.State.CompletionGeneration);
+
+            controller.ResolveContinue();
+
+            Assert.Equal(OperationStage.Mutating, controller.State.Stage); // successor still in flight, not terminal
+            Assert.Equal(0, controller.State.CompletionGeneration);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CompletionGeneration_ResolveContinue_FullLifecycle_RisesByExactlyOne()
+    {
+        // The successor's own arrival at terminal, via PublishState, supplies the single increment
+        // for the whole hand-off - the resolved parent journal must not supply a second one.
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var adapter = new FakePenumbraOperations();
+            var interruptedPlan = OperationPlan.Create(OperationType.Apply,
+                [new(0, "mod-a", "Weapons/A", OperationStepKind.FinalMove, 0)], [new("mod-a", "Gear/A", "Weapons/A", "mod-a")]);
+            var (controller, _, _) = SetUpPendingContinue(adapter, new FakeClock(), dir.FullName, interruptedPlan);
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Gear/A", false)])));
+            adapter.EnqueueSetModPathResult(Success);
+            adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.Success));
+            adapter.EnqueueLiveModRead(new LiveModReadResult(LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+            controller.ResolveContinue();
+            Assert.Equal(0, controller.State.CompletionGeneration);
+
+            controller.Update(); // Mutating -> Refreshing
+            controller.Update(); // Refreshing -> Verifying
+            controller.Update(); // Verifying -> Completed
+
+            Assert.Equal(OperationStage.Completed, controller.State.Stage);
+            Assert.Equal(1, controller.State.CompletionGeneration);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void OperationId_IsPublishedForTheActiveOperation()
     {
         var controller = NewController(new FakePenumbraOperations(), new FakeClock());

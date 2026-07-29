@@ -119,13 +119,17 @@ long CompletionGeneration      // incremented exactly once per operation reachin
 `CompletionGeneration` starts at 0 and is incremented the first time a given operation becomes
 terminal. **Not by `PublishState` alone** — an early draft of this design assumed that, and it is
 wrong. `IsTerminal` includes `Resolution != OperationResolution.None`, and every Resolution-driven
-conclusion (Keep Current on both its branches, a recovery successor's resolved parent, and
-blocked-multi-root accept-all) clears its in-memory context *before* publishing, so `PublishState`
-would never see those journals. The increment therefore lives in a `NoteTerminalIfNew(journal)`
-helper called from `PublishState`'s active branch **and** from each Resolution site before that site
-clears its context. Keying on `OperationId` makes a duplicate call a no-op. Novelty is then a numeric comparison rather than an inference from
-`Kind` and `Stage`, which is what makes re-rendering the same terminal snapshot free of side
-effects.
+conclusion that genuinely ends work (Keep Current on both its branches, and blocked-multi-root
+accept-all) clears its in-memory context *before* publishing, so `PublishState` would never see
+those journals. The increment therefore lives in a `NoteTerminalIfNew(journal)` helper called from
+`PublishState`'s active branch **and** from each such Resolution site before that site clears its
+context. A recovery successor's resolved parent is the deliberate exception: that resolution hands
+off to a successor operation already durably running rather than ending the work, so it must not
+call `NoteTerminalIfNew` — the successor supplies the single increment itself when it reaches its
+own terminal state through `PublishState`. The governing rule is hand-off versus ending: count a
+resolution when it ends the work, not when it hands off. Keying on `OperationId` makes a duplicate
+call a no-op. Novelty is then a numeric comparison rather than an inference from `Kind` and `Stage`,
+which is what makes re-rendering the same terminal snapshot free of side effects.
 
 `OperationId` is carried for diagnostics and log correlation; it is not what the UI compares. A Guid
 cannot express "newer than", and the UI needs ordering, not identity.
@@ -144,9 +148,10 @@ private void ConsumeCompletionIfNew()
 
     _lastConsumedCompletion = state.CompletionGeneration;
 
-    // Item 7 collapses to this one line. Every operation that reaches terminal has either
-    // appended a pre-operation snapshot or could have; invalidating unconditionally is correct
-    // and cheap, and removes the need to reason about which kinds mutate history.
+    // Item 7 collapses to this one line. A completion may mean history moved - most operations
+    // append a pre-operation snapshot before they start, but recovery successors write theirs
+    // only into the operation bundle. Invalidating unconditionally is correct and cheap, and
+    // removes the need to reason about which kinds mutate history.
     _historyCache = null;
 
     switch (state.Kind)

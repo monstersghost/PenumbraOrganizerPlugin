@@ -507,7 +507,9 @@ public sealed class OperationController
                 UpdatedAt = DateTimeOffset.UtcNow,
             };
             OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
-            NoteTerminalIfNew(resolvedInterruptedJournal);
+            // Do not NoteTerminalIfNew here: this resolution hands off to the successor rather than
+            // ending the work. It only counts when work ends; a hand-off's completion is counted once,
+            // by the successor itself when it reaches its own terminal state via PublishState.
             TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal);
         }
         catch (Exception ex)

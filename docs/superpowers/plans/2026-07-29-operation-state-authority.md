@@ -13,7 +13,7 @@
 
 ## Global Constraints
 
-- **This is a behaviour-preserving refactor, with two named exceptions.** No user-visible behaviour, recovery semantics, diagnostics output, or persisted format changes, and every exception message a caller can observe today remains observable with the same type and text — except: (1) completion consequences fire on the frame completion is observed rather than waiting for a tab visit (Task 5, documented there — the old deferral was itself a latent staleness bug), and (2) `CleanUpFolders`/`RollbackFolderCleanup` gain a domain-level admission guard they never had (Task 3 Step 4 — not user-visible, since the UI gate already prevents the click).
+- **This is a behaviour-preserving refactor, with three named exceptions.** No user-visible behaviour, recovery semantics, diagnostics output, or persisted format changes, and every exception message a caller can observe today remains observable with the same type and text — except: (1) completion consequences fire on the frame completion is observed rather than waiting for a tab visit (Task 5, documented there — the old deferral was itself a latent staleness bug), (2) `CleanUpFolders`/`RollbackFolderCleanup` gain a domain-level admission guard they never had (Task 3 Step 4 — not user-visible, since the UI gate already prevents the click), and (3) the Delete History Snapshot button in the History tab is now disabled during a pending recovery, where it previously remained clickable and failed with an error (final review fix — brought in line with the Create Backup and Restore buttons in the same tab, which were already gated this way).
 - Target framework `net10.0-windows7.0`; `ImplicitUsings` and `Nullable` enabled in both projects. Test project has `<Using Include="Xunit" />`, so `[Fact]` and `Assert` need no `using`.
 - Test namespaces mirror folder structure (`PenumbraOrganizer.Plugin.Tests.<Folder>`).
 - Build/test command: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`. Baseline before this plan: **800 passed, 0 failed**, one pre-existing `xUnit2017` analyzer warning in `ApplyPlannerTests.cs:306` that is not this plan's to fix.
@@ -628,15 +628,14 @@ Extract the guard into one private helper:
     }
 ```
 
-Call it from **five** places — in each Resolution case, before that site clears its context:
+Call it from **four** places — in each Resolution case, before that site clears its context:
 
 1. `PublishState`'s `_active` branch, immediately before the final `State = new OperationStateSnapshot(...)` assignment.
 2. `ResolveKeepCurrent`, pending-recovery branch.
 3. `ResolveKeepCurrent`, live-`_active` branch.
-4. `StartRecoverySuccessorOrThrow`, on the resolved **parent** journal.
-5. `TryResolveJournalAsKeepCurrent` — the shared extraction point behind both `AcceptAllAndCloseInterruptedOperations`'s loop and per-root resolution.
+4. `TryResolveJournalAsKeepCurrent` — the shared extraction point behind both `AcceptAllAndCloseInterruptedOperations`'s loop and per-root resolution.
 
-Recovery successors carry distinct `OperationId`s from their parents, so a parent's resolution and its successor's later completion are two separate increments. That is intended.
+`StartRecoverySuccessorOrThrow` resolves the parent journal but must **not** call `NoteTerminalIfNew` on it: that resolution hands off to a successor operation that is already durably running, rather than ending the work. The governing distinction is hand-off versus ending: count a resolution when it ends the work; do not count it when it hands off to a successor. The successor supplies the single increment when it itself reaches a terminal state and runs through `PublishState`.
 
 Pass `OperationId: journal.OperationId` and `CompletionGeneration: _completionGeneration` into the constructor call.
 

@@ -152,9 +152,9 @@ public sealed class MainWindow : Window, IDisposable
 
         _lastConsumedCompletion = state.CompletionGeneration;
 
-        // Every operation appended a pre-operation snapshot before it started, so any completion
-        // means history moved. Invalidating unconditionally is correct and removes the need to
-        // reason about which kinds mutate it.
+        // A completion may mean history moved - most operations append a pre-operation snapshot
+        // before they start, but recovery successors write theirs only into the operation bundle.
+        // Invalidating unconditionally avoids having to reason about which kinds mutate it.
         _historyCache = null;
 
         switch (state.Kind)
@@ -1036,7 +1036,12 @@ public sealed class MainWindow : Window, IDisposable
             }
 
             ImGui.SameLine();
-            if (ImGui.Button($"Delete##delete-{snapshot.Id}"))
+            ImGui.BeginDisabled(!operationState.CanCreateBackup);
+            var deleteButtonClicked = ImGui.Button($"Delete##delete-{snapshot.Id}");
+            ImGui.EndDisabled();
+            if (!operationState.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+            if (deleteButtonClicked)
             {
                 DeleteHistorySnapshot(snapshot.Id);
             }
