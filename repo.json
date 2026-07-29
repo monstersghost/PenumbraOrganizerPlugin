@@ -16,8 +16,8 @@
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "IsHide": "False",
-    "DownloadLinkInstall": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.1.0/PenumbraOrganizer.Plugin.zip",
-    "DownloadLinkUpdate": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.1.0/PenumbraOrganizer.Plugin.zip",
+    "DownloadLinkInstall": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.1.1/PenumbraOrganizer.Plugin.zip",
+    "DownloadLinkUpdate": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.1.1/PenumbraOrganizer.Plugin.zip",
     "IconUrl": "https://raw.githubusercontent.com/monstersghost/PenumbraOrganizerPlugin/main/PenumbraOrganizer.Plugin/images/icon.png"
   }
 ]
