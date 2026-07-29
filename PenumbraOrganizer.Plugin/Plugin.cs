@@ -36,7 +36,6 @@ public sealed class Plugin : IDalamudPlugin
     public LibrarySearch.ChangedItemIndex? LibraryIndex { get; private set; }
     public string? LibraryIndexError { get; private set; }
     internal Configuration Config = null!;
-    private bool _operationInProgress;
     private readonly WorkbookWorkflowService _workbookService;
     private readonly HttpClient _npcHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
@@ -127,17 +126,6 @@ public sealed class Plugin : IDalamudPlugin
     private void OnFrameworkUpdate(IFramework framework)
     {
         OperationController.Update();
-        if (_operationInProgress && (OperationController.State.CanStartApply || OperationController.State.RequiresRecovery))
-            _operationInProgress = false; // any async organizer operation (Apply or Restore) just reached
-                                           // a terminal, non-recovery stage - CanStartApply/CanStartRestore
-                                           // are guaranteed equal today (PublishState derives both from one
-                                           // shared canStartNew), so checking either detects completion of
-                                           // either operation type. If a future plan ever splits them apart
-                                           // per-type, this check must be revisited. Also clears on
-                                           // RequiresRecovery (Plan D2, review point 2) - an operation that
-                                           // needs recovery has stopped executing even though it isn't
-                                           // terminal, and _operationInProgress should track "is something
-                                           // executing," not "is there unresolved history."
     }
 
     public void RunScan()
@@ -322,34 +310,16 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void CreateBackup(string? label)
     {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        _operationInProgress = true;
-        try
-        {
-            var currentMods = ReadCurrentMods();
-            var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label, "Manual backup");
-            Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
-        }
-        finally
-        {
-            _operationInProgress = false;
-        }
+        EnsureAdmitted();
+        var currentMods = ReadCurrentMods();
+        var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label, "Manual backup");
+        Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
     }
 
     internal void DeleteHistorySnapshot(Guid id)
     {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        _operationInProgress = true;
-        try
-        {
-            Organizer.RollbackHistory.DeleteSnapshot(HistoryFilePath, id);
-        }
-        finally
-        {
-            _operationInProgress = false;
-        }
+        EnsureAdmitted();
+        Organizer.RollbackHistory.DeleteSnapshot(HistoryFilePath, id);
     }
 
     private string HistoryFilePath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-history.json");
@@ -372,103 +342,84 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void StartApplyOperation()
     {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-
-        var validation = OrganizerState.Validate();
-        if (validation.HasIssues)
-            throw new InvalidOperationException("Cannot Apply while Validate() reports issues.");
-
-        // Equivalence, not raw string equality - a path differing only by a transient " (N)"
-        // duplicate marker (or Penumbra's own name-trimming) is the same persisted location -
-        // moving it would be a no-op write that Penumbra reshuffles on the next reload anyway.
-        var touchedRows = OrganizerState.Mods
-            .Where(m => !m.Protected && !Organizer.PenumbraPathSemantics.AreEquivalent(m.CurrentPath, m.ProposedPath, m.Name))
-            .ToList();
-
-        var folderCollisions = Organizer.ApplyPlanner.FolderPathCollisions(touchedRows, ReadExistingOrganizationFolderPaths());
-        if (folderCollisions.Count > 0)
-            throw new InvalidOperationException(
-                "Cannot Apply: the proposed path for the following mods matches an existing (likely orphaned) " +
-                "folder entry in Penumbra's organization.json, which Penumbra's own SetModPath will reject: " +
-                $"{string.Join(", ", folderCollisions)}. Run Folder Cleanup on the Review Changes tab to prune " +
-                "orphaned folders, then try Apply again.");
-
-        var currentMods = ReadCurrentMods();
-        var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label: null, $"{touchedRows.Count} mods moved");
-        Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
-
-        var plan = Organizer.Operations.OperationPlanBuilder.BuildApplyPlan(touchedRows);
-        var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
-        Organizer.Operations.OperationPlanCodec.Save(Organizer.Operations.OperationBundlePaths.PlanPath(bundleDirectory), plan);
-        Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), snapshot);
-
-        _operationInProgress = true;
-        try
+        var result = OperationController.TryStart(Organizer.Operations.OperationType.Apply, () =>
         {
-            OperationController.StartApply(plan, snapshot.Id, bundleDirectory);
-        }
-        catch
-        {
-            _operationInProgress = false;
-            throw;
-        }
+            var validation = OrganizerState.Validate();
+            if (validation.HasIssues)
+                throw new InvalidOperationException("Cannot Apply while Validate() reports issues.");
+
+            // Equivalence, not raw string equality - a path differing only by a transient " (N)"
+            // duplicate marker (or Penumbra's own name-trimming) is the same persisted location -
+            // moving it would be a no-op write that Penumbra reshuffles on the next reload anyway.
+            var touchedRows = OrganizerState.Mods
+                .Where(m => !m.Protected && !Organizer.PenumbraPathSemantics.AreEquivalent(m.CurrentPath, m.ProposedPath, m.Name))
+                .ToList();
+
+            var folderCollisions = Organizer.ApplyPlanner.FolderPathCollisions(touchedRows, ReadExistingOrganizationFolderPaths());
+            if (folderCollisions.Count > 0)
+                throw new InvalidOperationException(
+                    "Cannot Apply: the proposed path for the following mods matches an existing (likely orphaned) " +
+                    "folder entry in Penumbra's organization.json, which Penumbra's own SetModPath will reject: " +
+                    $"{string.Join(", ", folderCollisions)}. Run Folder Cleanup on the Review Changes tab to prune " +
+                    "orphaned folders, then try Apply again.");
+
+            var currentMods = ReadCurrentMods();
+            var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label: null, $"{touchedRows.Count} mods moved");
+            Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
+
+            var plan = Organizer.Operations.OperationPlanBuilder.BuildApplyPlan(touchedRows);
+            var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
+            Organizer.Operations.OperationPlanCodec.Save(Organizer.Operations.OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), snapshot);
+
+            return new Organizer.Operations.PreparedOperation(plan, snapshot.Id, bundleDirectory);
+        });
+
+        if (!result.Started)
+            throw new InvalidOperationException(result.RejectionReason!);
     }
 
     internal void StartRestoreOperation(Guid snapshotId)
     {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        // Defense-in-depth alongside _operationInProgress, not a replacement for it: reads the
-        // controller's own authoritative state before any side effect below runs. A narrow TOCTOU gap
-        // remains between this check and OperationController.StartRestore's own admission guard,
-        // accepted rather than closed with a reservation API - both entry points only ever fire from
-        // a button click on the single UI thread, so the gap has no live trigger today.
-        if (!OperationController.State.CanStartRestore)
-            throw new InvalidOperationException("Another organizer operation is already in progress or requires recovery.");
-
-        var history = Organizer.RollbackHistory.Load(HistoryFilePath);
-        var target = history.FirstOrDefault(s => s.Id == snapshotId)
-            ?? throw new InvalidOperationException("Snapshot not found.");
-
-        var currentMods = ReadCurrentMods();
-
-        // Current protection state is deliberately never passed to BuildRestorePlan - unchanged
-        // reasoning from the synchronous Restore() path (tester report, Bug 3).
-        var restorePlan = Organizer.RollbackHistory.BuildRestorePlan(target, currentMods);
-        var namedMoves = Organizer.Operations.OperationPlanBuilder.BuildNamedMoves(restorePlan.Moves, currentMods);
-        var plan = Organizer.Operations.OperationPlanBuilder.BuildOperationPlan(Organizer.Operations.OperationType.Restore, namedMoves);
-
-        var preRestoreLabel = target.Label ?? target.CreatedAt.ToString("u");
-        var preRestoreSnapshot = Organizer.RollbackHistory.CaptureSnapshot(
-            currentMods, label: null, autoDescription: $"Snapshot before restoring to \"{preRestoreLabel}\"");
-
-        var resultSeed = new Organizer.Operations.RestoreResultSeed(
-            target, restorePlan.UnchangedIdentifiers, restorePlan.SkippedUninstalledIdentifiers, restorePlan.RootRelocatedIdentifiers);
-
-        var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
-        Organizer.Operations.OperationPlanCodec.Save(Organizer.Operations.OperationBundlePaths.PlanPath(bundleDirectory), plan);
-        Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), preRestoreSnapshot);
-        Organizer.Operations.OperationRestoreResultSeedCodec.Save(
-            Organizer.Operations.OperationBundlePaths.RestoreResultSeedPath(bundleDirectory), resultSeed);
-
-        // Everything above is pure computation or a bundle-local write; only after all of it succeeds
-        // does the operation become visible in the user-facing history file. This bounds the failure
-        // window that can leave a "Snapshot before restoring..." entry with no accompanying restore
-        // to failures below this line - a failure above can still leave partial bundle-local files
-        // with no history entry and no active operation, which is accepted residue (see Task 1).
-        Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, preRestoreSnapshot);
-
-        _operationInProgress = true;
-        try
+        var result = OperationController.TryStart(Organizer.Operations.OperationType.Restore, () =>
         {
-            OperationController.StartRestore(plan, preRestoreSnapshot.Id, bundleDirectory);
-        }
-        catch
-        {
-            _operationInProgress = false;
-            throw;
-        }
+            var history = Organizer.RollbackHistory.Load(HistoryFilePath);
+            var target = history.FirstOrDefault(s => s.Id == snapshotId)
+                ?? throw new InvalidOperationException("Snapshot not found.");
+
+            var currentMods = ReadCurrentMods();
+
+            // Current protection state is deliberately never passed to BuildRestorePlan - unchanged
+            // reasoning from the synchronous Restore() path (tester report, Bug 3).
+            var restorePlan = Organizer.RollbackHistory.BuildRestorePlan(target, currentMods);
+            var namedMoves = Organizer.Operations.OperationPlanBuilder.BuildNamedMoves(restorePlan.Moves, currentMods);
+            var plan = Organizer.Operations.OperationPlanBuilder.BuildOperationPlan(Organizer.Operations.OperationType.Restore, namedMoves);
+
+            var preRestoreLabel = target.Label ?? target.CreatedAt.ToString("u");
+            var preRestoreSnapshot = Organizer.RollbackHistory.CaptureSnapshot(
+                currentMods, label: null, autoDescription: $"Snapshot before restoring to \"{preRestoreLabel}\"");
+
+            var resultSeed = new Organizer.Operations.RestoreResultSeed(
+                target, restorePlan.UnchangedIdentifiers, restorePlan.SkippedUninstalledIdentifiers, restorePlan.RootRelocatedIdentifiers);
+
+            var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
+            Organizer.Operations.OperationPlanCodec.Save(Organizer.Operations.OperationBundlePaths.PlanPath(bundleDirectory), plan);
+            Organizer.Operations.OperationSnapshotCodec.Save(Organizer.Operations.OperationBundlePaths.SnapshotPath(bundleDirectory), preRestoreSnapshot);
+            Organizer.Operations.OperationRestoreResultSeedCodec.Save(
+                Organizer.Operations.OperationBundlePaths.RestoreResultSeedPath(bundleDirectory), resultSeed);
+
+            // Everything above is pure computation or a bundle-local write; only after all of it succeeds
+            // does the operation become visible in the user-facing history file. This bounds the failure
+            // window that can leave a "Snapshot before restoring..." entry with no accompanying restore
+            // to failures below this line - a failure above can still leave partial bundle-local files
+            // with no history entry and no active operation, which is accepted residue (see Task 1).
+            Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, preRestoreSnapshot);
+
+            return new Organizer.Operations.PreparedOperation(plan, preRestoreSnapshot.Id, bundleDirectory);
+        });
+
+        if (!result.Started)
+            throw new InvalidOperationException(result.RejectionReason!);
     }
 
     internal void ResolveKeepCurrent()
@@ -479,18 +430,8 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void ResolveContinue()
     {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        _operationInProgress = true;
-        try
-        {
-            OperationController.ResolveContinue();
-        }
-        catch
-        {
-            _operationInProgress = false;
-            throw;
-        }
+        EnsureAdmittedForRecoveryResolution();
+        OperationController.ResolveContinue();
         // No RunScan() here, unlike ResolveKeepCurrent/AcceptAll - this starts a new async operation,
         // which is polled to completion exactly like an ordinary Apply/Restore already is (Task 6's
         // MainWindow wiring) - RunScan() belongs there, not at the moment the operation merely starts.
@@ -498,18 +439,8 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void ResolveRestorePreviousState()
     {
-        if (_operationInProgress)
-            throw new InvalidOperationException("Another organizer operation is already in progress.");
-        _operationInProgress = true;
-        try
-        {
-            OperationController.ResolveRestorePreviousState();
-        }
-        catch
-        {
-            _operationInProgress = false;
-            throw;
-        }
+        EnsureAdmittedForRecoveryResolution();
+        OperationController.ResolveRestorePreviousState();
     }
 
     internal void AcceptAllAndCloseInterruptedOperations()
@@ -519,6 +450,24 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     internal void RequestCancellation() => OperationController.RequestCancellation();
+
+    // Throws rather than returning the result, deliberately: MainWindow's handlers already catch
+    // InvalidOperationException and surface the message via _lastError, so preserving the exception
+    // keeps this a behaviour-preserving refactor. The structured OperationStartResult is available
+    // for the UI to adopt later, when changing what the user sees is actually in scope.
+    internal void EnsureAdmitted()
+    {
+        if (OperationController.AdmissionRejectionReason() is { } reason)
+            throw new InvalidOperationException(reason);
+    }
+
+    // Recovery resolution is admitted despite _pendingRecovery - that is the state it exists to
+    // clear. It must still be excluded by an in-flight operation or another starting caller.
+    internal void EnsureAdmittedForRecoveryResolution()
+    {
+        if (OperationController.RecoveryResolutionRejectionReason() is { } reason)
+            throw new InvalidOperationException(reason);
+    }
 
     internal void ResolveOneMultiRootOperation(Guid operationId)
     {
@@ -601,6 +550,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal Organizer.FolderCleanupResult CleanUpFolders(IReadOnlySet<string> selectedPaths)
     {
+        EnsureAdmitted();
         // Fresh IPC read at write time — OrganizerState is only as fresh as the last scan and
         // can't see mods moved via Penumbra's own UI since then. Deliberately NOT RunScan(),
         // which would reset every ProposedPath and wipe staged sort proposals. If this throws
@@ -621,6 +571,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal Organizer.FolderRollbackResult RollbackFolderCleanup()
     {
+        EnsureAdmitted();
         var result = Organizer.FolderCleanupExecutor.ExecuteRollback(OrganizationJsonPath, FolderBackupFilePath);
 
         Config.LastFolderCleanupRollback = new Organizer.FolderCleanupRollbackOperationSummary(DateTimeOffset.Now, result.Status);

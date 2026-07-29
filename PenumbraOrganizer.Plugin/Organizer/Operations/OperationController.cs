@@ -145,6 +145,18 @@ public sealed class OperationController
         return _externalActivityGate?.Invoke();
     }
 
+    /// <summary> Admission for recovery resolution, which is allowed despite pending recovery
+    /// because clearing that state is its purpose. Every other exclusion still applies. </summary>
+    public string? RecoveryResolutionRejectionReason()
+    {
+        if (_starting)
+            return "Another organizer operation is already starting.";
+        if (_active is { } active && !CanStartNext(active.Journal, active.RequiresRecovery))
+            return "Another organizer operation is already in progress.";
+
+        return _externalActivityGate?.Invoke();
+    }
+
     /// <summary>
     /// Admission plus failure-atomic startup. The caller's preparation runs INSIDE the admitted
     /// window, so a second caller cannot slip in while a plan is being built, and a preparation
