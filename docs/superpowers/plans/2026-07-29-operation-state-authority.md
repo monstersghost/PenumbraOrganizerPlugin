@@ -609,15 +609,34 @@ Add fields beside `_starting`:
     private long _completionGeneration;
 ```
 
-In `PublishState`, immediately before the final `State = new OperationStateSnapshot(...)` assignment in the `_active is not null` branch:
+**Corrected during execution — the first draft of this step was wrong.** Placing the guard only inside `PublishState`'s `_active` branch silently misses every Resolution-driven conclusion: `IsTerminal` is `Resolution != OperationResolution.None || TerminalStages.Contains(Stage)`, and each Resolution site clears `_active`/`_pendingRecovery`/`_blockedMultiRootGraph` **before** calling `PublishState`, which then lands in an early-return branch that never touches the counter. Restructuring `PublishState` to inspect "whichever journal is reported" does not fix it either — Keep Current reports nothing at all.
+
+Extract the guard into one private helper:
 
 ```csharp
+    // Records a journal's first arrival at a terminal state. Must be called wherever a journal
+    // becomes terminal - including Resolution-driven conclusions, which clear their in-memory
+    // context before PublishState runs and would otherwise never be observed. Keyed on
+    // OperationId, so a second call for the same journal is a no-op.
+    private void NoteTerminalIfNew(OperationJournal journal)
+    {
         if (journal.IsTerminal && _lastTerminalOperationId != journal.OperationId)
         {
             _lastTerminalOperationId = journal.OperationId;
             _completionGeneration++;
         }
+    }
 ```
+
+Call it from **five** places — in each Resolution case, before that site clears its context:
+
+1. `PublishState`'s `_active` branch, immediately before the final `State = new OperationStateSnapshot(...)` assignment.
+2. `ResolveKeepCurrent`, pending-recovery branch.
+3. `ResolveKeepCurrent`, live-`_active` branch.
+4. `StartRecoverySuccessorOrThrow`, on the resolved **parent** journal.
+5. `TryResolveJournalAsKeepCurrent` — the shared extraction point behind both `AcceptAllAndCloseInterruptedOperations`'s loop and per-root resolution.
+
+Recovery successors carry distinct `OperationId`s from their parents, so a parent's resolution and its successor's later completion are two separate increments. That is intended.
 
 Pass `OperationId: journal.OperationId` and `CompletionGeneration: _completionGeneration` into the constructor call.
 

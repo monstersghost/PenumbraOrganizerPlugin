@@ -116,8 +116,14 @@ Guid? OperationId,             // the active or most recently finished operation
 long CompletionGeneration      // incremented exactly once per operation reaching terminal
 ```
 
-`CompletionGeneration` starts at 0 and is incremented by `PublishState` at the single point where an
-operation first becomes terminal. Novelty is then a numeric comparison rather than an inference from
+`CompletionGeneration` starts at 0 and is incremented the first time a given operation becomes
+terminal. **Not by `PublishState` alone** — an early draft of this design assumed that, and it is
+wrong. `IsTerminal` includes `Resolution != OperationResolution.None`, and every Resolution-driven
+conclusion (Keep Current on both its branches, a recovery successor's resolved parent, and
+blocked-multi-root accept-all) clears its in-memory context *before* publishing, so `PublishState`
+would never see those journals. The increment therefore lives in a `NoteTerminalIfNew(journal)`
+helper called from `PublishState`'s active branch **and** from each Resolution site before that site
+clears its context. Keying on `OperationId` makes a duplicate call a no-op. Novelty is then a numeric comparison rather than an inference from
 `Kind` and `Stage`, which is what makes re-rendering the same terminal snapshot free of side
 effects.
 
