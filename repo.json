@@ -11,7 +11,7 @@
     ],
     "InternalName": "PenumbraOrganizer.Plugin",
     "MinimumDalamudVersion": "15.0.0.0",
-    "AssemblyVersion": "0.5.1.0",
+    "AssemblyVersion": "0.5.1.1",
     "RepoUrl": "https://github.com/monstersghost/PenumbraOrganizerPlugin",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
