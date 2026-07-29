@@ -120,6 +120,19 @@ public sealed class OperationController
     private Guid? _lastTerminalOperationId;
     private long _completionGeneration;
 
+    // Records a journal's first arrival at a terminal state. Must be called wherever a journal
+    // becomes terminal - including Resolution-driven conclusions (Keep Current, Continue, Restore
+    // Previous State, and the blocked-multi-root Accept-All path), which clear their in-memory
+    // context before PublishState runs and would otherwise never be observed there.
+    private void NoteTerminalIfNew(OperationJournal journal)
+    {
+        if (journal.IsTerminal && _lastTerminalOperationId != journal.OperationId)
+        {
+            _lastTerminalOperationId = journal.OperationId;
+            _completionGeneration++;
+        }
+    }
+
     public OperationStateSnapshot State { get; private set; } = OperationStateSnapshot.Idle;
 
     public OperationController(
@@ -355,6 +368,7 @@ public sealed class OperationController
             var resolvedJournal = pending.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
             OperationJournalCodec.Save(OperationBundlePaths.JournalPath(pending.BundleDirectory), resolvedJournal);
             pending.Journal = resolvedJournal; // commit point - everything below is best-effort
+            NoteTerminalIfNew(resolvedJournal);
 
             var result = TryRelocateToCompleted(pending.BundleDirectory, resolvedJournal);
             _pendingRecovery = null;
@@ -375,6 +389,7 @@ public sealed class OperationController
             var resolvedJournal = active.Journal with { Resolution = OperationResolution.AcceptedCurrentState, UpdatedAt = DateTimeOffset.UtcNow };
             OperationJournalCodec.Save(OperationBundlePaths.JournalPath(active.BundleDirectory), resolvedJournal);
             active.Journal = resolvedJournal; // commit point - everything below is best-effort
+            NoteTerminalIfNew(resolvedJournal);
 
             var result = TryRelocateToCompleted(active.BundleDirectory, resolvedJournal);
             _active = null;
@@ -492,6 +507,7 @@ public sealed class OperationController
                 UpdatedAt = DateTimeOffset.UtcNow,
             };
             OperationJournalCodec.Save(OperationBundlePaths.JournalPath(interruptedBundleDirectory), resolvedInterruptedJournal);
+            NoteTerminalIfNew(resolvedInterruptedJournal);
             TryRelocateToCompleted(interruptedBundleDirectory, resolvedInterruptedJournal);
         }
         catch (Exception ex)
@@ -565,6 +581,7 @@ public sealed class OperationController
             return JournalResolutionOutcome.Failed;
         }
 
+        NoteTerminalIfNew(resolvedJournal);
         TryRelocateToCompleted(activeBundleDirectory, resolvedJournal); // best-effort, same rule as ResolveKeepCurrent
         return JournalResolutionOutcome.Resolved;
     }
@@ -976,11 +993,7 @@ public sealed class OperationController
         var processedTargets = statuses.Values.Count(s => s != TargetMutationStatus.NotAttempted);
         var successfulTargets = statuses.Values.Count(s => s is TargetMutationStatus.FinalStepSucceeded or TargetMutationStatus.AlreadySatisfied);
 
-        if (journal.IsTerminal && _lastTerminalOperationId != journal.OperationId)
-        {
-            _lastTerminalOperationId = journal.OperationId;
-            _completionGeneration++;
-        }
+        NoteTerminalIfNew(journal);
 
         State = new OperationStateSnapshot(
             Stage: journal.Stage, Kind: journal.Type,

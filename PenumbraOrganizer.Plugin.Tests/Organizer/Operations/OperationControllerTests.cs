@@ -2331,6 +2331,58 @@ public class OperationControllerTests
     }
 
     [Fact]
+    public void CompletionGeneration_ResolveKeepCurrentOnPendingRecovery_Increments()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewControllerWithPendingRecovery(new FakePenumbraOperations(), new FakeClock(), dir.FullName, out var journalId);
+            var activeBundleDirectory = OperationBundlePaths.BundleDirectory(dir.FullName, active: true, journalId);
+            OperationJournalCodec.Save(OperationBundlePaths.JournalPath(activeBundleDirectory), InterruptedJournal(journalId));
+            Assert.Equal(0, controller.State.CompletionGeneration);
+
+            controller.ResolveKeepCurrent();
+
+            // This is the gap the fix closes: the _pendingRecovery branch of ResolveKeepCurrent
+            // clears the context and publishes before this fix's NoteTerminalIfNew call was added,
+            // so PublishState's own inline guard never saw this journal.
+            Assert.Equal(1, controller.State.CompletionGeneration);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CompletionGeneration_ResolveKeepCurrentOnLiveActiveOperation_Increments()
+    {
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(Success);
+        adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.ProviderUnavailable));
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var controller = NewController(adapter, new FakeClock(), operationsRoot: dir.FullName);
+            var plan = SinglePlan();
+            controller.StartApply(plan, Guid.NewGuid(), OperationBundlePaths.BundleDirectory(dir.FullName, active: true, plan.OperationId));
+            controller.Update(); // Mutating -> Refreshing
+            controller.Update(); // Refreshing -> RecoveryRequired (_active.RequiresRecovery = true)
+            Assert.Equal(0, controller.State.CompletionGeneration);
+
+            controller.ResolveKeepCurrent();
+
+            // This is the other gap the fix closes: the live-_active branch of ResolveKeepCurrent
+            // also nulls _active before PublishState runs, so the inline guard never saw it either.
+            Assert.Equal(1, controller.State.CompletionGeneration);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void OperationId_IsPublishedForTheActiveOperation()
     {
         var controller = NewController(new FakePenumbraOperations(), new FakeClock());
