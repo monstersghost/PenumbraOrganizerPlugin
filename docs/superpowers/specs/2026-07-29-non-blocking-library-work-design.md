@@ -408,8 +408,11 @@ a missing directory, and the `null` result meaning "exclude" for Index.
 **Architecture test** (`LibraryWorkPurityTests`): the §4.3 reflection check over
 `LibraryWork.Pure`.
 
-**Event log** (`MainWindowEventLogTests` or equivalent seam): concurrent `LogEvent` calls from
-several threads followed by a drain produce every line exactly once and respect `MaxEventLogLines`.
+**Event log** (`EventLogBufferTests`, against the buffer extracted out of `MainWindow` so it is
+testable at all): queued lines are invisible until drained, drain orders newest-first, the line cap
+is enforced, and concurrent writes from several threads followed by a drain leave a full, well-formed
+window. Note the cap makes "every line exactly once" unassertable once the write count exceeds it, so
+the concurrency test asserts survival and well-formedness rather than an exact set.
 
 **Not covered by automated tests, requires in-game verification:** that a large-library scan actually
 holds framerate, and that the Penumbra adapters behave as expected when acquired and released within
