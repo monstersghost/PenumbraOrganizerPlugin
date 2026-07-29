@@ -2255,4 +2255,88 @@ public class OperationControllerTests
 
         Assert.True(result.Started);
     }
+
+    // Mirrors OperationAdmissionCharacterizationTests.RunSingleOperationToTerminal - the established
+    // sequence for driving a single Apply operation to a terminal Completed state.
+    private static OperationController RunSingleOperationToTerminal()
+    {
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(Success);
+        adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.Success));
+        adapter.EnqueueLiveModRead(new LiveModReadResult(
+            LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+        var controller = NewController(adapter, new FakeClock());
+        controller.StartApply(SinglePlan(), Guid.NewGuid(), NewBundleDirectory());
+
+        controller.Update(); // Mutating -> Refreshing
+        controller.Update(); // Refreshing -> Verifying
+        controller.Update(); // Verifying -> Completed
+
+        return controller;
+    }
+
+    // Starts and drives a second Apply operation to terminal on an already-terminal controller.
+    private static void RunAnotherOperationToTerminal(OperationController controller)
+    {
+        var adapter = new FakePenumbraOperations();
+        adapter.EnqueueSetModPathResult(Success);
+        adapter.EnqueueRefreshResult(new RefreshResult(RefreshStatus.Success));
+        adapter.EnqueueLiveModRead(new LiveModReadResult(
+            LiveModReadStatus.Success, LiveModSnapshotBuilder.Build([new LiveMod("mod-a", "mod-a", "Weapons/A", false)])));
+
+        controller.StartApply(SinglePlan(), Guid.NewGuid(), NewBundleDirectory());
+
+        controller.Update(); // Mutating -> Refreshing
+        controller.Update(); // Refreshing -> Verifying
+        controller.Update(); // Verifying -> Completed
+    }
+
+    [Fact]
+    public void CompletionGeneration_IsZeroBeforeAnythingCompletes()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+
+        Assert.Equal(0, controller.State.CompletionGeneration);
+    }
+
+    [Fact]
+    public void CompletionGeneration_IncrementsOnceWhenAnOperationReachesTerminal()
+    {
+        var controller = RunSingleOperationToTerminal();
+
+        Assert.Equal(1, controller.State.CompletionGeneration);
+    }
+
+    [Fact]
+    public void CompletionGeneration_DoesNotIncrementOnFurtherUpdates()
+    {
+        // Terminal state is retained, so PublishState keeps being called with the same terminal
+        // journal. Inferring novelty from Kind and Stage is what made this fragile before.
+        var controller = RunSingleOperationToTerminal();
+
+        controller.Update();
+        controller.Update();
+        controller.Update();
+
+        Assert.Equal(1, controller.State.CompletionGeneration);
+    }
+
+    [Fact]
+    public void CompletionGeneration_IncrementsAgainForASecondOperation()
+    {
+        var controller = RunSingleOperationToTerminal();
+        RunAnotherOperationToTerminal(controller);
+
+        Assert.Equal(2, controller.State.CompletionGeneration);
+    }
+
+    [Fact]
+    public void OperationId_IsPublishedForTheActiveOperation()
+    {
+        var controller = NewController(new FakePenumbraOperations(), new FakeClock());
+        var plan = SinglePlan();
+        controller.StartApply(plan, Guid.NewGuid(), NewBundleDirectory());
+
+        Assert.Equal(plan.OperationId, controller.State.OperationId);
+    }
 }

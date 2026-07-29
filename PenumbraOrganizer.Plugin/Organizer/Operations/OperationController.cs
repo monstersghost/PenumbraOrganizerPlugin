@@ -10,6 +10,8 @@ namespace PenumbraOrganizer.Plugin.Organizer.Operations;
 public sealed record OperationStateSnapshot(
     OperationStage? Stage,
     OperationType? Kind,
+    Guid? OperationId,              // the active or most recently concluded operation, for log correlation
+    long CompletionGeneration,      // incremented exactly once per operation reaching terminal
     int ProcessedSteps,
     int TotalSteps,
     int ProcessedTargets,
@@ -33,7 +35,7 @@ public sealed record OperationStateSnapshot(
     bool CanRequestCancellation)
 {
     public static OperationStateSnapshot Idle { get; } = new(
-        Stage: null, Kind: null, ProcessedSteps: 0, TotalSteps: 0,
+        Stage: null, Kind: null, OperationId: null, CompletionGeneration: 0, ProcessedSteps: 0, TotalSteps: 0,
         ProcessedTargets: 0, SuccessfulTargets: 0, TotalTargets: 0,
         LastProcessedIdentifier: null, LastProcessedDisplayName: null, LastError: null,
         RequiresRecovery: false, RecoveryClassificationPending: false,
@@ -111,6 +113,12 @@ public sealed class OperationController
     // Not a second state machine: no transitions, never published directly, only consulted by
     // AdmissionRejectionReason.
     private bool _starting;
+
+    // Novelty is a comparison, not an inference. _lastTerminalOperationId is what makes the
+    // increment fire once per operation even though _active (and therefore the terminal journal)
+    // is deliberately retained after completion.
+    private Guid? _lastTerminalOperationId;
+    private long _completionGeneration;
 
     public OperationStateSnapshot State { get; private set; } = OperationStateSnapshot.Idle;
 
@@ -926,7 +934,7 @@ public sealed class OperationController
     {
         if (_active is null && _pendingRecovery is null && _blockedMultiRootGraph is null)
         {
-            State = OperationStateSnapshot.Idle;
+            State = OperationStateSnapshot.Idle with { CompletionGeneration = _completionGeneration };
             return;
         }
 
@@ -934,6 +942,7 @@ public sealed class OperationController
         {
             State = OperationStateSnapshot.Idle with
             {
+                CompletionGeneration = _completionGeneration,
                 RequiresRecovery = true,
                 RecoveryClassificationPending = false,
                 CanResolveRecovery = true, // AcceptAllAndCloseInterruptedOperations, Task 8
@@ -948,6 +957,7 @@ public sealed class OperationController
             var pending = _pendingRecovery!;
             State = OperationStateSnapshot.Idle with
             {
+                CompletionGeneration = _completionGeneration,
                 RequiresRecovery = true,
                 RecoveryClassificationPending = pending.ClassificationStatus == RecoveryClassificationStatus.WaitingForProvider,
                 CanResolveRecovery = true, // Keep Current needs neither classification nor a valid plan/snapshot
@@ -966,8 +976,15 @@ public sealed class OperationController
         var processedTargets = statuses.Values.Count(s => s != TargetMutationStatus.NotAttempted);
         var successfulTargets = statuses.Values.Count(s => s is TargetMutationStatus.FinalStepSucceeded or TargetMutationStatus.AlreadySatisfied);
 
+        if (journal.IsTerminal && _lastTerminalOperationId != journal.OperationId)
+        {
+            _lastTerminalOperationId = journal.OperationId;
+            _completionGeneration++;
+        }
+
         State = new OperationStateSnapshot(
             Stage: journal.Stage, Kind: journal.Type,
+            OperationId: journal.OperationId, CompletionGeneration: _completionGeneration,
             ProcessedSteps: journal.ProcessedStepCount, TotalSteps: journal.TotalSteps,
             ProcessedTargets: processedTargets, SuccessfulTargets: successfulTargets, TotalTargets: _active.Plan.RecoveryTargets.Count,
             LastProcessedIdentifier: journal.LastCompletedIdentifier,
