@@ -21,8 +21,9 @@
 - Temp-directory test convention, copied from `HeliosphereDetectorTests`: `new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()))`, cleaned up in a `finally` with `Delete(recursive: true)`.
 - `OperationController.cs` must not be modified by any task in this plan. Coordination with it is read-only, through its published `State` snapshot.
 - No type in namespace `PenumbraOrganizer.Plugin.LibraryWork.Pure` may reference a type from the `Dalamud` or `Penumbra.Api` assemblies, and neither may the `TSeed`/`TResult` types that cross the thread boundary. Task 7 enforces this.
-- Build and test command used throughout: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`. Verified working; a filtered run of `HeliosphereDetectorTests` passes 3 tests in ~200 ms.
-- Work happens on branch `feat/non-blocking-library-work`, which already exists and already contains the spec commit.
+- Build and test command used throughout: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`. **Baseline at the start of this plan: 820 passed, 0 failed**, plus one pre-existing `xUnit2017` analyzer warning at `PenumbraOrganizer.Plugin.Tests/Organizer/ApplyPlannerTests.cs:306` that is not this plan's to fix. Introduce no new warnings.
+- Prerequisites already on `main` (do not redo them): the dead-code removal (`62fcbc0`, `f6079dc`) and the whole operation-state-authority refactor (through `a0d867d`, shipped as v0.5.1.1). `Plugin._operationInProgress` no longer exists; admission is `Plugin.EnsureAdmitted()` over `OperationController.AdmissionRejectionReason()`, and `OperationController`'s constructor already accepts the `Func<string?>? externalActivityGate` that Task 8 wires.
+- **Line numbers throughout this plan are stale** — it was written before that refactor, which shifted `Plugin.cs` from 651 to 603 lines. Locate every member by name.
 
 ---
 
@@ -2028,8 +2029,10 @@ git commit -m "feat: plug library work into the controller's admission gate"
 
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/ScanJob.cs`
-- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — `RunScan` (`:142-202`), `OnFrameworkUpdate` (`:126`), `Dispose` (`:104-120`), field block (`~:38-45`), `CreateBackup` (`:322`), `StartApplyOperation` (`:445`), `StartRestoreOperation` (`:490`), `ResolveKeepCurrent` (`:549`), `AcceptAllAndCloseInterruptedOperations` (`:590`), `ResolveOneMultiRootOperation` (`:604`), `CleanUpFolders` (`:787`), `RollbackFolderCleanup` (`:807`); delete `ApplyChanges()` (`:373-443`) and `Restore(Guid)` (`:608-693`)
-- Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.cs` — `RunScan` (`:1613-1629`), delete the unused `_lastApplyResults` field (`:35`)
+- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — `RunScan`, `OnFrameworkUpdate`, `Dispose`, the field block, and the three recovery-resolution methods `ResolveKeepCurrent` / `AcceptAllAndCloseInterruptedOperations` / `ResolveOneMultiRootOperation`
+- Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.cs` — the private `RunScan` wrapper
+
+**Locate members by name, not by the line numbers this plan was originally written against.** Those citations predate the operation-state-authority refactor and are all stale; `Plugin.cs` went 651 → 603 lines and everything shifted.
 
 **Interfaces:**
 - Consumes: `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>` (Task 4), `ScanSeed`/`ScanProcessor` (Task 6), `ModEventEpoch` (Task 2), `LibraryActivityGate` wiring (Task 8), `OrganizerState.ReplaceScanAtomically` (Task 3), and — from the state-authority plan — `Plugin.EnsureAdmitted()` and `OperationController.AdmissionRejectionReason()`.
@@ -2159,7 +2162,7 @@ Initialize it in the constructor, after `Config` is assigned (line 56) and befor
             () => ModEvents.Current, logWarning: message => Log.Warning(message));
 ```
 
-Replace the entire body of `RunScan()` (lines 142-202) with:
+Replace the entire body of `Plugin.RunScan()` with:
 
 ```csharp
     /// <summary>
@@ -2293,28 +2296,23 @@ In `PenumbraOrganizer.Plugin/Windows/MainWindow.cs`, replace `RunScan()` (lines 
     }
 ```
 
-- [ ] **Step 5: Delete the dead Apply and Restore paths**
+- [ ] **Step 5: (nothing to do — already shipped)**
 
-Delete `Plugin.ApplyChanges()` entirely (`Plugin.cs:373-443`) and `Plugin.Restore(Guid snapshotId)` entirely (`Plugin.cs:608-693`). Both have zero callers in production or tests; they were superseded by `StartApplyOperation`/`StartRestoreOperation` plus `OperationController`, and each contains a now-obsolete synchronous `RunScan()` call.
+This step originally deleted `Plugin.ApplyChanges()`, `Plugin.Restore(Guid)`, and the unused `MainWindow._lastApplyResults` field. **All of that shipped in commits `62fcbc0` and `f6079dc` before this plan runs.** Those members no longer exist, and the `CS0649` warning it referenced is gone.
 
-In `MainWindow.cs`, delete the `_lastApplyResults` field at line 35 — the compiler already reports it as `warning CS0649: Field 'MainWindow._lastApplyResults' is never assigned to`. If deleting it produces `CS0103` at any read site, delete those reads too; they can only be rendering a value that is permanently null.
-
-Do **not** touch `MainWindow.ApplyChanges()` at line 1631 — that is MainWindow's own wrapper around `StartApplyOperation` and is live.
+Verify and move on: `grep -n "ApplyChanges\|_lastApplyResults" PenumbraOrganizer.Plugin/Plugin.cs` should return nothing, and the only `ApplyChanges` in `MainWindow.cs` is its own live private wrapper around `StartApplyOperation`. Do not touch that one.
 
 - [ ] **Step 6: Build and run the full suite**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`
 
-Expected: PASS with no new failures, and `warning CS0649` for `_lastApplyResults` gone from the build output.
+Expected: PASS with no new failures.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add PenumbraOrganizer.Plugin/LibraryWork/ScanJob.cs PenumbraOrganizer.Plugin/Plugin.cs PenumbraOrganizer.Plugin/Windows/MainWindow.cs
-git commit -m "feat: run the scan off the render thread
-
-Also removes Plugin.ApplyChanges and Plugin.Restore, dead since the
-operation controller took over, and the unused _lastApplyResults field."
+git commit -m "feat: run the scan off the render thread"
 ```
 
 ---
@@ -2649,7 +2647,7 @@ Initialize it beside `ScanWork` in the constructor:
     }
 ```
 
-Replace the entire body of `BuildChangedItemIndex()` (lines 204-239) with:
+Replace the entire body of `Plugin.BuildChangedItemIndex()` with:
 
 ```csharp
     /// <summary>
