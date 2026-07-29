@@ -8,6 +8,8 @@
 
 **Revision note:** this plan was returned for correction after its first review. Six blocking changes are folded in: domain-level admission control (Task 8), atomic publish separated from post-commit side effects (Tasks 3 and 9), cancellation honoured when it arrives after the background task completed (Tasks 4 and 5), synchronous scheduler failure handled (Tasks 4 and 5), disposal semantics and a `_disposed` flag (Tasks 4 and 5), and recursive purity enforcement covering result DTOs (Task 7). Two new tasks were inserted and the rest renumbered.
 
+**Second revision (pre-execution review, 2026-07-29):** Task 8 rewritten from a standalone `ActivityAdmission` type to wiring `OperationController`'s external activity gate — the operation-state-authority plan (now a hard prerequisite for Tasks 8+, see Task 8's header) owns admission, and building a parallel mechanism here was the exact duplication the agreed sequencing exists to avoid. Task 9 Step 3b no longer adds guards to the operation entry points (`TryStart`/`EnsureAdmitted` already cover them); `RunScan`/`BuildChangedItemIndex` route through `EnsureAdmitted`; and the new per-frame `ScanWork.Update()`/`IndexWork.Update()`/`DrainEventLog()` calls now sit behind a latched catch boundary in `OnFrameworkUpdate`, closing the item-14 gap the cleanup-brief verification flagged against this plan's own first draft.
+
 **Tech Stack:** C# / .NET 10 (`net10.0-windows7.0`), Dalamud.NET.Sdk 15.0.0, Penumbra.Api 5.15.1, xunit 2.5.3.
 
 **Spec:** `docs/superpowers/specs/2026-07-29-non-blocking-library-work-design.md`
@@ -1893,29 +1895,31 @@ git commit -m "test: forbid Dalamud and Penumbra types in the background work na
 
 ---
 
-## Task 8: Admission control
+## Task 8: Wire library work into the shared admission authority
 
-Mutual exclusion across Scan, Index, and `OperationController` must be a domain invariant, not a consequence of disabled buttons. Nothing today prevents `plugin.RunScan(); plugin.BuildChangedItemIndex();` from running both at once, and `StartApplyOperation` (`Plugin.cs:447-452`) has no knowledge of library work at all.
+**Rewritten after the operation-state-authority plan landed its API.** The original Task 8 built a standalone `ActivityAdmission` type — a third admission mechanism alongside `_operationInProgress` and the controller, which the state-authority work exists to delete. The controller now owns admission (`AdmissionRejectionReason`, `TryStart`, and an injected `Func<string?>` external gate); this task's job is only to plug library work into that gate, plus one small pure helper so the gate's logic is testable without Dalamud.
+
+**Prerequisite: the operation-state-authority plan (`docs/superpowers/plans/2026-07-29-operation-state-authority.md`) Tasks 2–3 must be merged before this task starts.** It provides `OperationController.AdmissionRejectionReason()`, the `externalActivityGate` constructor parameter, and `Plugin.EnsureAdmitted()`. If they are absent, stop and execute that plan first.
 
 **Files:**
-- Create: `PenumbraOrganizer.Plugin/LibraryWork/ActivityAdmission.cs`
-- Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/ActivityAdmissionTests.cs`
+- Create: `PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs`
+- Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryActivityGateTests.cs`
+- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — the `OperationController` construction
 
 **Interfaces:**
-- Consumes: `LibraryWorkStateSnapshot` (Task 4), `OperationStateSnapshot`.
-- Produces: `ActivityAdmission.Check(operation, scan, index)` returning `string?` — null when admission is allowed, otherwise the reason to put in the exception message. `Plugin.EnsureNoConflictingActivity()` and `Plugin.TryRequestScan()` are added in Task 9.
+- Consumes: `LibraryWorkStateSnapshot` (Task 4); `OperationController`'s `externalActivityGate` constructor parameter and `Plugin.EnsureAdmitted()` (state-authority plan).
+- Produces: `LibraryActivityGate.Reason(scan, index)` returning `string?` — null when no library work blocks admission, otherwise the reason. Task 9's `RunScan` calls `EnsureAdmitted()`; Task 9's `TryRequestScan` calls `AdmissionRejectionReason()` directly.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `PenumbraOrganizer.Plugin.Tests/LibraryWork/ActivityAdmissionTests.cs`:
+Create `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryActivityGateTests.cs`:
 
 ```csharp
 using PenumbraOrganizer.Plugin.LibraryWork;
-using PenumbraOrganizer.Plugin.Organizer.Operations;
 
 namespace PenumbraOrganizer.Plugin.Tests.LibraryWork;
 
-public class ActivityAdmissionTests
+public class LibraryActivityGateTests
 {
     private static LibraryWorkStateSnapshot Running(string name) => new(
         LibraryWorkPhase.Computing, name, 1, 10, null, null, CanCancel: true);
@@ -1923,122 +1927,101 @@ public class ActivityAdmissionTests
     private static LibraryWorkStateSnapshot Idle => LibraryWorkStateSnapshot.Idle;
 
     [Fact]
-    public void NothingRunning_IsAdmitted()
+    public void NothingRunning_ReturnsNull()
     {
-        Assert.Null(ActivityAdmission.Check(OperationStateSnapshot.Idle, Idle, Idle));
+        Assert.Null(LibraryActivityGate.Reason(Idle, Idle));
     }
 
     [Fact]
-    public void ScanRunning_BlocksAdmission_AndNamesTheJob()
+    public void ScanRunning_ReturnsAReasonNamingTheJob()
     {
-        var reason = ActivityAdmission.Check(OperationStateSnapshot.Idle, Running("Scan"), Idle);
+        var reason = LibraryActivityGate.Reason(Running("Scan"), Idle);
 
         Assert.NotNull(reason);
         Assert.Contains("Scan", reason);
     }
 
     [Fact]
-    public void IndexRunning_BlocksAdmission_AndNamesTheJob()
+    public void IndexRunning_ReturnsAReasonNamingTheJob()
     {
-        var reason = ActivityAdmission.Check(OperationStateSnapshot.Idle, Idle, Running("Search index"));
+        var reason = LibraryActivityGate.Reason(Idle, Running("Search index"));
 
         Assert.NotNull(reason);
         Assert.Contains("Search index", reason);
     }
 
     [Fact]
-    public void OperationLockout_BlocksAdmission()
+    public void TerminalOutcomes_DoNotBlock()
     {
-        var operation = OperationStateSnapshot.Idle with { CanScan = false };
+        var finished = new LibraryWorkStateSnapshot(
+            LibraryWorkPhase.Idle, null, 10, 10, LibraryWorkOutcome.Failed, "boom", CanCancel: false);
 
-        Assert.NotNull(ActivityAdmission.Check(operation, Idle, Idle));
-    }
-
-    [Fact]
-    public void RecoveryRequired_BlocksAdmission()
-    {
-        var operation = OperationStateSnapshot.Idle with { RequiresRecovery = true, CanScan = false };
-
-        var reason = ActivityAdmission.Check(operation, Idle, Idle);
-
-        Assert.NotNull(reason);
-        Assert.Contains("recovery", reason, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void LibraryWorkIsReportedBeforeOperationLockout()
-    {
-        // Both blocked: the library run is the more actionable message, since the user can cancel it.
-        var operation = OperationStateSnapshot.Idle with { CanScan = false };
-
-        var reason = ActivityAdmission.Check(operation, Running("Scan"), Idle);
-
-        Assert.Contains("Scan", reason);
+        Assert.Null(LibraryActivityGate.Reason(finished, Idle));
     }
 }
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ActivityAdmissionTests" --nologo`
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~LibraryActivityGateTests" --nologo`
 
-Expected: FAIL to compile, `CS0246: The type or namespace name 'ActivityAdmission' could not be found`.
+Expected: FAIL to compile, `CS0246: The type or namespace name 'LibraryActivityGate' could not be found`.
 
-- [ ] **Step 3: Write the policy**
+- [ ] **Step 3: Write the helper and wire the gate**
 
-Create `PenumbraOrganizer.Plugin/LibraryWork/ActivityAdmission.cs`:
+Create `PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs`:
 
 ```csharp
-using PenumbraOrganizer.Plugin.Organizer.Operations;
-
 namespace PenumbraOrganizer.Plugin.LibraryWork;
 
 /// <summary>
-/// The single admission rule shared by every activity that must not overlap another: Scan, Index,
-/// Apply, Restore, folder cleanup, cleanup rollback, and backup.
-///
-/// This is the invariant. ActivityGates is the presentation of it. Disabling a button prevents a
-/// click; it does not prevent a slash command, a test hook, or an existing code path that predates
-/// the gate - and three recovery paths (Plugin.cs:549, :590, :604) already call RunScan() directly.
+/// The body of the external activity gate Plugin injects into OperationController. A pure function
+/// rather than a lambda written inline at the construction site, so the one rule ("no operation
+/// while library work runs") is testable without Dalamud. This is NOT an admission authority - the
+/// controller is; this only answers the controller's question about the one thing it cannot see.
 /// </summary>
-public static class ActivityAdmission
+public static class LibraryActivityGate
 {
-    /// <summary> Null when admission is allowed; otherwise the reason, for an exception message. </summary>
-    public static string? Check(
-        OperationStateSnapshot operation,
-        LibraryWorkStateSnapshot scan,
-        LibraryWorkStateSnapshot index)
+    /// <summary> Null when no library work blocks admission; otherwise the reason. </summary>
+    public static string? Reason(LibraryWorkStateSnapshot scan, LibraryWorkStateSnapshot index)
     {
-        // Reported first because it is the more actionable of the two: the user can cancel a library
-        // run, whereas an operation lockout has to resolve on its own terms.
         if (scan.IsRunning)
-            return $"{scan.JobDisplayName ?? "A scan"} is already running.";
+            return $"{scan.JobDisplayName ?? "A scan"} is still running.";
         if (index.IsRunning)
-            return $"{index.JobDisplayName ?? "An index build"} is already running.";
-
-        if (operation.RequiresRecovery)
-            return "An interrupted operation requires recovery before anything else can run.";
-        if (!operation.CanScan)
-            return "An Apply or Restore operation is currently active.";
+            return $"{index.JobDisplayName ?? "An index build"} is still running.";
 
         return null;
     }
 }
 ```
 
+In `PenumbraOrganizer.Plugin/Plugin.cs`, extend the existing `OperationController` construction with the gate argument:
+
+```csharp
+        OperationController = new Organizer.Operations.OperationController(
+            operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
+            // Late-bound on purpose: the delegate reads the coordinator properties at invoke time,
+            // never at construction. The controller is constructed before ScanWork/IndexWork are
+            // assigned, and no admission call can happen during the constructor - but the null
+            // guard makes that ordering a non-issue rather than an invariant to remember.
+            externalActivityGate: () => ScanWork is null || IndexWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
+```
+
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ActivityAdmissionTests" --nologo`
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`
 
-Expected: PASS, `Failed: 0, Passed: 6`.
+Expected: PASS — the four new tests plus the state-authority plan's external-gate tests, which already prove a gate reason rejects `TryStart`. Cross-mechanics (an Apply refused while a scan runs) are therefore covered by the composition of the two test sets; no Plugin-level test is possible because `Plugin` depends on Dalamud statics.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add PenumbraOrganizer.Plugin/LibraryWork/ActivityAdmission.cs PenumbraOrganizer.Plugin.Tests/LibraryWork/ActivityAdmissionTests.cs
-git commit -m "feat: add the shared activity admission rule"
+git add PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryActivityGateTests.cs PenumbraOrganizer.Plugin/Plugin.cs
+git commit -m "feat: plug library work into the controller's admission gate"
 ```
-
 ---
 
 ## Task 9: ScanJob, rewiring, and dead code removal
@@ -2049,8 +2032,8 @@ git commit -m "feat: add the shared activity admission rule"
 - Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.cs` — `RunScan` (`:1613-1629`), delete the unused `_lastApplyResults` field (`:35`)
 
 **Interfaces:**
-- Consumes: `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>` (Task 4), `ScanSeed`/`ScanProcessor` (Task 6), `ModEventEpoch` (Task 2), `ActivityAdmission` (Task 8), `OrganizerState.ReplaceScanAtomically` (Task 3).
-- Produces: `Plugin.ScanWork` of type `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>`; `Plugin.RunScan()` now starts a run instead of completing one; `Plugin.EnsureNoConflictingActivity()`; `Plugin.TryRequestScan()`; `Plugin.RunPostScanSideEffects()`; `MainWindow.OnScanPublished()`.
+- Consumes: `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>` (Task 4), `ScanSeed`/`ScanProcessor` (Task 6), `ModEventEpoch` (Task 2), `LibraryActivityGate` wiring (Task 8), `OrganizerState.ReplaceScanAtomically` (Task 3), and — from the state-authority plan — `Plugin.EnsureAdmitted()` and `OperationController.AdmissionRejectionReason()`.
+- Produces: `Plugin.ScanWork` of type `LibraryWorkCoordinator<ScanSeed, OrganizerModRow>`; `Plugin.RunScan()` now starts a run instead of completing one; `Plugin.TryRequestScan()`; `Plugin.RunPostScanSideEffects()`; `MainWindow.OnScanPublished()`.
 
 - [ ] **Step 1: Write ScanJob**
 
@@ -2186,7 +2169,10 @@ Replace the entire body of `RunScan()` (lines 142-202) with:
     /// </summary>
     public void RunScan()
     {
-        EnsureNoConflictingActivity();
+        // EnsureAdmitted is the state-authority plan's shared admission point: it consults
+        // AdmissionRejectionReason, which covers an active operation, a pending recovery, a
+        // starting operation, AND (via the Task 8 gate) the other library coordinator.
+        EnsureAdmitted();
         ScanWork.Start(new ScanJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
     }
 
@@ -2197,7 +2183,7 @@ Replace the entire body of `RunScan()` (lines 142-202) with:
     /// </summary>
     internal bool TryRequestScan()
     {
-        if (ActivityAdmission.Check(OperationController.State, ScanWork.State, IndexWork.State) is { } reason)
+        if (OperationController.AdmissionRejectionReason() is { } reason)
         {
             Log.Information($"Post-recovery scan skipped: {reason} Use Refresh mod list when it clears.");
             return false;
@@ -2206,20 +2192,33 @@ Replace the entire body of `RunScan()` (lines 142-202) with:
         RunScan();
         return true;
     }
-
-    // The single admission point every long-running activity shares. See ActivityAdmission for why
-    // this is a domain invariant rather than something the UI can be trusted to enforce.
-    internal void EnsureNoConflictingActivity()
-    {
-        if (ActivityAdmission.Check(OperationController.State, ScanWork.State, IndexWork.State) is { } reason)
-            throw new InvalidOperationException(reason);
-    }
 ```
 
-Add `ScanWork.Update();` to `OnFrameworkUpdate` (line 126), after the `DrainEventLog` call added in Task 1:
+Rework `OnFrameworkUpdate` (line 126) so the new per-frame calls sit behind a catch boundary — the framework callback has no caller-side net, which is exactly why `OperationController.Update()` carries its own internal one. The coordinator's `Update` is written not to throw, but "written not to" is an observation, not a boundary:
 
 ```csharp
-        ScanWork.Update();
+    private bool _libraryUpdateFaulted;
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        OperationController.Update(); // has its own internal exception boundary
+
+        try
+        {
+            _mainWindow.DrainEventLog();
+            ScanWork.Update();
+        }
+        catch (Exception ex)
+        {
+            // Latched: a fault that recurs every frame must not log every frame. Library work is
+            // non-critical - the plugin stays usable, the user re-runs the scan after a reload.
+            if (!_libraryUpdateFaulted)
+            {
+                _libraryUpdateFaulted = true;
+                Log.Error(ex, "Library work update failed; background scans are disabled until the plugin reloads.");
+            }
+        }
+    }
 ```
 
 Add disposal to `Dispose()` (line 104), before `WindowSystem.RemoveAllWindows()`:
@@ -2230,11 +2229,11 @@ Add disposal to `Dispose()` (line 104), before `WindowSystem.RemoveAllWindows()`
 
 Add `using PenumbraOrganizer.Plugin.LibraryWork;` and `using PenumbraOrganizer.Plugin.LibraryWork.Pure;` to the file's using block, or fully qualify as shown above.
 
-- [ ] **Step 3b: Apply admission to every other starting wrapper, and fix the recovery paths**
+- [ ] **Step 3b: Fix the recovery paths**
 
-Add `EnsureNoConflictingActivity();` as the **first** statement of `StartApplyOperation` (`:445`), `StartRestoreOperation` (`:490`), `CleanUpFolders` (`:787`), `RollbackFolderCleanup` (`:807`), and `CreateBackup` (`:322`). It goes before their existing `_operationInProgress` checks, so a library run blocks them the same way an operation does.
+**Do NOT add any admission calls to `StartApplyOperation`, `StartRestoreOperation`, `CleanUpFolders`, `RollbackFolderCleanup`, or `CreateBackup`.** The state-authority plan already routed every one of them through `TryStart`/`EnsureAdmitted`, whose `AdmissionRejectionReason` now includes the Task 8 gate — a library run blocks all of them with no further wiring. Adding another check here would double-guard and re-create the duplication this sequencing exists to avoid.
 
-Then change the three unguarded recovery call sites, which would otherwise throw out of a committed recovery resolution:
+What still needs changing is the three unguarded recovery call sites, which would otherwise throw out of a committed recovery resolution:
 
 `Plugin.cs:549` in `ResolveKeepCurrent`:
 
@@ -2660,12 +2659,12 @@ Replace the entire body of `BuildChangedItemIndex()` (lines 204-239) with:
     /// </summary>
     public void BuildChangedItemIndex()
     {
-        EnsureNoConflictingActivity();
+        EnsureAdmitted(); // same shared admission point as RunScan - see Task 9
         IndexWork.Start(new IndexJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
     }
 ```
 
-Add `IndexWork.Update();` to `OnFrameworkUpdate` next to `ScanWork.Update();`, and `IndexWork.Dispose();` to `Dispose()` next to `ScanWork.Dispose();`.
+Add `IndexWork.Update();` to `OnFrameworkUpdate` **inside the same try/catch boundary** Task 9 added, next to `ScanWork.Update();`, and `IndexWork.Dispose();` to `Dispose()` next to `ScanWork.Dispose();`.
 
 - [ ] **Step 10: Build and run the full suite**
 

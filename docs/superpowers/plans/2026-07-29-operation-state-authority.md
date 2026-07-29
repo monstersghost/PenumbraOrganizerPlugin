@@ -13,7 +13,7 @@
 
 ## Global Constraints
 
-- **This is a behaviour-preserving refactor.** No user-visible behaviour, recovery semantics, diagnostics output, or persisted format changes. Every exception message a caller can observe today must remain observable, with the same type and text.
+- **This is a behaviour-preserving refactor, with two named exceptions.** No user-visible behaviour, recovery semantics, diagnostics output, or persisted format changes, and every exception message a caller can observe today remains observable with the same type and text — except: (1) completion consequences fire on the frame completion is observed rather than waiting for a tab visit (Task 5, documented there — the old deferral was itself a latent staleness bug), and (2) `CleanUpFolders`/`RollbackFolderCleanup` gain a domain-level admission guard they never had (Task 3 Step 4 — not user-visible, since the UI gate already prevents the click).
 - Target framework `net10.0-windows7.0`; `ImplicitUsings` and `Nullable` enabled in both projects. Test project has `<Using Include="Xunit" />`, so `[Fact]` and `Assert` need no `using`.
 - Test namespaces mirror folder structure (`PenumbraOrganizer.Plugin.Tests.<Folder>`).
 - Build/test command: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --nologo`. Baseline before this plan: **800 passed, 0 failed**, one pre-existing `xUnit2017` analyzer warning in `ApplyPlannerTests.cs:306` that is not this plan's to fix.
@@ -80,7 +80,10 @@ public class OperationAdmissionCharacterizationTests
     [Fact]
     public void CanStartNext_RequiresBothTerminalAndNoRecovery()
     {
-        var terminal = InterruptedJournal(Guid.NewGuid()) with { Stage = OperationStage.Succeeded };
+        // OperationStage's terminal success member is Completed - there is no "Succeeded" stage
+        // (the enum: Preparing/Prepared/Mutating/Refreshing/Verifying/Completed/
+        // CompletedWithItemFailures/FailedBeforeMutation/FailedPartiallyApplied/Cancelled).
+        var terminal = InterruptedJournal(Guid.NewGuid()) with { Stage = OperationStage.Completed };
 
         Assert.True(OperationController.CanStartNext(terminal, requiresRecovery: false));
         Assert.False(OperationController.CanStartNext(terminal, requiresRecovery: true));
@@ -428,7 +431,9 @@ Preserve exactly: the `Validate()` throw, the folder-collision throw and its ful
 
 - [ ] **Step 4: Migrate the non-operation entry points**
 
-`CreateBackup`, `DeleteHistorySnapshot`, `CleanUpFolders`, and `RollbackFolderCleanup` do not start controller operations, so they use the helper instead. In each, replace this shape:
+Two different situations here — do not treat them as one.
+
+**`CreateBackup` and `DeleteHistorySnapshot`** have the flag shape today. In each, replace:
 
 ```csharp
         if (_operationInProgress)
@@ -452,6 +457,8 @@ with:
 ```
 
 The `try/finally` existed only to clear the flag. Any `catch` that does something *other* than clear the flag — logging, wrapping, config writes — must be kept.
+
+**`CleanUpFolders` and `RollbackFolderCleanup` have NO admission guard today** — verified by grep; the 23 flag sites live entirely in the six methods above and `OnFrameworkUpdate`. They have relied solely on the UI's `CanRunFolderCleanup`/`CanRunFolderCleanupRollback` gating. Add `EnsureAdmitted();` as their first statement. This is a guard **addition**, not a replacement: it hardens the direct-call path the spec's admission-everywhere rule requires, and is not user-visible because the UI gate already prevents the click. Do not go looking for a flag shape to strip from these two — there isn't one.
 
 `ResolveContinue` and `ResolveRestorePreviousState` also guard on the flag today. They start recovery successors through the controller's own bypass path, so they use `EnsureAdmitted()` too, but note the bypass: their successor start is *supposed* to proceed despite `RequiresRecovery`. Check `AdmissionRejectionReason` does not reject them — if it does (it will, via the `_pendingRecovery` clause), give them a dedicated guard that checks only `_starting` and `_active`:
 
@@ -664,6 +671,17 @@ Add near the top of `MainWindow`:
     private long _lastConsumedCompletion;
 ```
 
+Add a second field beside it:
+
+```csharp
+    // Set by the completion consumer, consumed inside the Review Changes tab's own draw. The
+    // OpenPopup call CANNOT move into the consumer: BeginTabBar pushes an ID override, so the
+    // matching BeginPopupModal inside the tab resolves the popup name against a different ID stack
+    // than Draw()'s root - a root-level OpenPopup would mark a popup open that the tab's
+    // BeginPopupModal never sees. The flag carries the decision across that scope boundary.
+    private bool _pendingApplyReminder;
+```
+
 Add the method, and call it as the **first** statement of `Draw()`, before `DrawRecoveryPanelIfNeeded()`:
 
 ```csharp
@@ -671,6 +689,13 @@ Add the method, and call it as the **first** statement of `Draw()`, before `Draw
     // comparison rather than a per-kind latch, so a terminal snapshot that stays published for many
     // frames is consumed exactly once, and recovery successors are consumed by the same code as
     // ordinary operations rather than needing their own polling.
+    //
+    // DELIBERATE BEHAVIOUR CHANGE, the one exception to this plan's behaviour-preserving rule: the
+    // old latches lived inside tab draw methods that early-return when their tab is not selected,
+    // so completion consequences waited until the user visited the right tab. This consumer fires
+    // on the frame completion is first observed, whatever tab is visible. Deferred consumption was
+    // itself a latent staleness bug (a completed Apply's RunScan would not happen until a tab
+    // visit), so immediate consumption is adopted knowingly rather than reproduced.
     private void ConsumeCompletionIfNew()
     {
         var state = _plugin.OperationController.State;
@@ -691,19 +716,29 @@ Add the method, and call it as the **first** statement of `Draw()`, before `Draw
                 // OrganizerState's cached CurrentPath values are stale too - RunScan re-reads both.
                 RunScan();
                 if (state.SuccessfulTargets > 0)
-                    ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
+                    _pendingApplyReminder = true;
                 break;
 
             case Organizer.Operations.OperationType.Restore:
-                RunScan();
+                RunScan(); // matches today's Restore completion block: cache null + RunScan, no popup
                 break;
         }
     }
 ```
 
-Check the Restore completion block before writing this: if it does **not** call `RunScan()` today, do not add one — that would be a behaviour change, and this is a behaviour-preserving refactor. Mirror exactly what each block does now.
+Inside the Review Changes tab's draw, where the old completion block sat, leave only:
 
-`ImGui.OpenPopup` must be called while the containing window is current. Verify the popup still fires by the manual check in Step 6; if it does not, move only the `OpenPopup` call back into the Apply tab's draw path, gated on a `_pendingApplyReminder` bool the consumer sets.
+```csharp
+        if (_pendingApplyReminder)
+        {
+            _pendingApplyReminder = false;
+            // In-scope with this tab's BeginPopupModal - see the field's comment for why the
+            // consumer cannot call this itself.
+            ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
+        }
+```
+
+This preserves today's popup semantics exactly: the modal appears when the Review Changes tab is visible, which is where the user who clicked Apply already is.
 
 - [ ] **Step 3: Delete the old latches**
 
@@ -753,3 +788,4 @@ The suite has no game process and `PenumbraOperationsAdapter` has no automated c
 - [ ] Force a preparation failure — stage a proposed path that collides with an orphaned folder entry, which throws inside the folder-collision check. Confirm the error appears **and** that Apply is immediately usable again afterwards. This is the failure-atomicity case that `_operationInProgress` handled with a catch at every call site.
 - [ ] Force a `RequiresRecovery` state, resolve it with Keep Current, and confirm the History tab reflects the pre-operation snapshot without a manual refresh. This is the pre-existing gap Task 5 Step 4 closes.
 - [ ] Leave the plugin window open on the History tab for a minute after an operation completes. Nothing re-fires: no repeated scan, no reopening popup, no flicker.
+- [ ] Start an Apply from Review Changes, switch to the Protect tab, and wait for completion there. The mod list refreshes without visiting Review Changes (the deliberate timing change), and on returning to Review Changes the Rediscover Mods reminder appears exactly once.
