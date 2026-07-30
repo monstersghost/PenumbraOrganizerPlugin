@@ -29,8 +29,24 @@ public sealed class TemplateStore(string directory)
         var templates = new List<StoredTemplate>();
         var unreadable = new List<string>();
 
-        foreach (var path in System.IO.Directory.GetFiles(Directory, "*.json")
-                     .OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase))
+        string[] paths;
+        try
+        {
+            paths = System.IO.Directory.GetFiles(Directory, "*.json");
+        }
+        catch (IOException)
+        {
+            // The directory vanished or became unreadable between the Exists check above and
+            // now. List() is called from a draw method, so this must degrade to an empty
+            // listing rather than throw a frame.
+            return new TemplateStoreListing([], []);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new TemplateStoreListing([], []);
+        }
+
+        foreach (var path in paths.OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase))
         {
             var fileName = Path.GetFileName(path);
             string json;

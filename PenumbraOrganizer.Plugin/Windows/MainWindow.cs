@@ -1279,8 +1279,15 @@ public sealed class MainWindow : Window, IDisposable
             // Created on demand: the folder need not exist until someone actually wants it.
             // OpenFileWithDefaultApp is this window's existing helper and shell-executes a
             // directory path just as it does a file, so no new API is introduced here.
-            Directory.CreateDirectory(_plugin.TemplatesDirectory);
-            OpenFileWithDefaultApp(_plugin.TemplatesDirectory);
+            try
+            {
+                Directory.CreateDirectory(_plugin.TemplatesDirectory);
+                OpenFileWithDefaultApp(_plugin.TemplatesDirectory);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"Could not open the templates folder: {ex.Message}";
+            }
         }
 
         ImGui.SameLine();
