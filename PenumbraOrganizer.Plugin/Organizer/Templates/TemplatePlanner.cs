@@ -29,6 +29,27 @@ public sealed record TemplateApplicationPlan(
 /// </summary>
 public static class TemplatePlanner
 {
+    /// <summary>
+    /// Plans directly from a decode result, so the decode warnings cannot be dropped. Plan's own
+    /// decodeWarnings parameter is optional, and a caller that omits it silently loses every
+    /// warning and reports InvalidEntriesSkipped as 0 -- a plausible-looking but incomplete plan
+    /// with no signal that anything is missing. UI callers use this entry point.
+    /// </summary>
+    public static TemplateApplicationPlan PlanFromDecoded(
+        TemplateDecodeResult decoded,
+        IReadOnlyCollection<OrganizerModRow> rows,
+        Func<string, string> canonicalizeCreator)
+    {
+        if (!decoded.Succeeded)
+        {
+            throw new ArgumentException(
+                "Cannot plan from a template that failed to decode; surface the error instead.",
+                nameof(decoded));
+        }
+
+        return Plan(decoded.Template!, rows, canonicalizeCreator, decoded.Warnings);
+    }
+
     public static TemplateApplicationPlan Plan(
         ValidatedOrganizationTemplate template,
         IReadOnlyCollection<OrganizerModRow> rows,
