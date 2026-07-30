@@ -482,7 +482,7 @@ public sealed record ValidatedOrganizationTemplate(
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateModelsTests"
 ```
 
-Expected: PASS, 14 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1419,7 +1419,7 @@ public static class TemplateCodec
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateCodecJsonTests"
 ```
 
-Expected: PASS, 14 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Commit**
 
