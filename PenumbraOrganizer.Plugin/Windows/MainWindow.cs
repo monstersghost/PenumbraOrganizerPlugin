@@ -413,16 +413,20 @@ public sealed class MainWindow : Window, IDisposable
         if (!tab)
             return;
 
-        var scanOperationState = _plugin.OperationController.State;
+        var gates = CurrentGates();
+        var scanState = _plugin.ScanWork.State;
         using (PluginTheme.PrimaryButton())
         {
-            ImGui.BeginDisabled(!scanOperationState.CanScan);
+            ImGui.BeginDisabled(!gates.CanScan);
             if (ImGui.Button("Refresh mod list"))
                 RunScan();
             ImGui.EndDisabled();
         }
-        if (!scanOperationState.CanScan && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+        if (!gates.CanScan && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+
+        DrawLibraryWorkProgress(scanState, _plugin.ScanWork.RequestCancellation);
+        DrawLibraryWorkOutcome(scanState);
 
         ImGui.SameLine();
         ImGui.Text($"{_plugin.OrganizerState.Mods.Count} mods loaded");
@@ -697,11 +701,65 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.TextDisabled($"{operationState.ProcessedSteps}/{operationState.TotalSteps} steps ({operationState.Stage})");
     }
 
+    private ActivityGates CurrentGates() => ActivityGates.Build(
+        _plugin.OperationController.State, _plugin.ScanWork.State, _plugin.IndexWork.State);
+
+    // Progress bar plus a right-aligned Cancel, reserving the button's width before the bar claims
+    // it - same layout approach as DrawOperationProgress, against the library work snapshot.
+    private static void DrawLibraryWorkProgress(LibraryWork.LibraryWorkStateSnapshot state, Action onCancel)
+    {
+        if (!state.IsRunning)
+            return;
+
+        var fraction = state.TotalItems > 0 ? (float)state.ProcessedItems / state.TotalItems : 0f;
+        var buttonWidth = ImGui.CalcTextSize("Cancel").X + ImGui.GetStyle().FramePadding.X * 2;
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var barWidth = state.CanCancel
+            ? MathF.Max(1f, ImGui.GetContentRegionAvail().X - buttonWidth - spacing)
+            : -1f;
+
+        ImGui.ProgressBar(fraction, new Vector2(barWidth, 0),
+            $"{state.ProcessedItems}/{state.TotalItems} mods");
+        if (state.CanCancel)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button($"Cancel##library-work-{state.JobDisplayName}", new Vector2(buttonWidth, 0)))
+                onCancel();
+        }
+
+        ImGui.TextDisabled($"{state.JobDisplayName}: {state.Phase}");
+    }
+
+    private static void DrawLibraryWorkOutcome(LibraryWork.LibraryWorkStateSnapshot state)
+    {
+        if (state.IsRunning)
+            return;
+
+        switch (state.LastOutcome)
+        {
+            case LibraryWork.LibraryWorkOutcome.Failed:
+                ImGui.TextColored(PluginTheme.CollisionBad, state.LastError ?? "The run failed.");
+                break;
+            case LibraryWork.LibraryWorkOutcome.StaleModList:
+                ImGui.TextColored(ImGuiColors.DalamudYellow,
+                    "The mod list changed while this was running, so nothing was applied. Run it again.");
+                break;
+            case LibraryWork.LibraryWorkOutcome.Cancelled:
+                ImGui.TextDisabled("Cancelled. The previous results are unchanged.");
+                break;
+            case LibraryWork.LibraryWorkOutcome.Completed:
+            case null:
+                break;
+        }
+    }
+
     private void DrawSortTab()
     {
         using var tab = ImRaii.TabItem("Sort");
         if (!tab)
             return;
+
+        var gates = CurrentGates();
 
         DrawWrappingButtonRow(
         [
@@ -772,8 +830,12 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.InputText("Destination folder", ref _manualFolderInput, 256);
 
         ImGui.SameLine();
-        if (ImGui.Button($"Assign {_selectedManualModIdentifiers.Count} selected mods")
-            && _manualFolderInput.Length > 0 && _selectedManualModIdentifiers.Count > 0)
+        ImGui.BeginDisabled(!gates.CanStageProposals);
+        var assignClicked = ImGui.Button($"Assign {_selectedManualModIdentifiers.Count} selected mods");
+        ImGui.EndDisabled();
+        if (!gates.CanStageProposals && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+        if (assignClicked && _manualFolderInput.Length > 0 && _selectedManualModIdentifiers.Count > 0)
         {
             var batchResults = _plugin.OrganizerState.AssignManualBatch(_selectedManualModIdentifiers, _manualFolderInput);
             var succeeded = batchResults.Count(r => r.Success);
@@ -894,6 +956,7 @@ public sealed class MainWindow : Window, IDisposable
             .Count(m => !m.Protected && !string.Equals(m.ProposedPath, m.CurrentPath, StringComparison.OrdinalIgnoreCase));
 
         var operationState = _plugin.OperationController.State;
+        var gates = CurrentGates();
         if (_pendingApplyReminder)
         {
             _pendingApplyReminder = false;
@@ -902,7 +965,7 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
         }
 
-        ImGui.BeginDisabled(result.HasIssues || !operationState.CanStartApply);
+        ImGui.BeginDisabled(result.HasIssues || !gates.CanStartApply);
         var applyClicked = ImGui.Button("Apply");
         ImGui.EndDisabled();
         if (applyClicked)
@@ -980,10 +1043,11 @@ public sealed class MainWindow : Window, IDisposable
             return;
 
         var operationState = _plugin.OperationController.State;
+        var gates = CurrentGates();
 
         ImGui.InputText("Label (optional)", ref _createBackupLabelInput, 200);
         ImGui.SameLine();
-        ImGui.BeginDisabled(!operationState.CanCreateBackup);
+        ImGui.BeginDisabled(!gates.CanCreateBackup);
         if (ImGui.Button("Create Backup"))
         {
             var label = _createBackupLabelInput.Trim();
@@ -991,7 +1055,7 @@ public sealed class MainWindow : Window, IDisposable
             _createBackupLabelInput = string.Empty;
         }
         ImGui.EndDisabled();
-        if (!operationState.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+        if (!gates.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
         ImGui.Spacing();
@@ -1021,10 +1085,10 @@ public sealed class MainWindow : Window, IDisposable
             // window edge.
             ImGui.TextWrapped($"{title} ({snapshot.ModPaths.Count} mods)");
 
-            ImGui.BeginDisabled(!operationState.CanStartRestore);
+            ImGui.BeginDisabled(!gates.CanStartRestore);
             var restoreButtonClicked = ImGui.Button($"Restore##restore-{snapshot.Id}");
             ImGui.EndDisabled();
-            if (!operationState.CanStartRestore && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            if (!gates.CanStartRestore && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
             if (restoreButtonClicked)
             {
@@ -1037,10 +1101,10 @@ public sealed class MainWindow : Window, IDisposable
             }
 
             ImGui.SameLine();
-            ImGui.BeginDisabled(!operationState.CanCreateBackup);
+            ImGui.BeginDisabled(!gates.CanCreateBackup);
             var deleteButtonClicked = ImGui.Button($"Delete##delete-{snapshot.Id}");
             ImGui.EndDisabled();
-            if (!operationState.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            if (!gates.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
             if (deleteButtonClicked)
             {
@@ -1170,11 +1234,20 @@ public sealed class MainWindow : Window, IDisposable
             + "now - it may be retired later if Penumbra's own filtering fully supersedes it.");
         ImGui.Spacing();
 
+        var gates = CurrentGates();
+        var indexState = _plugin.IndexWork.State;
         using (PluginTheme.PrimaryButton())
         {
+            ImGui.BeginDisabled(!gates.CanIndex);
             if (ImGui.Button("Build/Refresh Index"))
                 BuildChangedItemIndex();
+            ImGui.EndDisabled();
         }
+        if (!gates.CanIndex && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+
+        DrawLibraryWorkProgress(indexState, _plugin.IndexWork.RequestCancellation);
+        DrawLibraryWorkOutcome(indexState);
 
         if (_plugin.LibraryIndexError is { } error)
             ImGui.TextColored(PluginTheme.CollisionBad, error);
@@ -1400,7 +1473,7 @@ public sealed class MainWindow : Window, IDisposable
     private void DrawOrphanedFoldersSection()
     {
         var detection = _orphanedFolders;
-        var operationState = _plugin.OperationController.State;
+        var gates = CurrentGates();
         if (detection is null || detection.Status == Organizer.FolderDetectionStatus.NotScanned)
             return; // nothing meaningful before the first scan
 
@@ -1464,14 +1537,14 @@ public sealed class MainWindow : Window, IDisposable
             }
 
             ImGui.Spacing();
-            ImGui.BeginDisabled(_selectedOrphans.Count == 0 || !operationState.CanRunFolderCleanup);
+            ImGui.BeginDisabled(_selectedOrphans.Count == 0 || !gates.CanRunFolderCleanup);
             var cleanClicked = ImGui.Button("Clean Up Selected Folders");
             ImGui.EndDisabled();
             // Gated on _selectedOrphans.Count > 0 so this tooltip only claims the reason is "another
             // operation" when that's actually why the button is disabled - with no selection at all,
             // the button is disabled for an unrelated, pre-existing reason (nothing chosen yet), and
             // this tooltip must not claim an operation is blocking it when none is.
-            if (_selectedOrphans.Count > 0 && !operationState.CanRunFolderCleanup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            if (_selectedOrphans.Count > 0 && !gates.CanRunFolderCleanup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
             if (cleanClicked)
                 ImGui.OpenPopup("Clean up folders?");
@@ -1507,11 +1580,11 @@ public sealed class MainWindow : Window, IDisposable
             // (the wrapped explanatory paragraph, or nothing if total == 0) can end at an
             // unpredictable X position depending on window width and how many lines it wrapped
             // to, which could otherwise push this button most of the way off the window edge.
-            ImGui.BeginDisabled(!operationState.CanRunFolderCleanupRollback);
+            ImGui.BeginDisabled(!gates.CanRunFolderCleanupRollback);
             if (ImGui.Button("Rollback Folder Cleanup"))
                 RollbackFolderCleanup();
             ImGui.EndDisabled();
-            if (!operationState.CanRunFolderCleanupRollback && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            if (!gates.CanRunFolderCleanupRollback && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Another operation is in progress or requires recovery.");
         }
 
