@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 namespace PenumbraOrganizer.Plugin.Organizer;
 
@@ -193,31 +194,29 @@ public sealed class OrganizerState
     }
 
     public int SortByCreator(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), null));
+        SortBy(TemplateFallbackStrategy.Creator, canonicalizeCreator);
 
+    // No canonicalizer: these two strategies have no creator segment, so none is computed.
     public int SortByModType() =>
-        Sort(row => (TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory)), null));
+        SortBy(TemplateFallbackStrategy.ModType, null);
 
     public int SortByModTypeDetailed() =>
-        Sort(row => (TypeFolder(row.Category, row.SubCategory), null));
+        SortBy(TemplateFallbackStrategy.ModTypeDetailed, null);
 
     public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (TypeFolder(row.Category, row.SubCategory), KnownSegment(canonicalizeCreator(row.Author))));
+        SortBy(TemplateFallbackStrategy.TypeThenCreator, canonicalizeCreator);
 
     public int SortByTypeThenCreatorFlat(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory)), KnownSegment(canonicalizeCreator(row.Author))));
+        SortBy(TemplateFallbackStrategy.TypeThenCreatorFlat, canonicalizeCreator);
 
     public int SortByCreatorThenType(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, row.SubCategory)));
+        SortBy(TemplateFallbackStrategy.CreatorThenType, canonicalizeCreator);
 
     public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory))));
+        SortBy(TemplateFallbackStrategy.CreatorThenTypeFlat, canonicalizeCreator);
 
-    // Gear only: always the flat folder, ignoring any resolved slot subcategory. Every other
-    // category keeps its normal subfolder behavior via GetFolder unchanged. Shared by every
-    // "flat" sort variant so Gear/Feet vs Gear stays a single decision point.
-    private static string? FlattenGearSubCategory(ModCategory? category, string? subCategory) =>
-        category == ModCategory.Gear ? null : subCategory;
+    private int SortBy(TemplateFallbackStrategy strategy, Func<string, string>? canonicalizeCreator) =>
+        Sort(row => SortFolderSelectors.Select(strategy, row, canonicalizeCreator));
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
@@ -238,19 +237,6 @@ public sealed class OrganizerState
         FinishProposals(touched);
         return count;
     }
-
-    private static string? TypeFolder(ModCategory? category, string? subCategory) =>
-        category is null ? null : KnownFolder(ModTypeFolders.GetFolder(category.Value, subCategory));
-
-    // For multi-level folder constants from ModTypeFolders (may contain a real '/', e.g.
-    // "Gear/Feet") — must NOT be FixName'd, which would turn the separator into '\'.
-    private static string? KnownFolder(string? folder) =>
-        string.IsNullOrWhiteSpace(folder) ? null : folder;
-
-    // For single dynamic segments (creator names): mirror Penumbra's FixName so what we
-    // propose is what Penumbra will actually store (trimmed, '/' escaped).
-    private static string? KnownSegment(string? segment) =>
-        string.IsNullOrWhiteSpace(segment) ? null : PenumbraPathSemantics.FixName(segment);
 
     private static string BuildPath(string? primaryFolder, string? secondaryFolder, string name)
     {
