@@ -45,6 +45,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Organizer.NpcNames.NpcNameRefreshService _npcNameRefreshService;
 
     internal ModEventEpoch ModEvents { get; } = new();
+    internal LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow> ScanWork { get; }
 
     private readonly EventSubscriber<string> _modAdded;
     private readonly EventSubscriber<string> _modDeleted;
@@ -65,7 +66,18 @@ public sealed class Plugin : IDalamudPlugin
             Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(OperationsRoot));
         OperationController = new Organizer.Operations.OperationController(
             operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
-            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot);
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
+            // Late-bound on purpose: the delegate reads the coordinator property at invoke time,
+            // never at construction. OperationController is constructed before ScanWork is
+            // assigned, and no admission check can run during the constructor - but the null
+            // guard makes that ordering a non-issue rather than an invariant to remember.
+            // IndexWork does not exist until Task 10; it passes Idle here until then.
+            externalActivityGate: () => ScanWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(
+                    ScanWork.State, LibraryWork.LibraryWorkStateSnapshot.Idle));
+        ScanWork = new LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow>(
+            () => ModEvents.Current, logWarning: message => Log.Warning(message));
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
         try
@@ -142,6 +154,8 @@ public sealed class Plugin : IDalamudPlugin
         _modDirectoryChanged.Dispose();
         _penumbraDisposed.Dispose();
 
+        ScanWork.Dispose();
+
         WindowSystem.RemoveAllWindows();
         _mainWindow.Dispose();
 
@@ -153,72 +167,82 @@ public sealed class Plugin : IDalamudPlugin
 
     private void ToggleMainUi() => _mainWindow.Toggle();
 
-    private void OnFrameworkUpdate(IFramework framework)
+    // Everything that must happen once new scan data is live, none of which can be rolled back.
+    // Each is isolated: one failing must not skip the others, and none may fail the run - the data
+    // is already published by the time this is called.
+    internal void RunPostScanSideEffects()
     {
-        _mainWindow.DrainEventLog();
-        OperationController.Update();
+        try
+        {
+            SaveProtectionState();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Saving protection state after a scan failed; the scan itself succeeded.");
+        }
+
+        try
+        {
+            _mainWindow.OnScanPublished();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Post-scan refresh failed; the scan itself succeeded.");
+        }
     }
 
+    private bool _libraryUpdateFaulted;
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        OperationController.Update(); // has its own internal exception boundary
+
+        try
+        {
+            _mainWindow.DrainEventLog();
+            ScanWork.Update();
+        }
+        catch (Exception ex)
+        {
+            // Latched: a fault that recurs every frame must not log every frame. Library work is
+            // non-critical - the plugin stays usable, the user re-runs the scan after a reload.
+            if (!_libraryUpdateFaulted)
+            {
+                _libraryUpdateFaulted = true;
+                Log.Error(ex, "Library work update failed; background scans are disabled until the plugin reloads.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a scan. Returns as soon as the Penumbra reads are done; classification and the
+    /// per-mod disk walk run on a background thread and publish through ScanJob.Publish.
+    /// Throws InvalidOperationException if any conflicting activity is running.
+    /// </summary>
     public void RunScan()
     {
-        // One bulk call for all mods' changed items (Approach B in the Phase 1c spec).
-        // Plain dictionary, not disposable. If Penumbra is unavailable this throws and
-        // surfaces through MainWindow's existing scan error handling.
-        var allChangedItems = new Penumbra.Api.IpcSubscribers.GetChangedItemAdapterDictionary(PluginInterface).Invoke();
+        // EnsureAdmitted is the state-authority plan's shared admission point: it consults
+        // AdmissionRejectionReason, which covers an active operation, a pending recovery, a
+        // starting operation, AND (via the Task 8 gate) the other library coordinator.
+        EnsureAdmitted();
+        ScanWork.Start(new ScanJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+    }
 
-        using var modList = GetModListAdapterIpc.Invoke();
-
-        var npcNameListResult = NpcNameListStore.Load(NpcNameListPath, ReadEmbeddedNpcNameSeed());
-        if (npcNameListResult.Warning is not null)
-            Log.Warning(npcNameListResult.Warning);
-        var npcNameMatcher = NpcNameListStore.BuildMatcher(npcNameListResult.Document);
-
-        var rows = modList.Select(mod =>
+    /// <summary>
+    /// Best-effort scan for callers that must not fail if one cannot start right now - specifically
+    /// the recovery-resolution paths, whose scan is a refresh after the fact, not a correctness
+    /// requirement. Returns false and logs rather than throwing out of a committed recovery.
+    /// </summary>
+    internal bool TryRequestScan()
+    {
+        if (OperationController.AdmissionRejectionReason() is { } reason)
         {
-            var changedItemKeys = allChangedItems.TryGetValue(mod.Identifier, out var changedItems)
-                ? changedItems.Keys
-                : Enumerable.Empty<string>();
-            var classification = ModTypeClassifier.Classify(mod.Name, changedItemKeys, npcNameMatcher);
+            Log.Information($"Post-recovery scan skipped: {reason} Use Refresh mod list when it clears.");
+            return false;
+        }
 
-            // Disk I/O only for mods the existing GetChangedItems-based rule already confirmed
-            // are Gear — every other category never touches disk for this.
-            var gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable;
-            if (classification.Category == ModCategory.Gear)
-            {
-                var equipmentSlots = ModEquipmentFileReader.ReadEquipmentSlots(mod.ModPath);
-                classification = ModTypeClassifier.EnrichGearSubCategory(classification, equipmentSlots);
-
-                // Recorded per-row (not logged) so the Export button can surface a breakdown -
-                // see GearSlotDiagnostic's doc comment for why this exists. ReadEquipmentSlots
-                // itself can't distinguish "directory doesn't exist" from "directory exists but
-                // has no equipment evidence" (by design, per its own tests) - checked here
-                // instead, since it's a materially different root cause for diagnostics.
-                gearSlotDiagnostic = equipmentSlots switch
-                {
-                    null => GearSlotDiagnostic.ReadFailure,
-                    { Count: 0 } when !mod.ModPath.Exists => GearSlotDiagnostic.DirectoryMissing,
-                    { Count: 0 } => GearSlotDiagnostic.ZeroEvidence,
-                    { Count: 1 } => GearSlotDiagnostic.Single,
-                    _ => GearSlotDiagnostic.Ambiguous,
-                };
-            }
-
-            return new Organizer.OrganizerModRow
-            {
-                Identifier = mod.Identifier,
-                Name = mod.Name,
-                Author = mod.Author,
-                CurrentPath = mod.FullPath,
-                ProposedPath = mod.FullPath,
-                HeliosphereManaged = Organizer.HeliosphereDetector.IsHeliosphereManaged(mod.Identifier, mod.ModPath),
-                Category = classification.Category,
-                SubCategory = classification.SubCategory,
-                GearSlotDiagnostic = gearSlotDiagnostic,
-            };
-        }).ToList();
-
-        OrganizerState.LoadScan(rows, Config.ProtectedModIdentifiers, Config.ProtectedFolderPaths);
-        SaveProtectionState();
+        RunScan();
+        return true;
     }
 
     public void BuildChangedItemIndex()
@@ -281,9 +305,9 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string DefaultWorkbookFilePath => Path.Combine(PluginInterface.ConfigDirectory.FullName, DefaultWorkbookFileName);
 
-    private string NpcNameListPath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "npc-name-list.json");
+    internal string NpcNameListPath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "npc-name-list.json");
 
-    private static string ReadEmbeddedNpcNameSeed()
+    internal static string ReadEmbeddedNpcNameSeed()
     {
         var assembly = typeof(Plugin).Assembly;
         const string resourceName = "PenumbraOrganizer.Plugin.Organizer.NpcNames.npc-name-list-seed.json";
@@ -456,7 +480,7 @@ public sealed class Plugin : IDalamudPlugin
     internal void ResolveKeepCurrent()
     {
         OperationController.ResolveKeepCurrent();
-        RunScan();
+        TryRequestScan();
     }
 
     internal void ResolveContinue()
@@ -477,7 +501,7 @@ public sealed class Plugin : IDalamudPlugin
     internal void AcceptAllAndCloseInterruptedOperations()
     {
         OperationController.AcceptAllAndCloseInterruptedOperations();
-        RunScan();
+        TryRequestScan();
     }
 
     internal void RequestCancellation() => OperationController.RequestCancellation();
@@ -509,7 +533,7 @@ public sealed class Plugin : IDalamudPlugin
         // would throw or record a misleading error while a recovery is still outstanding. Only scan
         // once recovery has actually cleared.
         if (!OperationController.State.RequiresRecovery)
-            RunScan();
+            TryRequestScan();
     }
 
     // Read-only: computes what a Restore would do without capturing a snapshot or moving

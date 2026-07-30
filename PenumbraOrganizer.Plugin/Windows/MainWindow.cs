@@ -1614,21 +1614,28 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
+    // Starts the scan; completion lands in OnScanPublished on a later frame. The catch covers a
+    // rejected start (another library run in flight); every failure inside the run itself is
+    // reported through ScanWork.State.LastError instead.
     private void RunScan()
     {
         try
         {
             _plugin.RunScan();
             _lastError = null;
-            _folderReloadRequired = false; // the banner's instruction is "Rediscover Mods, then Scan here"
-            Plugin.Log.Information($"Scan completed: {_plugin.OrganizerState.Mods.Count} mods loaded.");
         }
         catch (Exception ex)
         {
-            _lastError = $"Failed to reach Penumbra IPC: {ex.Message}";
-            Plugin.Log.Error(ex, "Scan failed.");
+            _lastError = $"Could not start scan: {ex.Message}";
+            Plugin.Log.Error(ex, "Scan could not be started.");
         }
+    }
 
+    // Framework thread, called by ScanJob.Publish once results are live in OrganizerState.
+    internal void OnScanPublished()
+    {
+        _folderReloadRequired = false; // the banner's instruction is "Rediscover Mods, then Scan here"
+        Plugin.Log.Information($"Scan completed: {_plugin.OrganizerState.Mods.Count} mods loaded.");
         RefreshOrphanedFolders();
     }
 
