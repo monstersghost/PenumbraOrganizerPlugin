@@ -218,6 +218,31 @@ public sealed class OrganizerState
     private int SortBy(TemplateFallbackStrategy strategy, Func<string, string>? canonicalizeCreator) =>
         Sort(row => SortFolderSelectors.Select(strategy, row, canonicalizeCreator));
 
+    /// <summary>
+    /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes
+    /// through the same private Sort tail as every other strategy, so pinning, collision
+    /// disambiguation and protected-row filtering are inherited rather than reimplemented.
+    /// Because the plan was computed from these same rows, preview and result cannot diverge.
+    ///
+    /// A row absent from the plan keeps its current proposal: the plan is authoritative about
+    /// which rows it covers.
+    /// </summary>
+    public TemplateApplyReport ApplyTemplate(TemplateApplicationPlan plan)
+    {
+        var touched = new List<OrganizerModRow>();
+        foreach (var row in _mods.Values.Where(m => !m.Protected))
+        {
+            if (!plan.DestinationFolders.TryGetValue(row.Identifier, out var folder))
+                continue;
+
+            row.ProposedPath = BuildPath(folder, null, row.Name);
+            touched.Add(row);
+        }
+
+        FinishProposals(touched);
+        return plan.Report;
+    }
+
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
     // over every touched row. Each public SortBy* method supplies only what varies: which
