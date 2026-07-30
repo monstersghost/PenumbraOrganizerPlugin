@@ -765,6 +765,7 @@ public sealed class MainWindow : Window, IDisposable
 
         var gates = CurrentGates();
 
+        ImGui.BeginDisabled(!gates.CanStageProposals);
         DrawWrappingButtonRow(
         [
             ("By Creator", () => _plugin.OrganizerState.SortByCreator(_creatorCanonicalizer.Canonicalize)),
@@ -779,11 +780,24 @@ public sealed class MainWindow : Window, IDisposable
                 ".xlsx",
                 (success, paths) =>
                 {
-                    if (success && paths.Count > 0)
-                        ImportWorkbook(paths[0]);
+                    // The dialog callback fires on a later frame, after this frame's BeginDisabled
+                    // has already lapsed - a scan or index build can have started in between, and
+                    // ReplaceScanAtomically would silently wipe whatever ImportWorkbook is about to
+                    // stage. Re-check the gate here, at the moment the import would actually run.
+                    if (!success || paths.Count == 0)
+                        return;
+                    if (!CurrentGates().CanStageProposals)
+                    {
+                        _lastError = "Import Workbook was cancelled because library work started before the file was chosen.";
+                        return;
+                    }
+                    ImportWorkbook(paths[0]);
                 },
                 selectionCountMax: 1)),
         ]);
+        ImGui.EndDisabled();
+        if (!gates.CanStageProposals && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
         if (_lastWorkbookImportResult is not null)
         {

@@ -31,6 +31,9 @@ public sealed class EventLogBuffer
     /// </summary>
     public void Drain()
     {
+        if (_incoming.IsEmpty)
+            return;
+
         var drained = new List<string>();
         while (_incoming.TryDequeue(out var line))
             drained.Add(line);

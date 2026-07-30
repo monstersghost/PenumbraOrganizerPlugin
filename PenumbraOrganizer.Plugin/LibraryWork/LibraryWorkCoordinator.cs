@@ -184,6 +184,23 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
 
     public void RequestCancellation() => _cts?.Cancel();
 
+    /// <summary>
+    /// Force-settles the current run (if any) to <see cref="LibraryWorkOutcome.Failed"/> with
+    /// <paramref name="reason"/>, releasing every gate that depends on Phase == Idle. Deliberately
+    /// does not touch <see cref="_task"/>: the background task may still be running, and this method
+    /// is giving up on observing it, not stopping it. Safe to call when nothing is running - it just
+    /// overwrites State with a Failed/Idle snapshot - and Start() may be called again immediately
+    /// afterwards.
+    /// </summary>
+    public void AbandonRun(string reason)
+    {
+        _job = null;
+        State = new LibraryWorkStateSnapshot(
+            LibraryWorkPhase.Idle, JobDisplayName: null,
+            Volatile.Read(ref _processed), _total,
+            LastOutcome: LibraryWorkOutcome.Failed, LastError: reason, CanCancel: false);
+    }
+
     public void Dispose()
     {
         if (_disposed)

@@ -199,26 +199,60 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    private bool _libraryUpdateFaulted;
+    private bool _eventLogDrainFaulted;
+    private bool _scanWorkFaulted;
+    private bool _indexWorkFaulted;
 
     private void OnFrameworkUpdate(IFramework framework)
     {
         OperationController.Update(); // has its own internal exception boundary
 
+        // Each of these three gets its own try/catch and its own never-reset latch: they are
+        // independent of one another, so one throwing must not skip or starve the others. A
+        // coordinator that faults here is abandoned so its Phase returns to Idle and releases the
+        // activity gate - without that, a coordinator stuck outside Idle would make
+        // LibraryActivityGate.Reason non-null forever, permanently rejecting every gated action.
         try
         {
             _mainWindow.DrainEventLog();
+        }
+        catch (Exception ex)
+        {
+            if (!_eventLogDrainFaulted)
+            {
+                _eventLogDrainFaulted = true;
+                Log.Error(ex, "Draining the event log failed; this frame's log lines were lost, " +
+                    "the plugin remains usable, and later frames will keep trying.");
+            }
+        }
+
+        try
+        {
             ScanWork.Update();
+        }
+        catch (Exception ex)
+        {
+            ScanWork.AbandonRun($"Scan update threw: {ex.Message}");
+            if (!_scanWorkFaulted)
+            {
+                _scanWorkFaulted = true;
+                Log.Error(ex, "Scan work update failed; the in-flight scan (if any) was abandoned " +
+                    "and Scan can be started again.");
+            }
+        }
+
+        try
+        {
             IndexWork.Update();
         }
         catch (Exception ex)
         {
-            // Latched: a fault that recurs every frame must not log every frame. Library work is
-            // non-critical - the plugin stays usable, the user re-runs the scan after a reload.
-            if (!_libraryUpdateFaulted)
+            IndexWork.AbandonRun($"Index update threw: {ex.Message}");
+            if (!_indexWorkFaulted)
             {
-                _libraryUpdateFaulted = true;
-                Log.Error(ex, "Library work update failed; background scans are disabled until the plugin reloads.");
+                _indexWorkFaulted = true;
+                Log.Error(ex, "Search index work update failed; the in-flight build (if any) was " +
+                    "abandoned and the index build can be started again.");
             }
         }
     }

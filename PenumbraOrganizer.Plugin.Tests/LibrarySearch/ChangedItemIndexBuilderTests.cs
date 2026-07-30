@@ -1,11 +1,21 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.LibrarySearch;
+using PenumbraOrganizer.Plugin.LibraryWork.Pure;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Tests.LibrarySearch;
 
+/// <summary>
+/// Retargeted at IndexProcessor (the per-mod work production actually runs) plus
+/// ChangedItemIndexBuilder.Assemble (the framework-thread final step production actually calls).
+/// ChangedItemIndexBuilder.Build and LibraryModEntry were a full duplicate of IndexProcessor with
+/// zero production callers and were deleted; these tests assert the same behaviours against the
+/// real implementation instead.
+/// </summary>
 public class ChangedItemIndexBuilderTests
 {
+    private const string EmptyNpcSeedJson = """{"Version":1,"NPCs":[],"Enemies":[],"Bosses":[],"Excluded":[]}""";
+
     private static DirectoryInfo MakeTempModDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "PenumbraOrganizer.Plugin.Tests", Guid.NewGuid().ToString("N"));
@@ -16,44 +26,58 @@ public class ChangedItemIndexBuilderTests
     private static void WriteJson(DirectoryInfo modDirectory, string fileName, string json) =>
         File.WriteAllText(Path.Combine(modDirectory.FullName, fileName), json);
 
-    private static LibraryModEntry MakeMod(string identifier, string name, string author, DirectoryInfo? modPath = null) =>
-        new(identifier, name, author, modPath ?? new DirectoryInfo(Path.Combine(Path.GetTempPath(), "nonexistent-" + identifier)));
+    private static IndexProcessor NewProcessor(string npcSeedJson = EmptyNpcSeedJson)
+    {
+        var processor = new IndexProcessor(
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString(), "npc-name-list.json"), npcSeedJson);
+        processor.Prepare(CancellationToken.None);
+        return processor;
+    }
+
+    private static IndexSeed MakeSeed(
+        string identifier, string name, string author, DirectoryInfo? modPath, IReadOnlyList<string> changedItemKeys) =>
+        new(identifier, name, author,
+            (modPath ?? new DirectoryInfo(Path.Combine(Path.GetTempPath(), "nonexistent-" + identifier))).FullName,
+            changedItemKeys);
+
+    private static ChangedItemIndex RunOne(IndexProcessor processor, IndexSeed seed, IReadOnlySet<string> modIdentifiersWithChangedItems)
+    {
+        var result = processor.Process(seed, CancellationToken.None);
+        var indexedMods = result is null ? [] : new List<IndexedMod> { result };
+        return ChangedItemIndexBuilder.Assemble(indexedMods, [seed.Identifier], modIdentifiersWithChangedItems);
+    }
 
     [Fact]
-    public void Build_ModWithNoChangedItems_ExcludedFromMods_ButCountedInTotal()
+    public void ModWithNoChangedItems_ExcludedFromMods_ButCountedInTotal()
     {
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Empty Mod", "Someone") };
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string>(), _ => Enumerable.Empty<string>(), NpcNameMatcher.Empty);
+        var seed = MakeSeed("a", "Empty Mod", "Someone", null, []);
+
+        var result = RunOne(NewProcessor(), seed, new HashSet<string>());
 
         Assert.Empty(result.Mods);
         Assert.Equal(1, result.TotalModsSeen);
     }
 
     [Fact]
-    public void Build_SmallclothesPlusRealGear_CategoriesContainsBothBodyAndGear()
+    public void SmallclothesPlusRealGear_CategoriesContainsBothBodyAndGear()
     {
         // Deliberately diverges from ModTypeClassifier.Classify, which would return Body alone
         // (Rule 0 wins) — Categories here is a per-item union, not a first-match-wins reduction.
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Compilation Mod", "Someone") };
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string> { "a" },
-            _ => new[] { "Smallclothes", "Appointed Gloves" },
-            NpcNameMatcher.Empty);
+        var seed = MakeSeed("a", "Compilation Mod", "Someone", null, ["Smallclothes", "Appointed Gloves"]);
+
+        var result = RunOne(NewProcessor(), seed, new HashSet<string> { "a" });
 
         var mod = Assert.Single(result.Mods);
         Assert.Equal(new HashSet<ModCategory> { ModCategory.Body, ModCategory.Gear }, mod.Categories);
     }
 
     [Fact]
-    public void Build_NpcNameHeuristicMatch_SetsFlagIndependentlyOfCategories()
+    public void NpcNameHeuristicMatch_SetsFlagIndependentlyOfCategories()
     {
-        var npcMatcher = new NpcNameMatcher(["Zenos"], [], []);
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Zenos", "Someone") };
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string> { "a" },
-            _ => new[] { "Customization: Midlander Male Skin Textures" },
-            npcMatcher);
+        const string npcSeedJson = """{"Version":1,"NPCs":["Zenos"],"Enemies":[],"Bosses":[],"Excluded":[]}""";
+        var seed = MakeSeed("a", "Zenos", "Someone", null, ["Customization: Midlander Male Skin Textures"]);
+
+        var result = RunOne(NewProcessor(npcSeedJson), seed, new HashSet<string> { "a" });
 
         var mod = Assert.Single(result.Mods);
         Assert.True(mod.MatchedByNpcNameHeuristic);
@@ -61,30 +85,36 @@ public class ChangedItemIndexBuilderTests
     }
 
     [Fact]
-    public void Build_GearModWithSingleSlot_ReadsEquipmentSlotsAndSetsDiagnostic()
+    public void GearModWithSingleSlot_ReadsEquipmentSlotsAndSetsDiagnostic()
     {
         var modDir = MakeTempModDirectory();
-        WriteJson(modDir, "default_mod.json", """
-            {"Files":{"chara/equipment/e0387/model/c0101e0387_sho.mdl":"files/sho.mdl"},"Manipulations":[]}
-            """);
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Boots Mod", "Someone", modDir) };
+        try
+        {
+            WriteJson(modDir, "default_mod.json", """
+                {"Files":{"chara/equipment/e0387/model/c0101e0387_sho.mdl":"files/sho.mdl"},"Manipulations":[]}
+                """);
+            var seed = MakeSeed("a", "Boots Mod", "Someone", modDir, ["Calfskin Rider's Shoes"]);
 
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string> { "a" }, _ => new[] { "Calfskin Rider's Shoes" }, NpcNameMatcher.Empty);
+            var result = RunOne(NewProcessor(), seed, new HashSet<string> { "a" });
 
-        var mod = Assert.Single(result.Mods);
-        Assert.Equal(new HashSet<EquipmentSlot> { EquipmentSlot.Feet }, mod.EquipmentSlots);
-        Assert.Equal(GearSlotDiagnostic.Single, mod.SlotDiagnostic);
+            var mod = Assert.Single(result.Mods);
+            Assert.Equal(new HashSet<EquipmentSlot> { EquipmentSlot.Feet }, mod.EquipmentSlots);
+            Assert.Equal(GearSlotDiagnostic.Single, mod.SlotDiagnostic);
+        }
+        finally
+        {
+            modDir.Delete(recursive: true);
+        }
     }
 
     [Fact]
-    public void Build_NonGearMod_NeverReadsDisk_EquipmentSlotsEmptyNotApplicable()
+    public void NonGearMod_NeverReadsDisk_EquipmentSlotsEmptyNotApplicable()
     {
         // A directory that doesn't exist would fail EquipmentSlot reads if ever touched -- proves
-        // the builder never calls ModEquipmentFileReader for a mod whose Categories has no Gear.
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Vfx Mod", "Someone") };
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string> { "a" }, _ => new[] { "Vfx" }, NpcNameMatcher.Empty);
+        // IndexProcessor never calls ModEquipmentFileReader for a mod whose Categories has no Gear.
+        var seed = MakeSeed("a", "Vfx Mod", "Someone", null, ["Vfx"]);
+
+        var result = RunOne(NewProcessor(), seed, new HashSet<string> { "a" });
 
         var mod = Assert.Single(result.Mods);
         Assert.Empty(mod.EquipmentSlots);
@@ -92,11 +122,11 @@ public class ChangedItemIndexBuilderTests
     }
 
     [Fact]
-    public void Build_UnrecognizedKeyAlongsideRecognizedOnes_SetsHasUnknownFacetItems()
+    public void UnrecognizedKeyAlongsideRecognizedOnes_SetsHasUnknownFacetItems()
     {
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Mixed Mod", "Someone") };
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string> { "a" }, _ => new[] { "Vfx", "Icon: Something" }, NpcNameMatcher.Empty);
+        var seed = MakeSeed("a", "Mixed Mod", "Someone", null, ["Vfx", "Icon: Something"]);
+
+        var result = RunOne(NewProcessor(), seed, new HashSet<string> { "a" });
 
         var mod = Assert.Single(result.Mods);
         Assert.True(mod.HasUnknownFacetItems);
@@ -104,30 +134,30 @@ public class ChangedItemIndexBuilderTests
     }
 
     [Fact]
-    public void Build_ChangedItemEntryWithNoMatchingMod_CountedAsOrphaned()
+    public void ChangedItemEntryWithNoMatchingMod_CountedAsOrphaned()
     {
-        var mods = new List<LibraryModEntry> { MakeMod("a", "Real Mod", "Someone") };
-        var result = ChangedItemIndexBuilder.Build(
-            mods,
-            new HashSet<string> { "a", "ghost-identifier" },
-            id => id == "a" ? new[] { "Appointed Gloves" } : Enumerable.Empty<string>(),
-            NpcNameMatcher.Empty);
+        var seed = MakeSeed("a", "Real Mod", "Someone", null, ["Appointed Gloves"]);
+
+        var result = RunOne(NewProcessor(), seed, new HashSet<string> { "a", "ghost-identifier" });
 
         Assert.Equal(1, result.OrphanedChangedItemEntryCount);
     }
 
     [Fact]
-    public void Build_TotalModsSeen_CountsEveryModRegardlessOfChangedItems()
+    public void TotalModsSeen_CountsEveryModRegardlessOfChangedItems()
     {
-        var mods = new List<LibraryModEntry>
-        {
-            MakeMod("a", "Has Items", "Someone"),
-            MakeMod("b", "No Items", "Someone"),
-        };
-        var result = ChangedItemIndexBuilder.Build(
-            mods, new HashSet<string> { "a" },
-            id => id == "a" ? new[] { "Appointed Gloves" } : Enumerable.Empty<string>(),
-            NpcNameMatcher.Empty);
+        var processor = NewProcessor();
+        var seedA = MakeSeed("a", "Has Items", "Someone", null, ["Appointed Gloves"]);
+        var seedB = MakeSeed("b", "No Items", "Someone", null, []);
+
+        var indexedMods = new List<IndexedMod>();
+        if (processor.Process(seedA, CancellationToken.None) is { } rowA)
+            indexedMods.Add(rowA);
+        if (processor.Process(seedB, CancellationToken.None) is { } rowB)
+            indexedMods.Add(rowB);
+
+        var result = ChangedItemIndexBuilder.Assemble(
+            indexedMods, ["a", "b"], new HashSet<string> { "a" });
 
         Assert.Equal(2, result.TotalModsSeen);
         Assert.Single(result.Mods);

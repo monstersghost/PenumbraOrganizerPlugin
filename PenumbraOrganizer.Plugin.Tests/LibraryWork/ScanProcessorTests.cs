@@ -74,7 +74,7 @@ public class ScanProcessorTests
     }
 
     [Fact]
-    public void NonGearMod_NeverTouchesDiskAndReportsNotApplicable()
+    public void NonGearMod_ReportsNotApplicable()
     {
         var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 

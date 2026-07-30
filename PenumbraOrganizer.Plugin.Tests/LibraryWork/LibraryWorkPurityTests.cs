@@ -18,8 +18,6 @@ public class LibraryWorkPurityTests
 {
     private const string PureNamespace = "PenumbraOrganizer.Plugin.LibraryWork.Pure";
 
-    private static readonly string[] ForbiddenAssemblies = ["Dalamud", "Penumbra.Api"];
-
     [Fact]
     public void PureTypesAndCrossThreadDtos_DoNotReferenceDalamudOrPenumbra()
     {
@@ -68,10 +66,21 @@ public class LibraryWorkPurityTests
         Assert.Empty(violations.Distinct());
     }
 
+    // Dalamud ships several assembly names beyond the main "Dalamud" one (e.g.
+    // Dalamud.Bindings.ImGui, Dalamud.Bindings.ImGuizmo, Dalamud.Bindings.ImPlot, Dalamud.Common),
+    // and matching by exact equality misses all of them - a Pure type could gain an ImGuiCol or
+    // ImVec2 member and this guard would still pass. StartsWith("Penumbra.Api.") plus the exact
+    // "Penumbra.Api" name catches Penumbra's own sub-assemblies the same way, without matching our
+    // own "PenumbraOrganizer.Plugin" assembly (which starts with "Penumbra" but not "Penumbra.Api").
     private static bool IsForbidden(Type type)
     {
         var assemblyName = type.Assembly.GetName().Name;
-        return assemblyName is not null && ForbiddenAssemblies.Contains(assemblyName);
+        if (assemblyName is null)
+            return false;
+
+        return assemblyName.StartsWith("Dalamud", StringComparison.Ordinal)
+            || assemblyName == "Penumbra.Api"
+            || assemblyName.StartsWith("Penumbra.Api.", StringComparison.Ordinal);
     }
 
     private static IEnumerable<Type> SignatureTypes(Type type)
@@ -84,8 +93,13 @@ public class LibraryWorkPurityTests
                 yield return t;
 
         foreach (var property in type.GetProperties(all))
+        {
             foreach (var t in Expand(property.PropertyType))
                 yield return t;
+            foreach (var indexParameter in property.GetIndexParameters())
+                foreach (var t in Expand(indexParameter.ParameterType))
+                    yield return t;
+        }
 
         foreach (var constructor in type.GetConstructors(all))
             foreach (var parameter in constructor.GetParameters())

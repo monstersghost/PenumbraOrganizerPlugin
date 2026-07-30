@@ -447,6 +447,50 @@ public class LibraryWorkCoordinatorTests
     }
 
     [Fact]
+    public void AbandonRun_WhileComputing_SettlesToFailedAndReturnsToIdle()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, _, _) = NewCoordinator();
+        coordinator.Start(job);
+
+        coordinator.AbandonRun("gave up");
+
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+        Assert.Equal("gave up", coordinator.State.LastError);
+    }
+
+    [Fact]
+    public void AbandonRun_AllowsStartAgainAfterwards()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, _, _) = NewCoordinator();
+        coordinator.Start(job);
+        coordinator.AbandonRun("gave up");
+
+        var second = new FakeJob { Items = ["b"], Processor = new FakeProcessor() };
+        coordinator.Start(second);
+
+        Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
+    }
+
+    [Fact]
+    public void AbandonRun_WhenIdle_IsASafeNoOp()
+    {
+        var (coordinator, _, _) = NewCoordinator();
+
+        coordinator.AbandonRun("nothing was running");
+
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+        Assert.Equal("nothing was running", coordinator.State.LastError);
+
+        // And it does not block a subsequent Start.
+        coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
+        Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
+    }
+
+    [Fact]
     public void Dispose_WhenTheRunDoesNotStop_LogsATeardownWarning()
     {
         var warnings = new List<string>();
