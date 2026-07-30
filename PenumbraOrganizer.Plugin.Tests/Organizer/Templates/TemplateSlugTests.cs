@@ -43,7 +43,9 @@ public class TemplateSlugTests
         Assert.False(slug is "." or "..");
         Assert.DoesNotContain("..", slug);
         Assert.False(slug.EndsWith('.') || slug.EndsWith(' '));
-        Assert.DoesNotContain(slug, Path.GetInvalidFileNameChars().Select(c => c.ToString()));
+        Assert.All(
+            slug,
+            character => Assert.DoesNotContain(character, Path.GetInvalidFileNameChars()));
         Assert.Equal(slug, Path.GetFileName(slug));
     }
 
