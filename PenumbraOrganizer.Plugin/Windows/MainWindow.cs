@@ -1173,7 +1173,7 @@ public sealed class MainWindow : Window, IDisposable
         using (PluginTheme.PrimaryButton())
         {
             if (ImGui.Button("Build/Refresh Index"))
-                _plugin.BuildChangedItemIndex();
+                BuildChangedItemIndex();
         }
 
         if (_plugin.LibraryIndexError is { } error)
@@ -1628,6 +1628,22 @@ public sealed class MainWindow : Window, IDisposable
         {
             _lastError = $"Could not start scan: {ex.Message}";
             Plugin.Log.Error(ex, "Scan could not be started.");
+        }
+    }
+
+    // Starts the changed-item index build; the catch covers a rejected start (another library
+    // run or operation in flight) so the exception cannot escape the draw callback.
+    private void BuildChangedItemIndex()
+    {
+        try
+        {
+            _plugin.BuildChangedItemIndex();
+            _lastError = null;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Could not start index build: {ex.Message}";
+            Plugin.Log.Error(ex, "Index build could not be started.");
         }
     }
 
