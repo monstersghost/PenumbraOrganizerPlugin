@@ -210,6 +210,36 @@ select it. The right pane lists that mod's changed items. If a mod matched only 
 name contains" box and not because of any item, a red "Matched by mod name, not by item" note
 appears above its item list, so you can tell a name hit from an item hit.
 
+### Templates
+
+A template is an organization layout someone else shared as a `.json` file. Importing one
+proposes where your mods would go: mods you and the template's author both have land in the
+folder they chose, and everything else is placed by the fallback sort strategy they picked, using
+their folder names.
+
+1. Get a template file from whoever shared it and click **Import template file...**, or drop the
+   file into the templates folder yourself (**Open templates folder** shows you where) and click
+   **Refresh list**.
+2. Select it in the list to see who made it and what it is for.
+3. Click **Preview against my library**. You get a count of how many of your mods the template
+   matched, how many its fallback strategy placed, and a browsable tree of the resulting folders
+   with the number of mods in each.
+4. If it looks right, click **Apply this template to my proposals**, then open **Review Changes**
+   to check the result and apply it like any other sort.
+
+Nothing is written to Penumbra until you apply from Review Changes, exactly as with the sort
+buttons.
+
+A few things worth knowing:
+
+- **A template never sees your mod list.** It matches on mod names, so it only affects mods you
+  already have. Mods its author never had are placed by the fallback strategy, not left behind.
+- **Matching is on the mod's name**, ignoring case, install suffixes like `_1_1_0`, and bracketed
+  tags. A mod you renamed will not match, and will be placed by the fallback strategy instead.
+- **Protected mods are never moved**, the same as with any sort.
+- If you rescan your library after previewing, the preview is discarded — preview again before
+  applying.
+
 ## Typical workflows
 
 First-time sort: Scan, pick a Sort strategy, review the proposed paths on Review Changes, then

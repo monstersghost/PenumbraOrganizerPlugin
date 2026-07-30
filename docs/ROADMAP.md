@@ -69,17 +69,19 @@ below unless a phase explicitly says otherwise.
   reappears). 46 new tests (468 total), build clean. See
   `docs/superpowers/specs/2026-07-21-library-search-changed-item-lookup-design.md` and
   `docs/superpowers/plans/2026-07-21-library-search-changed-item-lookup.md`.
-- **Community organization templates, Phase T1 (format and application core) — implemented, no UI
-  yet.** A portable, identity-free template document (normalized mod name → folder entries, an
+- **Community organization templates, Phases T1 and T2 — implemented, not yet verified in-game.**
+  A portable, identity-free template document (normalized mod name → folder entries, an
   author-declared fallback strategy, and a longest-prefix folder-label rename map) with staged
-  validation, a `POT1:` share-code transport, and a pure `TemplatePlanner` whose plan is consumed
-  by both the (future) preview and `OrganizerState.ApplyTemplate`. Unlike the workbook, a template
-  carries no `installationIdentity`, so it travels between users. T2 (file import, template list,
-  preview UI) and T3 (export review-and-trim, clipboard sharing) are not started — and T3's
-  review-and-trim screen is a privacy mechanism, not polish, since export publishes the author's
-  mod names. Design:
-  `docs/superpowers/specs/2026-07-30-community-templates-design.md`. Plan:
-  `docs/superpowers/plans/2026-07-30-community-templates-t1-core.md`.
+  validation and a `POT1:` share-code transport, plus a Templates tab that imports a `.json`
+  someone shared, previews the resulting folder tree and match counts against the current
+  library, and stages proposals through the existing Review Changes pipeline. Unlike the
+  workbook, a template carries no `installationIdentity`, so it travels between users. T3
+  (export review-and-trim, clipboard sharing) is not started, and its review-and-trim screen is a
+  privacy mechanism rather than polish, since export publishes the author's mod names. Verifying
+  the feature end to end needs two libraries and therefore a second tester. Design:
+  `docs/superpowers/specs/2026-07-30-community-templates-design.md`. Plans:
+  `docs/superpowers/plans/2026-07-30-community-templates-t1-core.md`,
+  `docs/superpowers/plans/2026-07-31-community-templates-t2-import-and-preview.md`.
 
 ## Phase 1c — done
 
