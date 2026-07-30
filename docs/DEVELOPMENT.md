@@ -17,9 +17,13 @@ its own. No local XIVLauncher or Dalamud install path needs to be configured to 
 ## Loading a local build in-game
 
 1. Build the project. This produces `PenumbraOrganizer.Plugin.json` next to the built DLL, under
-   `PenumbraOrganizer.Plugin/bin/Debug/net10.0-windows7.0/`.
+   `PenumbraOrganizer.Plugin/bin/Debug/`. The Dalamud SDK writes the output flat, with no
+   target-framework subfolder.
 2. In-game, open Dalamud settings (`/xlsettings`), go to Experimental, then Dev Plugin Locations,
-   and add the path to that build output folder.
+   and add the path to that build output folder. If you build from a git worktree, point this at
+   that worktree's own `bin/Debug` and change the existing entry rather than adding a second one —
+   two checkouts produce two builds under the same plugin name, and Dalamud will load whichever
+   path is registered.
 3. Open the plugin installer (`/xlplugins`), go to the Dev Tools tab, and enable Penumbra
    Organizer.
 4. Open the window with `/porganizer` or the plugin installer's icon.
