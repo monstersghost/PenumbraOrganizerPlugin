@@ -2676,6 +2676,18 @@ Replace the entire body of `Plugin.BuildChangedItemIndex()` with:
     }
 ```
 
+**Complete the admission gate.** Task 9 wired `externalActivityGate` into the `OperationController` construction, but `IndexWork` did not exist then, so it passes `LibraryWorkStateSnapshot.Idle` as a placeholder. Now that you create `IndexWork`, replace that placeholder with the real state and drop the stale "until Task 10" comment:
+
+```csharp
+            externalActivityGate: () => ScanWork is null || IndexWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
+```
+
+Keep the null guard covering both coordinators: `OperationController` is still constructed before either is assigned, and the guard makes that ordering a non-issue rather than an invariant a future edit has to remember. Until this change, an index build did not block Apply/Restore at all — the placeholder made the gate blind to it.
+
+Also note `Plugin.cs` fully qualifies nested namespace types as `LibraryWork.Pure.X`; a bare `Pure.X` does not resolve, because a `using` of the parent namespace does not alias a nested one. Task 9 hit this. Follow the same form for `IndexSeed`.
+
 Add `IndexWork.Update();` to `OnFrameworkUpdate` **inside the same try/catch boundary** Task 9 added, next to `ScanWork.Update();`, and `IndexWork.Dispose();` to `Dispose()` next to `ScanWork.Dispose();`.
 
 - [ ] **Step 10: Build and run the full suite**
