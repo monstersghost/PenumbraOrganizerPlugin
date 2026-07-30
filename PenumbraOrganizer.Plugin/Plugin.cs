@@ -10,6 +10,7 @@ using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Infrastructure.Exports;
 using PenumbraOrganizer.Plugin.LibrarySearch;
+using PenumbraOrganizer.Plugin.LibraryWork;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.NpcNames;
 using PenumbraOrganizer.Plugin.Windows;
@@ -43,9 +44,13 @@ public sealed class Plugin : IDalamudPlugin
     };
     private readonly Organizer.NpcNames.NpcNameRefreshService _npcNameRefreshService;
 
+    internal ModEventEpoch ModEvents { get; } = new();
+
     private readonly EventSubscriber<string> _modAdded;
     private readonly EventSubscriber<string> _modDeleted;
     private readonly EventSubscriber<string, string> _modMoved;
+    private readonly EventSubscriber<string, bool> _modDirectoryChanged;
+    private readonly EventSubscriber _penumbraDisposed;
 
     public Plugin()
     {
@@ -81,10 +86,33 @@ public sealed class Plugin : IDalamudPlugin
         // Observe live changes. SetModPath is now reached only through the operation engine
         // (StartApplyOperation/StartRestoreOperation -> OperationController -> PathMutationOperation),
         // gated on OrganizerState.Validate() showing no issues.
-        _modAdded = ModAdded.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod added: {dir}"));
-        _modDeleted = ModDeleted.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod deleted: {dir}"));
-        _modMoved = ModMoved.Subscriber(PluginInterface,
-            (oldDir, newDir) => _mainWindow.LogEvent($"Mod moved: {oldDir} -> {newDir}"));
+        _modAdded = ModAdded.Subscriber(PluginInterface, dir =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod added: {dir}");
+        });
+        _modDeleted = ModDeleted.Subscriber(PluginInterface, dir =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod deleted: {dir}");
+        });
+        _modMoved = ModMoved.Subscriber(PluginInterface, (oldDir, newDir) =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod moved: {oldDir} -> {newDir}");
+        });
+        _modDirectoryChanged = ModDirectoryChanged.Subscriber(PluginInterface, (dir, locked) =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod directory changed: {dir}");
+        });
+        // Penumbra's own docs for GetChangedItemAdapterDictionary say to clear it on Disposed, so a
+        // run holding one across this event is working from storage that is no longer valid.
+        _penumbraDisposed = Disposed.Subscriber(PluginInterface, () =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent("Penumbra unloaded.");
+        });
 
         Framework.Update += OnFrameworkUpdate;
 
@@ -111,6 +139,8 @@ public sealed class Plugin : IDalamudPlugin
         _modAdded.Dispose();
         _modDeleted.Dispose();
         _modMoved.Dispose();
+        _modDirectoryChanged.Dispose();
+        _penumbraDisposed.Dispose();
 
         WindowSystem.RemoveAllWindows();
         _mainWindow.Dispose();
