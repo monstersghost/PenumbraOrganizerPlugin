@@ -44,6 +44,19 @@ public static class TemplateCodec
     // non-ASCII mod names from inflating to six bytes per character.
     private static JsonSerializerOptions SerializerOptions => TemplateJson.SerializerOptions;
 
+    // Error details reach UI and logs, so every echoed fragment of an untrusted document is
+    // bounded. Without this a single hostile field can inflate whatever surface displays it.
+    private static string Preview(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(empty)";
+
+        return value.Length <= PreviewLength ? value : value[..PreviewLength] + "...";
+    }
+
+    private const int PreviewLength = 64;
+    private const string NullSubject = "(null)";
+
     public static string EncodeJson(OrganizationTemplate template) =>
         JsonSerializer.Serialize(template, SerializerOptions);
 
@@ -69,6 +82,14 @@ public static class TemplateCodec
     // Stages 3-5: schema validation, semantic normalization, validated construction.
     private static TemplateDecodeResult Validate(OrganizationTemplate document)
     {
+        // System.Text.Json overwrites a property's initializer default whenever the JSON supplies
+        // an explicit null, so every collection here can arrive null no matter what the model
+        // declares. This is the untrusted-input boundary: a hostile document must produce a value
+        // describing what is wrong, never an exception.
+        var rawFolders = document.Folders ?? [];
+        var rawLabels = document.FolderLabels ?? new Dictionary<string, string>();
+        var rawEntries = document.Entries ?? [];
+
         if (document.FormatVersion != SupportedFormatVersion)
         {
             return TemplateDecodeResult.Fail(
@@ -83,21 +104,27 @@ public static class TemplateCodec
         {
             return TemplateDecodeResult.Fail(
                 TemplateDecodeError.UnknownFallbackStrategy,
-                $"Unknown fallback strategy '{document.FallbackStrategy}'.");
+                $"Unknown fallback strategy '{Preview(document.FallbackStrategy)}'.");
         }
 
-        if (document.Entries.Count > TemplateLimits.MaxEntries)
-            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Entries: {document.Entries.Count}.");
-        if (document.Folders.Count > TemplateLimits.MaxFolders)
-            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folders: {document.Folders.Count}.");
-        if (document.FolderLabels.Count > TemplateLimits.MaxFolderLabels)
-            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folder labels: {document.FolderLabels.Count}.");
+        if (rawEntries.Count > TemplateLimits.MaxEntries)
+            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Entries: {rawEntries.Count}.");
+        if (rawFolders.Count > TemplateLimits.MaxFolders)
+            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folders: {rawFolders.Count}.");
+        if (rawLabels.Count > TemplateLimits.MaxFolderLabels)
+            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folder labels: {rawLabels.Count}.");
 
         var warnings = new List<TemplateWarning>();
 
         var folders = new List<string>();
-        foreach (var folder in document.Folders)
+        foreach (var folder in rawFolders)
         {
+            if (folder is null)
+            {
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, NullSubject));
+                continue;
+            }
+
             if (TemplatePathValidator.IsValidFolder(folder))
                 folders.Add(folder);
             else
@@ -105,15 +132,28 @@ public static class TemplateCodec
         }
 
         var labels = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (key, replacement) in document.FolderLabels)
+        foreach (var (key, replacement) in rawLabels)
         {
+            if (key is null)
+            {
+                warnings.Add(new TemplateWarning(TemplateWarningCode.UnknownFolderLabelKey, NullSubject));
+                continue;
+            }
+
+            if (replacement is null)
+            {
+                return TemplateDecodeResult.Fail(
+                    TemplateDecodeError.InvalidFolderLabelValue,
+                    $"Folder label '{Preview(key)}' has a null replacement.");
+            }
+
             // A malformed replacement value would inject a broken path into every fallback
             // proposal, so it is fatal; a malformed key only fails to match anything.
             if (!TemplatePathValidator.IsValidFolder(replacement) || replacement.Length == 0)
             {
                 return TemplateDecodeResult.Fail(
                     TemplateDecodeError.InvalidFolderLabelValue,
-                    $"Folder label '{key}' has invalid replacement '{replacement}'.");
+                    $"Folder label '{Preview(key)}' has invalid replacement '{Preview(replacement)}'.");
             }
 
             if (!TemplatePathValidator.IsValidFolder(key) || key.Length == 0)
@@ -125,7 +165,21 @@ public static class TemplateCodec
             labels[key] = replacement;
         }
 
-        var resolution = TemplateDuplicateResolver.Resolve(document.Entries);
+        // Dropped here rather than inside TemplateDuplicateResolver: the resolver's contract is
+        // non-null entries, and the boundary is the right place to enforce that.
+        var safeEntries = new List<TemplateEntry>(rawEntries.Count);
+        foreach (var entry in rawEntries)
+        {
+            if (entry is null || entry.N is null || entry.F is null)
+            {
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, entry?.N ?? NullSubject));
+                continue;
+            }
+
+            safeEntries.Add(entry);
+        }
+
+        var resolution = TemplateDuplicateResolver.Resolve(safeEntries);
         warnings.AddRange(resolution.Warnings);
 
         var validated = new ValidatedOrganizationTemplate(

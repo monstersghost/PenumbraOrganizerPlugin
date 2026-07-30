@@ -174,4 +174,79 @@ public class TemplateCodecJsonTests
         Assert.True(result.Succeeded);
         Assert.Equal("Gear/Top", result.Template!.EntriesByNormalizedName["bibo+ medieval"]);
     }
+
+    // System.Text.Json replaces the model's non-null defaults when the JSON says null outright.
+    // Each of these once threw an unhandled NullReferenceException at the untrusted boundary.
+    [Theory]
+    [InlineData("""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","folders":null}""")]
+    [InlineData("""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","entries":null}""")]
+    [InlineData("""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","folderLabels":null}""")]
+    public void DecodeJson_NullCollections_AreTreatedAsEmpty(string json)
+    {
+        var result = TemplateCodec.DecodeJson(json);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Template!.Folders);
+        Assert.Empty(result.Template.EntriesByNormalizedName);
+        Assert.Empty(result.Template.FolderLabels);
+    }
+
+    [Fact]
+    public void DecodeJson_NullFolderElement_IsSkippedWithWarning()
+    {
+        var result = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","folders":["Gear",null]}""");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(["Gear"], result.Template!.Folders);
+        Assert.Contains(
+            new TemplateWarning(TemplateWarningCode.InvalidEntryPath, "(null)"), result.Warnings);
+    }
+
+    [Fact]
+    public void DecodeJson_NullEntryDestination_IsSkippedWithWarning()
+    {
+        var result = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","entries":[{"n":"x","f":null}]}""");
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Template!.EntriesByNormalizedName);
+        Assert.Contains(
+            new TemplateWarning(TemplateWarningCode.InvalidEntryPath, "x"), result.Warnings);
+    }
+
+    [Fact]
+    public void DecodeJson_NullEntryElement_IsSkippedWithWarning()
+    {
+        var result = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","entries":[null]}""");
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Template!.EntriesByNormalizedName);
+    }
+
+    [Fact]
+    public void DecodeJson_NullFolderLabelKeyOrValue_AreHandled()
+    {
+        var nullValue = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","folderLabels":{"Gear":null}}""");
+
+        Assert.False(nullValue.Succeeded);
+        Assert.Equal(TemplateDecodeError.InvalidFolderLabelValue, nullValue.Error);
+    }
+
+    // A hostile document must not be able to inflate the error text a UI or log will show.
+    [Fact]
+    public void DecodeJson_OverlongFallbackStrategy_IsTruncatedInErrorDetail()
+    {
+        var hostile = new string('x', 100_000);
+        var result = TemplateCodec.DecodeJson(
+            $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"{{hostile}}"}""");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(TemplateDecodeError.UnknownFallbackStrategy, result.Error);
+        Assert.True(
+            result.ErrorDetail!.Length < 200,
+            $"ErrorDetail should be bounded, was {result.ErrorDetail.Length} chars.");
+    }
 }
