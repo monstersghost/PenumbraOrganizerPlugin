@@ -24,9 +24,12 @@ public static class TemplateDuplicateResolver
         {
             // Entry keys are untrusted input: re-normalize rather than believe them.
             var key = ModNameNormalizer.Normalize(entry.N);
-            if (key.Length == 0 || !TemplatePathValidator.IsValidFolder(entry.F))
+            // "" is a valid folder in general (it means library root), but as an entry destination
+            // it would produce a leading-slash path like "/Some Mod" once the leaf is appended --
+            // OrganizerState.BuildPath does not implement the library-root convention.
+            if (key.Length == 0 || entry.F.Length == 0 || !TemplatePathValidator.IsValidFolder(entry.F))
             {
-                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, entry.N));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, TemplateText.Preview(entry.N)));
                 continue;
             }
 
@@ -41,12 +44,12 @@ public static class TemplateDuplicateResolver
             var distinct = folders.Distinct(StringComparer.Ordinal).ToList();
             if (distinct.Count > 1)
             {
-                warnings.Add(new TemplateWarning(TemplateWarningCode.ConflictingDuplicateEntry, key));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.ConflictingDuplicateEntry, TemplateText.Preview(key)));
                 continue;
             }
 
             if (folders.Count > 1)
-                warnings.Add(new TemplateWarning(TemplateWarningCode.DuplicateEntry, key));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.DuplicateEntry, TemplateText.Preview(key)));
 
             resolved[key] = distinct[0];
         }

@@ -85,6 +85,22 @@ public class TemplateCodecJsonTests
         Assert.Contains("ByVibes", result.ErrorDetail);
     }
 
+    // Enum.TryParse accepts numeric strings and comma-joined lists, yielding values that are not
+    // defined members. Such a value once decoded as valid and then threw inside the planner.
+    [Theory]
+    [InlineData("99")]
+    [InlineData("-1")]
+    [InlineData("0")]
+    [InlineData("Creator,ModType")]
+    public void DecodeJson_UndefinedFallbackStrategyValue_Fails(string strategy)
+    {
+        var result = TemplateCodec.DecodeJson(
+            $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"{{strategy}}"}""");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(TemplateDecodeError.UnknownFallbackStrategy, result.Error);
+    }
+
     [Fact]
     public void DecodeJson_MissingName_Fails()
     {
@@ -117,7 +133,7 @@ public class TemplateCodecJsonTests
         Assert.True(result.Succeeded);
         Assert.Equal(["Gear"], result.Template!.Folders);
         Assert.Contains(
-            new TemplateWarning(TemplateWarningCode.InvalidEntryPath, "Gear//Bad"),
+            new TemplateWarning(TemplateWarningCode.InvalidFolderPath, "Gear//Bad"),
             result.Warnings);
     }
 
@@ -200,7 +216,7 @@ public class TemplateCodecJsonTests
         Assert.True(result.Succeeded);
         Assert.Equal(["Gear"], result.Template!.Folders);
         Assert.Contains(
-            new TemplateWarning(TemplateWarningCode.InvalidEntryPath, "(null)"), result.Warnings);
+            new TemplateWarning(TemplateWarningCode.InvalidFolderPath, "(null)"), result.Warnings);
     }
 
     [Fact]
@@ -248,5 +264,20 @@ public class TemplateCodecJsonTests
         Assert.True(
             result.ErrorDetail!.Length < 200,
             $"ErrorDetail should be bounded, was {result.ErrorDetail.Length} chars.");
+    }
+
+    // Warning subjects are rendered in the UI just as error details are, and entry names have no
+    // length limit of their own.
+    [Fact]
+    public void DecodeJson_OverlongEntryName_IsTruncatedInWarningSubject()
+    {
+        var hostile = new string('x', 5_000);
+        var result = TemplateCodec.DecodeJson(
+            $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","entries":[{"n":"{{hostile}}","f":"Gear//Bad"}]}""");
+
+        Assert.True(result.Succeeded);
+        Assert.All(result.Warnings, warning => Assert.True(
+            warning.Subject.Length <= TemplateText.PreviewLength + 3,
+            $"Warning subject should be bounded, was {warning.Subject.Length} chars."));
     }
 }

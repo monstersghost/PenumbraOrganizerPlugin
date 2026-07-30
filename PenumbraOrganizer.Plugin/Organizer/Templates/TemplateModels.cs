@@ -42,6 +42,7 @@ public enum TemplateWarningCode
 {
     UnknownFolderLabelKey,
     InvalidEntryPath,
+    InvalidFolderPath,
     DuplicateEntry,
     ConflictingDuplicateEntry,
     ExportNameCollision,

@@ -131,19 +131,6 @@ public static class TemplateCodec
     // non-ASCII mod names from inflating to six bytes per character.
     private static JsonSerializerOptions SerializerOptions => TemplateJson.SerializerOptions;
 
-    // Error details reach UI and logs, so every echoed fragment of an untrusted document is
-    // bounded. Without this a single hostile field can inflate whatever surface displays it.
-    private static string Preview(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "(empty)";
-
-        return value.Length <= PreviewLength ? value : value[..PreviewLength] + "...";
-    }
-
-    private const int PreviewLength = 64;
-    private const string NullSubject = "(null)";
-
     public static string EncodeJson(OrganizationTemplate template) =>
         JsonSerializer.Serialize(template, SerializerOptions);
 
@@ -187,11 +174,17 @@ public static class TemplateCodec
         if (string.IsNullOrWhiteSpace(document.Name) || document.Name.Length > TemplateLimits.MaxStringLength)
             return TemplateDecodeResult.Fail(TemplateDecodeError.MissingName, "Template name is missing or too long.");
 
-        if (!Enum.TryParse<TemplateFallbackStrategy>(document.FallbackStrategy, ignoreCase: false, out var strategy))
+        // Enum.TryParse accepts numeric strings ("0") and comma-joined flag-style lists
+        // ("Creator,ModType") for any enum, not only [Flags] ones, and both can resolve to a
+        // defined member despite not being a name a template author ever wrote. Requiring the
+        // parsed value's own name to match the input verbatim closes that off.
+        if (!Enum.TryParse<TemplateFallbackStrategy>(document.FallbackStrategy, ignoreCase: false, out var strategy)
+            || !Enum.IsDefined(strategy)
+            || !string.Equals(strategy.ToString(), document.FallbackStrategy, StringComparison.Ordinal))
         {
             return TemplateDecodeResult.Fail(
                 TemplateDecodeError.UnknownFallbackStrategy,
-                $"Unknown fallback strategy '{Preview(document.FallbackStrategy)}'.");
+                $"Unknown fallback strategy '{TemplateText.Preview(document.FallbackStrategy)}'.");
         }
 
         if (rawEntries.Count > TemplateLimits.MaxEntries)
@@ -208,14 +201,14 @@ public static class TemplateCodec
         {
             if (folder is null)
             {
-                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, NullSubject));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidFolderPath, TemplateText.NullSubject));
                 continue;
             }
 
             if (TemplatePathValidator.IsValidFolder(folder))
                 folders.Add(folder);
             else
-                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, folder));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidFolderPath, TemplateText.Preview(folder)));
         }
 
         var labels = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -223,7 +216,7 @@ public static class TemplateCodec
         {
             if (key is null)
             {
-                warnings.Add(new TemplateWarning(TemplateWarningCode.UnknownFolderLabelKey, NullSubject));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.UnknownFolderLabelKey, TemplateText.NullSubject));
                 continue;
             }
 
@@ -231,7 +224,7 @@ public static class TemplateCodec
             {
                 return TemplateDecodeResult.Fail(
                     TemplateDecodeError.InvalidFolderLabelValue,
-                    $"Folder label '{Preview(key)}' has a null replacement.");
+                    $"Folder label '{TemplateText.Preview(key)}' has a null replacement.");
             }
 
             // A malformed replacement value would inject a broken path into every fallback
@@ -240,12 +233,12 @@ public static class TemplateCodec
             {
                 return TemplateDecodeResult.Fail(
                     TemplateDecodeError.InvalidFolderLabelValue,
-                    $"Folder label '{Preview(key)}' has invalid replacement '{Preview(replacement)}'.");
+                    $"Folder label '{TemplateText.Preview(key)}' has invalid replacement '{TemplateText.Preview(replacement)}'.");
             }
 
             if (!TemplatePathValidator.IsValidFolder(key) || key.Length == 0)
             {
-                warnings.Add(new TemplateWarning(TemplateWarningCode.UnknownFolderLabelKey, key));
+                warnings.Add(new TemplateWarning(TemplateWarningCode.UnknownFolderLabelKey, TemplateText.Preview(key)));
                 continue;
             }
 
@@ -259,7 +252,9 @@ public static class TemplateCodec
         {
             if (entry is null || entry.N is null || entry.F is null)
             {
-                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, entry?.N ?? NullSubject));
+                warnings.Add(new TemplateWarning(
+                    TemplateWarningCode.InvalidEntryPath,
+                    entry?.N is { } name ? TemplateText.Preview(name) : TemplateText.NullSubject));
                 continue;
             }
 

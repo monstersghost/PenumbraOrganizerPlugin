@@ -137,4 +137,17 @@ public class TemplateDuplicateResolverTests
             forward.EntriesByNormalizedName.OrderBy(p => p.Key, StringComparer.Ordinal),
             reversed.EntriesByNormalizedName.OrderBy(p => p.Key, StringComparer.Ordinal));
     }
+
+    // "" is a valid folder in general (it means library root), but as an entry destination it
+    // would produce a leading-slash path like "/Some Mod" when the leaf is appended.
+    [Fact]
+    public void Resolve_EmptyDestination_SkipsEntryAndWarns()
+    {
+        var result = TemplateDuplicateResolver.Resolve([new TemplateEntry("some mod", "")]);
+
+        Assert.Empty(result.EntriesByNormalizedName);
+        Assert.Equal(
+            [new TemplateWarning(TemplateWarningCode.InvalidEntryPath, "some mod")],
+            result.Warnings);
+    }
 }
