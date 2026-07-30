@@ -121,8 +121,7 @@ were ambiguous (a real multi-piece outfit), and how many had no equipment eviden
 files at all, which is useful for figuring out why a mod didn't land where you expected under By
 Mod Type Detailed. It's a quick snapshot to review, not something meant to be re-imported later.
 
-Export Workbook writes an `.xlsx` file (`organizer-workbook.xlsx`) using whichever strategy is
-selected in the dropdown as the suggested-destination column. It's interoperable with the
+Export Workbook writes an `.xlsx` file (`organizer-workbook.xlsx`). It's interoperable with the
 standalone app's own workbook feature: edit the file in Excel, then use Import Workbook on the Sort
 tab to bring your edits back in.
 
