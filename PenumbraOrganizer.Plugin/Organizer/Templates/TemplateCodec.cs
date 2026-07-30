@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Templates;
@@ -38,6 +40,91 @@ public sealed record TemplateDecodeResult(
 public static class TemplateCodec
 {
     public const int SupportedFormatVersion = 1;
+
+    public const string ShareCodePrefix = "POT1:";
+
+    public static string EncodeShareCode(OrganizationTemplate template)
+    {
+        var json = Encoding.UTF8.GetBytes(EncodeJson(template));
+        using var buffer = new MemoryStream();
+        using (var deflate = new DeflateStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true))
+            deflate.Write(json, 0, json.Length);
+
+        return ShareCodePrefix + Convert.ToBase64String(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// Stage 1 of decoding: transport only. Each failure names the stage that failed, so a user
+    /// pasting a truncated code sees "invalid base64" rather than a generic parse error.
+    /// </summary>
+    public static TemplateDecodeResult DecodeShareCode(string code)
+    {
+        var trimmed = code.Trim();
+        if (!trimmed.StartsWith(ShareCodePrefix, StringComparison.Ordinal))
+        {
+            return TemplateDecodeResult.Fail(
+                TemplateDecodeError.MissingPrefix,
+                $"A share code must start with '{ShareCodePrefix}'.");
+        }
+
+        byte[] compressed;
+        try
+        {
+            compressed = Convert.FromBase64String(trimmed[ShareCodePrefix.Length..]);
+        }
+        catch (FormatException exception)
+        {
+            return TemplateDecodeResult.Fail(TemplateDecodeError.InvalidBase64, exception.Message);
+        }
+
+        if (compressed.Length > TemplateLimits.MaxCompressedBytes)
+        {
+            return TemplateDecodeResult.Fail(
+                TemplateDecodeError.PayloadTooLarge,
+                $"Compressed payload is {compressed.Length} bytes; the limit is {TemplateLimits.MaxCompressedBytes}.");
+        }
+
+        string json;
+        try
+        {
+            json = Inflate(compressed);
+        }
+        catch (PayloadTooLargeException)
+        {
+            return TemplateDecodeResult.Fail(
+                TemplateDecodeError.PayloadTooLarge,
+                $"Payload inflates past the {TemplateLimits.MaxDecompressedBytes}-byte limit.");
+        }
+        catch (InvalidDataException exception)
+        {
+            return TemplateDecodeResult.Fail(TemplateDecodeError.InvalidDeflate, exception.Message);
+        }
+
+        return DecodeJson(json);
+    }
+
+    private sealed class PayloadTooLargeException : Exception;
+
+    // Reads in chunks and stops the moment the cap is passed, so a small code that inflates to
+    // gigabytes cannot be materialized before validation gets a chance to reject it.
+    private static string Inflate(byte[] compressed)
+    {
+        using var source = new MemoryStream(compressed);
+        using var deflate = new DeflateStream(source, CompressionMode.Decompress);
+        using var destination = new MemoryStream();
+
+        var chunk = new byte[81_920];
+        int read;
+        while ((read = deflate.Read(chunk, 0, chunk.Length)) > 0)
+        {
+            if (destination.Length + read > TemplateLimits.MaxDecompressedBytes)
+                throw new PayloadTooLargeException();
+
+            destination.Write(chunk, 0, read);
+        }
+
+        return Encoding.UTF8.GetString(destination.ToArray());
+    }
 
     // Task 2's shared options, not a second private copy: a document written here must be
     // byte-identical to one written anywhere else, and the relaxed encoder keeps '+' and
