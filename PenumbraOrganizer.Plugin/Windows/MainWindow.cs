@@ -425,11 +425,15 @@ public sealed class MainWindow : Window, IDisposable
         if (!gates.CanScan && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("Another operation is in progress or requires recovery.");
 
-        DrawLibraryWorkProgress(scanState, _plugin.ScanWork.RequestCancellation);
-        DrawLibraryWorkOutcome(scanState);
-
+        // The mods-loaded text must stay SameLine'd with the button here, before the progress bar
+        // and outcome message are drawn - DrawLibraryWorkOutcome renders text on Failed/StaleModList/
+        // Cancelled outcomes (not just while a run is in progress), and a SameLine after it would
+        // wrongly glue the mods-loaded count onto the end of that outcome line.
         ImGui.SameLine();
         ImGui.Text($"{_plugin.OrganizerState.Mods.Count} mods loaded");
+
+        DrawLibraryWorkProgress(scanState, _plugin.ScanWork.RequestCancellation);
+        DrawLibraryWorkOutcome(scanState);
         ImGui.Spacing();
 
         PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: false);
