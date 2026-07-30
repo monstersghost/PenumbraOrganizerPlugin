@@ -104,14 +104,27 @@ public class TemplateInteropTests
             ApplyVia(TemplateCodec.DecodeShareCode(TemplateCodec.EncodeShareCode(template))));
     }
 
-    // A template is not identity-bound in any way: nothing about the importing library can make
-    // it refuse to load. This is the property the workbook cannot have.
+    // Narrow by design: this guards against the two identity fields the workbook format carries
+    // being reintroduced by name. It is NOT by itself proof that templates are portable -- that
+    // is what the two placement tests above establish, by actually placing mods across two
+    // different libraries. The decode assertion below is the part that checks behavior: a
+    // template must decode fully on its own, with no library, no installation, and no
+    // OrganizerState in scope for it to be validated against.
     [Fact]
-    public void Template_CarriesNoInstallationIdentity()
+    public void Template_IsNotBoundToAnyInstallation()
     {
         var json = TemplateCodec.EncodeJson(AuthorTemplate());
 
         Assert.DoesNotContain("installationIdentity", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("scanIdentity", json, StringComparison.OrdinalIgnoreCase);
+
+        // No OrganizerState, no mod library, nothing installation-specific is available here --
+        // if decoding ever came to depend on the importing library, this would stop compiling or
+        // stop succeeding.
+        var decoded = TemplateCodec.DecodeJson(json);
+
+        Assert.True(decoded.Succeeded);
+        Assert.Equal("Akako's layout", decoded.Template!.Name);
+        Assert.Equal(3, decoded.Template.EntriesByNormalizedName.Count);
     }
 }
