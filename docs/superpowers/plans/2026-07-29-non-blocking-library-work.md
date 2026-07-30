@@ -1905,7 +1905,7 @@ git commit -m "test: forbid Dalamud and Penumbra types in the background work na
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs`
 - Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryActivityGateTests.cs`
-- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — the `OperationController` construction
+- (No `Plugin.cs` change in this task — see Step 3.)
 
 **Interfaces:**
 - Consumes: `LibraryWorkStateSnapshot` (Task 4); `OperationController`'s `externalActivityGate` constructor parameter and `Plugin.EnsureAdmitted()` (state-authority plan).
@@ -1968,7 +1968,7 @@ Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.
 
 Expected: FAIL to compile, `CS0246: The type or namespace name 'LibraryActivityGate' could not be found`.
 
-- [ ] **Step 3: Write the helper and wire the gate**
+- [ ] **Step 3: Write the helper (wiring is deferred — see below)**
 
 Create `PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs`:
 
@@ -1996,20 +1996,13 @@ public static class LibraryActivityGate
 }
 ```
 
-In `PenumbraOrganizer.Plugin/Plugin.cs`, extend the existing `OperationController` construction with the gate argument:
+**Do NOT modify `Plugin.cs` in this task.** The gate delegate has to read `Plugin.ScanWork` and `Plugin.IndexWork`, and neither property exists yet: Task 9 creates `ScanWork`, Task 10 creates `IndexWork`. Wiring the gate here would not compile.
 
-```csharp
-        OperationController = new Organizer.Operations.OperationController(
-            operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
-            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
-            // Late-bound on purpose: the delegate reads the coordinator properties at invoke time,
-            // never at construction. The controller is constructed before ScanWork/IndexWork are
-            // assigned, and no admission call can happen during the constructor - but the null
-            // guard makes that ordering a non-issue rather than an invariant to remember.
-            externalActivityGate: () => ScanWork is null || IndexWork is null
-                ? null
-                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
-```
+Ownership of the wiring:
+- **Task 9** adds the `externalActivityGate` argument to the `OperationController` construction when it creates `ScanWork`, null-guarding `IndexWork` until Task 10 exists.
+- **Task 10** drops the `IndexWork` null-guard once it adds that coordinator.
+
+This task therefore delivers the pure helper and its tests only. That is still worth its own task: it is the one piece of the gate's logic that can be tested without Dalamud, and both later tasks call into it rather than re-deriving the rule.
 
 - [ ] **Step 4: Run to verify it passes**
 
