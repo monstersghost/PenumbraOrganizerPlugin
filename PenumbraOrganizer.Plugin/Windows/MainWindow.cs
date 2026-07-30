@@ -77,6 +77,9 @@ public sealed class MainWindow : Window, IDisposable
         ("By Mod Type", PenumbraOrganizer.Core.Models.OrganizationStrategy.TypeOnly),
         ("By Type Then Creator", PenumbraOrganizer.Core.Models.OrganizationStrategy.TypeThenCreator),
         ("By Creator Then Type", PenumbraOrganizer.Core.Models.OrganizationStrategy.CreatorThenType),
+        // Appended deliberately: _workbookStrategyIndex defaults to 2, so inserting this earlier
+        // would silently change which strategy a fresh session exports with.
+        ("Keep current folders (as-is)", PenumbraOrganizer.Core.Models.OrganizationStrategy.PreserveAndClean),
     ];
 
     private static readonly string PluginVersion =
@@ -947,7 +950,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         var strategyLabels = WorkbookStrategyOptions.Select(o => o.Label).ToArray();
         ImGui.SetNextItemWidth(220);
-        ImGui.Combo("Workbook suggestion strategy", ref _workbookStrategyIndex, strategyLabels, strategyLabels.Length);
+        ImGui.Combo("Workbook destinations", ref _workbookStrategyIndex, strategyLabels, strategyLabels.Length);
 
         ImGui.SameLine();
         if (ImGui.Button("Export Workbook"))

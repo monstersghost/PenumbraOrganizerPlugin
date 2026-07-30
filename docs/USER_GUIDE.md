@@ -126,6 +126,12 @@ selected in the dropdown as the suggested-destination column. It's interoperable
 standalone app's own workbook feature: edit the file in Excel, then use Import Workbook on the Sort
 tab to bring your edits back in.
 
+The Workbook destinations dropdown decides what goes in the workbook's Destination column. The four
+sorting choices fill it with suggested folders. Keep current folders (as-is) fills it with each
+mod's folder as it stands right now, which is what you want when you intend to write the layout
+yourself in Excel rather than start from a suggestion. Protected mods and mods sitting at the top
+level of your library get a blank Destination, which means "leave this one alone" on import.
+
 Show Config File opens Explorer with the plugin's own settings file (your protected mods and
 protected folders) pre-selected, so you can copy or attach it directly. Create Diagnostic Dump
 writes a plain-text state summary (mod and protection counts, the last Apply/Restore/Folder

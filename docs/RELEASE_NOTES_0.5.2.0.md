@@ -2,8 +2,18 @@
 
 ## Changes since v0.5.1.1
 
-This release is about one thing: the plugin no longer freezes the game while it works on your mod
-library.
+This release is mostly about one thing: the plugin no longer freezes the game while it works on your
+mod library. There is also one small addition to workbook export.
+
+### Added: export the workbook exactly as your library stands
+
+Workbook export always filled the Destination column with a suggested folder, based on whichever
+sorting strategy you picked. There was no way to get a workbook that simply described your library
+as it is, so anyone wanting to write the layout by hand had to pick a strategy they did not want and
+then clear every cell it produced.
+
+The dropdown now offers Keep current folders (as-is). Every mod's Destination is the folder it is
+in right now, and importing that workbook back without editing it changes nothing.
 
 ### Fixed: Rediscover Mods froze the game on large libraries
 
@@ -69,4 +79,4 @@ compute on a background thread, publish the result back on the framework thread.
 lives in a namespace with an enforced test that no Dalamud or Penumbra type can be referenced from
 it, so it stays testable without a running game.
 
-883 tests pass on this release.
+886 tests pass on this release.

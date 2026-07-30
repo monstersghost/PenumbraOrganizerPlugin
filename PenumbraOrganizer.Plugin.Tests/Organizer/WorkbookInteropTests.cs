@@ -116,4 +116,41 @@ public class WorkbookInteropTests
         Assert.True(row.Protected);
         Assert.Equal("Gear/Baz Mod", row.ProposedPath);
     }
+
+    [Fact]
+    public async Task AsIsExport_ImportedUnedited_LeavesEveryProposedPathUnchanged()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [
+                new OrganizerModRow { Identifier = "Nested", Name = "Nested Mod", Author = "Author", CurrentPath = "Gear/Nested Mod", ProposedPath = "Gear/Nested Mod", Category = ModCategory.Gear },
+                new OrganizerModRow { Identifier = "Protected", Name = "Protected Mod", Author = "Author", CurrentPath = "Gear/Protected Mod", ProposedPath = "Gear/Protected Mod", Category = ModCategory.Gear },
+                new OrganizerModRow { Identifier = "Root", Name = "Root Mod", Author = "Author", CurrentPath = "Root Mod", ProposedPath = "Root Mod", Category = ModCategory.Gear },
+            ],
+            new HashSet<string>(["Protected"]));
+
+        var service = CreateService();
+        var inventory = WorkbookAdapter.ToScanInventory(state, MakeInstallation());
+        var export = await service.ExportAsync(
+            inventory, WorkbookAdapter.ToProposals(state), WorkbookAdapter.ToOrganizationPreferences(OrganizationStrategy.PreserveAndClean),
+            MakeWorkbookPath(), CancellationToken.None);
+
+        // Rows are written in name order, so 2/3/4 are Nested/Protected/Root. Asserting the
+        // nested mod's cell holds its own folder is what distinguishes as-is from a sorting
+        // strategy: without it, this test would still pass if the option were wired to the
+        // wrong strategy, because an unedited round-trip is internally consistent either way.
+        using (var workbook = new XLWorkbook(export.WorkbookPath))
+        {
+            var sheet = workbook.Worksheet("Edit Destinations");
+            Assert.Equal("Gear", sheet.Cell(2, 7).GetString());
+            Assert.Equal(string.Empty, sheet.Cell(3, 7).GetString());
+            Assert.Equal(string.Empty, sheet.Cell(4, 7).GetString());
+        }
+
+        var imported = await service.ImportAsync(export.WorkbookPath, inventory, CancellationToken.None);
+        WorkbookAdapter.ApplyImportResult(state, imported);
+
+        Assert.Empty(imported.Errors);
+        Assert.All(state.Mods, row => Assert.Equal(row.CurrentPath, row.ProposedPath));
+    }
 }
