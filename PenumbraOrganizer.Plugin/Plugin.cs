@@ -10,6 +10,7 @@ using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Infrastructure.Exports;
 using PenumbraOrganizer.Plugin.LibrarySearch;
+using PenumbraOrganizer.Plugin.LibraryWork;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.NpcNames;
 using PenumbraOrganizer.Plugin.Windows;
@@ -35,6 +36,12 @@ public sealed class Plugin : IDalamudPlugin
     public readonly Organizer.OrganizerState OrganizerState = new();
     public LibrarySearch.ChangedItemIndex? LibraryIndex { get; private set; }
     public string? LibraryIndexError { get; private set; }
+
+    internal void SetLibraryIndex(LibrarySearch.ChangedItemIndex index)
+    {
+        LibraryIndex = index;
+        LibraryIndexError = null;
+    }
     internal Configuration Config = null!;
     private readonly WorkbookWorkflowService _workbookService;
     private readonly HttpClient _npcHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
@@ -43,9 +50,15 @@ public sealed class Plugin : IDalamudPlugin
     };
     private readonly Organizer.NpcNames.NpcNameRefreshService _npcNameRefreshService;
 
+    internal ModEventEpoch ModEvents { get; } = new();
+    internal LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow> ScanWork { get; }
+    internal LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod> IndexWork { get; }
+
     private readonly EventSubscriber<string> _modAdded;
     private readonly EventSubscriber<string> _modDeleted;
     private readonly EventSubscriber<string, string> _modMoved;
+    private readonly EventSubscriber<string, bool> _modDirectoryChanged;
+    private readonly EventSubscriber _penumbraDisposed;
 
     public Plugin()
     {
@@ -60,7 +73,18 @@ public sealed class Plugin : IDalamudPlugin
             Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(OperationsRoot));
         OperationController = new Organizer.Operations.OperationController(
             operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
-            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot);
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
+            // Late-bound on purpose: the delegate reads the coordinator property at invoke time,
+            // never at construction. OperationController is constructed before ScanWork and
+            // IndexWork are assigned, and no admission check can run during the constructor - but
+            // the null guard makes that ordering a non-issue rather than an invariant to remember.
+            externalActivityGate: () => ScanWork is null || IndexWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
+        ScanWork = new LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow>(
+            () => ModEvents.Current, logWarning: message => Log.Warning(message));
+        IndexWork = new LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod>(
+            () => ModEvents.Current, logWarning: message => Log.Warning(message));
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
         try
@@ -81,10 +105,33 @@ public sealed class Plugin : IDalamudPlugin
         // Observe live changes. SetModPath is now reached only through the operation engine
         // (StartApplyOperation/StartRestoreOperation -> OperationController -> PathMutationOperation),
         // gated on OrganizerState.Validate() showing no issues.
-        _modAdded = ModAdded.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod added: {dir}"));
-        _modDeleted = ModDeleted.Subscriber(PluginInterface, dir => _mainWindow.LogEvent($"Mod deleted: {dir}"));
-        _modMoved = ModMoved.Subscriber(PluginInterface,
-            (oldDir, newDir) => _mainWindow.LogEvent($"Mod moved: {oldDir} -> {newDir}"));
+        _modAdded = ModAdded.Subscriber(PluginInterface, dir =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod added: {dir}");
+        });
+        _modDeleted = ModDeleted.Subscriber(PluginInterface, dir =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod deleted: {dir}");
+        });
+        _modMoved = ModMoved.Subscriber(PluginInterface, (oldDir, newDir) =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod moved: {oldDir} -> {newDir}");
+        });
+        _modDirectoryChanged = ModDirectoryChanged.Subscriber(PluginInterface, (dir, locked) =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent($"Mod directory changed: {dir}");
+        });
+        // Penumbra's own docs for GetChangedItemAdapterDictionary say to clear it on Disposed, so a
+        // run holding one across this event is working from storage that is no longer valid.
+        _penumbraDisposed = Disposed.Subscriber(PluginInterface, () =>
+        {
+            ModEvents.Increment();
+            _mainWindow.LogEvent("Penumbra unloaded.");
+        });
 
         Framework.Update += OnFrameworkUpdate;
 
@@ -111,6 +158,11 @@ public sealed class Plugin : IDalamudPlugin
         _modAdded.Dispose();
         _modDeleted.Dispose();
         _modMoved.Dispose();
+        _modDirectoryChanged.Dispose();
+        _penumbraDisposed.Dispose();
+
+        ScanWork.Dispose();
+        IndexWork.Dispose();
 
         WindowSystem.RemoveAllWindows();
         _mainWindow.Dispose();
@@ -123,109 +175,128 @@ public sealed class Plugin : IDalamudPlugin
 
     private void ToggleMainUi() => _mainWindow.Toggle();
 
-    private void OnFrameworkUpdate(IFramework framework)
-    {
-        OperationController.Update();
-    }
-
-    public void RunScan()
-    {
-        // One bulk call for all mods' changed items (Approach B in the Phase 1c spec).
-        // Plain dictionary, not disposable. If Penumbra is unavailable this throws and
-        // surfaces through MainWindow's existing scan error handling.
-        var allChangedItems = new Penumbra.Api.IpcSubscribers.GetChangedItemAdapterDictionary(PluginInterface).Invoke();
-
-        using var modList = GetModListAdapterIpc.Invoke();
-
-        var npcNameListResult = NpcNameListStore.Load(NpcNameListPath, ReadEmbeddedNpcNameSeed());
-        if (npcNameListResult.Warning is not null)
-            Log.Warning(npcNameListResult.Warning);
-        var npcNameMatcher = NpcNameListStore.BuildMatcher(npcNameListResult.Document);
-
-        var rows = modList.Select(mod =>
-        {
-            var changedItemKeys = allChangedItems.TryGetValue(mod.Identifier, out var changedItems)
-                ? changedItems.Keys
-                : Enumerable.Empty<string>();
-            var classification = ModTypeClassifier.Classify(mod.Name, changedItemKeys, npcNameMatcher);
-
-            // Disk I/O only for mods the existing GetChangedItems-based rule already confirmed
-            // are Gear — every other category never touches disk for this.
-            var gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable;
-            if (classification.Category == ModCategory.Gear)
-            {
-                var equipmentSlots = ModEquipmentFileReader.ReadEquipmentSlots(mod.ModPath);
-                classification = ModTypeClassifier.EnrichGearSubCategory(classification, equipmentSlots);
-
-                // Recorded per-row (not logged) so the Export button can surface a breakdown -
-                // see GearSlotDiagnostic's doc comment for why this exists. ReadEquipmentSlots
-                // itself can't distinguish "directory doesn't exist" from "directory exists but
-                // has no equipment evidence" (by design, per its own tests) - checked here
-                // instead, since it's a materially different root cause for diagnostics.
-                gearSlotDiagnostic = equipmentSlots switch
-                {
-                    null => GearSlotDiagnostic.ReadFailure,
-                    { Count: 0 } when !mod.ModPath.Exists => GearSlotDiagnostic.DirectoryMissing,
-                    { Count: 0 } => GearSlotDiagnostic.ZeroEvidence,
-                    { Count: 1 } => GearSlotDiagnostic.Single,
-                    _ => GearSlotDiagnostic.Ambiguous,
-                };
-            }
-
-            return new Organizer.OrganizerModRow
-            {
-                Identifier = mod.Identifier,
-                Name = mod.Name,
-                Author = mod.Author,
-                CurrentPath = mod.FullPath,
-                ProposedPath = mod.FullPath,
-                HeliosphereManaged = Organizer.HeliosphereDetector.IsHeliosphereManaged(mod.Identifier, mod.ModPath),
-                Category = classification.Category,
-                SubCategory = classification.SubCategory,
-                GearSlotDiagnostic = gearSlotDiagnostic,
-            };
-        }).ToList();
-
-        OrganizerState.LoadScan(rows, Config.ProtectedModIdentifiers, Config.ProtectedFolderPaths);
-        SaveProtectionState();
-    }
-
-    public void BuildChangedItemIndex()
+    // Everything that must happen once new scan data is live, none of which can be rolled back.
+    // Each is isolated: one failing must not skip the others, and none may fail the run - the data
+    // is already published by the time this is called.
+    internal void RunPostScanSideEffects()
     {
         try
         {
-            var allChangedItems = new Penumbra.Api.IpcSubscribers.GetChangedItemAdapterDictionary(PluginInterface).Invoke();
-            using var modList = GetModListAdapterIpc.Invoke();
-
-            var mods = modList
-                .Select(mod => new LibrarySearch.LibraryModEntry(mod.Identifier, mod.Name, mod.Author, mod.ModPath))
-                .ToList();
-
-            var npcNameListResult = NpcNameListStore.Load(NpcNameListPath, ReadEmbeddedNpcNameSeed());
-            if (npcNameListResult.Warning is not null)
-                Log.Warning(npcNameListResult.Warning);
-            var npcNameMatcher = NpcNameListStore.BuildMatcher(npcNameListResult.Document);
-
-            var changedItemIdentifiers = allChangedItems.Keys.ToHashSet(StringComparer.Ordinal);
-
-            LibraryIndex = LibrarySearch.ChangedItemIndexBuilder.Build(
-                mods,
-                changedItemIdentifiers,
-                identifier => allChangedItems.TryGetValue(identifier, out var changedItems)
-                    ? changedItems.Keys
-                    : Enumerable.Empty<string>(),
-                npcNameMatcher);
-            LibraryIndexError = null;
+            SaveProtectionState();
         }
         catch (Exception ex)
         {
-            // Atomic replacement: LibraryIndex is only ever reassigned above, after every step
-            // succeeds. A thrown exception here (e.g. Penumbra unavailable) leaves the previous
-            // index (and its BuiltAt timestamp) exactly as it was -- a failed refresh must not
-            // discard a previously good result.
-            LibraryIndexError = $"Refresh failed: {ex.Message}";
-            Log.Warning(ex, "Library Search index refresh failed.");
+            Log.Warning(ex, "Saving protection state after a scan failed; the scan itself succeeded.");
         }
+
+        try
+        {
+            _mainWindow.OnScanPublished();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Post-scan refresh failed; the scan itself succeeded.");
+        }
+    }
+
+    private bool _eventLogDrainFaulted;
+    private bool _scanWorkFaulted;
+    private bool _indexWorkFaulted;
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        OperationController.Update(); // has its own internal exception boundary
+
+        // Each of these three gets its own try/catch and its own never-reset latch: they are
+        // independent of one another, so one throwing must not skip or starve the others. A
+        // coordinator that faults here is abandoned so its Phase returns to Idle and releases the
+        // activity gate - without that, a coordinator stuck outside Idle would make
+        // LibraryActivityGate.Reason non-null forever, permanently rejecting every gated action.
+        try
+        {
+            _mainWindow.DrainEventLog();
+        }
+        catch (Exception ex)
+        {
+            if (!_eventLogDrainFaulted)
+            {
+                _eventLogDrainFaulted = true;
+                Log.Error(ex, "Draining the event log failed; this frame's log lines were lost, " +
+                    "the plugin remains usable, and later frames will keep trying.");
+            }
+        }
+
+        try
+        {
+            ScanWork.Update();
+        }
+        catch (Exception ex)
+        {
+            ScanWork.AbandonRun($"Scan update threw: {ex.Message}");
+            if (!_scanWorkFaulted)
+            {
+                _scanWorkFaulted = true;
+                Log.Error(ex, "Scan work update failed; the in-flight scan (if any) was abandoned " +
+                    "and Scan can be started again.");
+            }
+        }
+
+        try
+        {
+            IndexWork.Update();
+        }
+        catch (Exception ex)
+        {
+            IndexWork.AbandonRun($"Index update threw: {ex.Message}");
+            if (!_indexWorkFaulted)
+            {
+                _indexWorkFaulted = true;
+                Log.Error(ex, "Search index work update failed; the in-flight build (if any) was " +
+                    "abandoned and the index build can be started again.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a scan. Returns as soon as the Penumbra reads are done; classification and the
+    /// per-mod disk walk run on a background thread and publish through ScanJob.Publish.
+    /// Throws InvalidOperationException if any conflicting activity is running.
+    /// </summary>
+    public void RunScan()
+    {
+        // EnsureAdmitted is the state-authority plan's shared admission point: it consults
+        // AdmissionRejectionReason, which covers an active operation, a pending recovery, a
+        // starting operation, AND (via the Task 8 gate) the other library coordinator.
+        EnsureAdmitted();
+        ScanWork.Start(new ScanJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+    }
+
+    /// <summary>
+    /// Best-effort scan for callers that must not fail if one cannot start right now - specifically
+    /// the recovery-resolution paths, whose scan is a refresh after the fact, not a correctness
+    /// requirement. Returns false and logs rather than throwing out of a committed recovery.
+    /// </summary>
+    internal bool TryRequestScan()
+    {
+        if (OperationController.AdmissionRejectionReason() is { } reason)
+        {
+            Log.Information($"Post-recovery scan skipped: {reason} Use Refresh mod list when it clears.");
+            return false;
+        }
+
+        RunScan();
+        return true;
+    }
+
+    /// <summary>
+    /// Starts a Search index build. Same three-phase shape as RunScan; a failed or discarded run
+    /// leaves the previous LibraryIndex untouched. Throws InvalidOperationException if a library run
+    /// is already in flight.
+    /// </summary>
+    public void BuildChangedItemIndex()
+    {
+        EnsureAdmitted(); // same shared admission point as RunScan - see Task 9
+        IndexWork.Start(new LibraryWork.IndexJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
     }
 
     internal void SaveProtectionState()
@@ -250,9 +321,9 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string DefaultWorkbookFilePath => Path.Combine(PluginInterface.ConfigDirectory.FullName, DefaultWorkbookFileName);
 
-    private string NpcNameListPath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "npc-name-list.json");
+    internal string NpcNameListPath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "npc-name-list.json");
 
-    private static string ReadEmbeddedNpcNameSeed()
+    internal static string ReadEmbeddedNpcNameSeed()
     {
         var assembly = typeof(Plugin).Assembly;
         const string resourceName = "PenumbraOrganizer.Plugin.Organizer.NpcNames.npc-name-list-seed.json";
@@ -425,7 +496,7 @@ public sealed class Plugin : IDalamudPlugin
     internal void ResolveKeepCurrent()
     {
         OperationController.ResolveKeepCurrent();
-        RunScan();
+        TryRequestScan();
     }
 
     internal void ResolveContinue()
@@ -446,7 +517,7 @@ public sealed class Plugin : IDalamudPlugin
     internal void AcceptAllAndCloseInterruptedOperations()
     {
         OperationController.AcceptAllAndCloseInterruptedOperations();
-        RunScan();
+        TryRequestScan();
     }
 
     internal void RequestCancellation() => OperationController.RequestCancellation();
@@ -478,7 +549,7 @@ public sealed class Plugin : IDalamudPlugin
         // would throw or record a misleading error while a recovery is still outstanding. Only scan
         // once recovery has actually cleared.
         if (!OperationController.State.RequiresRecovery)
-            RunScan();
+            TryRequestScan();
     }
 
     // Read-only: computes what a Restore would do without capturing a snapshot or moving

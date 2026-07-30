@@ -1019,4 +1019,51 @@ public class OrganizerStateTests
 
         Assert.Equal("MyFolder/Apple", state.Mods.Single().ProposedPath);
     }
+
+    [Fact]
+    public void ReplaceScanAtomically_ThrowingDuringDerivation_LeavesPreviousStateIntact()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [new OrganizerModRow { Identifier = "a", Name = "A", Author = "x", CurrentPath = "Gear/A", ProposedPath = "Gear/A" }],
+            new HashSet<string>(StringComparer.Ordinal));
+
+        // A row whose enumeration throws part-way: the first item is fine, the second blows up
+        // during derivation, exactly like a malformed path would.
+        IEnumerable<OrganizerModRow> Exploding()
+        {
+            yield return new OrganizerModRow { Identifier = "b", Name = "B", Author = "y", CurrentPath = "Gear/B", ProposedPath = "Gear/B" };
+            throw new InvalidOperationException("derivation failed");
+        }
+
+        Assert.Throws<InvalidOperationException>(() =>
+            state.ReplaceScanAtomically(Exploding(), new HashSet<string>(StringComparer.Ordinal)));
+
+        // The previous scan must still be entirely present and uncontaminated.
+        var mods = state.Mods;
+        Assert.Single(mods);
+        Assert.Equal("a", mods[0].Identifier);
+        Assert.Contains("Gear", state.KnownFolders);
+    }
+
+    [Fact]
+    public void ReplaceScanAtomically_OnSuccess_BehavesExactlyLikeLoadScan()
+    {
+        var viaLoadScan = new OrganizerState();
+        var viaReplace = new OrganizerState();
+        OrganizerModRow[] Rows() =>
+        [
+            new() { Identifier = "a", Name = "A", Author = "x", CurrentPath = "Gear/Feet/A", ProposedPath = "somewhere/else" },
+        ];
+        var protectedIds = new HashSet<string>(["a"], StringComparer.Ordinal);
+
+        viaLoadScan.LoadScan(Rows(), protectedIds);
+        viaReplace.ReplaceScanAtomically(Rows(), protectedIds);
+
+        Assert.Equal(viaLoadScan.Mods.Select(m => m.Identifier), viaReplace.Mods.Select(m => m.Identifier));
+        Assert.Equal(viaLoadScan.Mods[0].Protected, viaReplace.Mods[0].Protected);
+        Assert.Equal(viaLoadScan.Mods[0].ProposedPath, viaReplace.Mods[0].ProposedPath);
+        Assert.Equal(viaLoadScan.KnownFolders, viaReplace.KnownFolders);
+        Assert.True(viaReplace.HasScanned);
+    }
 }

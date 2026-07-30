@@ -5,10 +5,13 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 
 public sealed class OrganizerState
 {
-    private readonly Dictionary<string, OrganizerModRow> _mods = new();
-    private readonly HashSet<string> _protectedModIdentifiers = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _protectedFolders = new(StringComparer.Ordinal);
-    private readonly List<string> _knownFolders = [];
+    // Not readonly: ReplaceScanAtomically swaps these references only after every replacement
+    // collection has been built successfully, so a throw during derivation cannot leave the state
+    // half-replaced. Nothing else reassigns them.
+    private Dictionary<string, OrganizerModRow> _mods = new();
+    private HashSet<string> _protectedModIdentifiers = new(StringComparer.Ordinal);
+    private HashSet<string> _protectedFolders = new(StringComparer.Ordinal);
+    private List<string> _knownFolders = [];
 
     public IReadOnlyList<OrganizerModRow> Mods =>
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
@@ -44,31 +47,49 @@ public sealed class OrganizerState
     public void LoadScan(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlySet<string>? previouslyProtectedFolders = null) =>
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolders);
+
+    /// <summary>
+    /// Whole-state replacement that either fully happens or does not happen at all. Every
+    /// replacement collection is built first; the field references are swapped only once all
+    /// derivation has succeeded. A background scan publishes through this, so a throw here must
+    /// leave the previously published scan exactly as it was rather than half-replaced.
+    /// </summary>
+    public void ReplaceScanAtomically(
+        IEnumerable<OrganizerModRow> scanned,
+        IReadOnlySet<string> previouslyProtectedIdentifiers,
         IReadOnlySet<string>? previouslyProtectedFolders = null)
     {
-        HasScanned = true;
-        _mods.Clear();
-        _protectedModIdentifiers.Clear();
-        _protectedModIdentifiers.UnionWith(previouslyProtectedIdentifiers);
-        _protectedFolders.Clear();
-        _protectedFolders.UnionWith(previouslyProtectedFolders ?? new HashSet<string>(StringComparer.Ordinal));
+        var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
+        var replacementProtectedFolders = new HashSet<string>(
+            previouslyProtectedFolders ?? new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal);
 
+        var replacementMods = new Dictionary<string, OrganizerModRow>();
         foreach (var row in scanned)
         {
-            row.Protected = IsEffectivelyProtectedFull(row);
+            // Protection is derived against the REPLACEMENT sets, not the live fields, so this loop
+            // reads nothing it is about to overwrite.
+            row.Protected = IsEffectivelyProtected(row, replacementProtectedIdentifiers, replacementProtectedFolders);
             row.ProposedPath = row.CurrentPath;
-            _mods[row.Identifier] = row;
+            replacementMods[row.Identifier] = row;
         }
 
-        _knownFolders.Clear();
-        _knownFolders.AddRange(
-            _mods.Values
-                .Select(m => OrganizationCleanupPlanner.GetVirtualParent(m.CurrentPath))
-                .Where(f => f is not null)
-                .Select(f => f!)
-                .SelectMany(AncestorChain)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(f => f, StringComparer.Ordinal));
+        var replacementKnownFolders = replacementMods.Values
+            .Select(m => OrganizationCleanupPlanner.GetVirtualParent(m.CurrentPath))
+            .Where(f => f is not null)
+            .Select(f => f!)
+            .SelectMany(AncestorChain)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+
+        // COMMIT. Nothing above this point has touched published state.
+        _protectedModIdentifiers = replacementProtectedIdentifiers;
+        _protectedFolders = replacementProtectedFolders;
+        _mods = replacementMods;
+        _knownFolders = replacementKnownFolders;
+        HasScanned = true;
     }
 
     public void SetProtected(string identifier, bool value)
@@ -122,9 +143,13 @@ public sealed class OrganizerState
     }
 
     private bool IsEffectivelyProtectedFull(OrganizerModRow row) =>
+        IsEffectivelyProtected(row, _protectedModIdentifiers, _protectedFolders);
+
+    private static bool IsEffectivelyProtected(
+        OrganizerModRow row, IReadOnlySet<string> protectedModIdentifiers, IReadOnlySet<string> protectedFolders) =>
         row.HeliosphereManaged
-        || _protectedModIdentifiers.Contains(row.Identifier)
-        || OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, _protectedFolders);
+        || protectedModIdentifiers.Contains(row.Identifier)
+        || OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, protectedFolders);
 
     // Deliberately excludes HeliosphereManaged - see SetProtected/SetAllProtection's doc comment
     // context above and the plan's Global Constraints for why.

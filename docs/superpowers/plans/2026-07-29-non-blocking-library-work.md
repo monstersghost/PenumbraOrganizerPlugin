@@ -1905,7 +1905,7 @@ git commit -m "test: forbid Dalamud and Penumbra types in the background work na
 **Files:**
 - Create: `PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs`
 - Create: `PenumbraOrganizer.Plugin.Tests/LibraryWork/LibraryActivityGateTests.cs`
-- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — the `OperationController` construction
+- (No `Plugin.cs` change in this task — see Step 3.)
 
 **Interfaces:**
 - Consumes: `LibraryWorkStateSnapshot` (Task 4); `OperationController`'s `externalActivityGate` constructor parameter and `Plugin.EnsureAdmitted()` (state-authority plan).
@@ -1968,7 +1968,7 @@ Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.
 
 Expected: FAIL to compile, `CS0246: The type or namespace name 'LibraryActivityGate' could not be found`.
 
-- [ ] **Step 3: Write the helper and wire the gate**
+- [ ] **Step 3: Write the helper (wiring is deferred — see below)**
 
 Create `PenumbraOrganizer.Plugin/LibraryWork/LibraryActivityGate.cs`:
 
@@ -1996,20 +1996,13 @@ public static class LibraryActivityGate
 }
 ```
 
-In `PenumbraOrganizer.Plugin/Plugin.cs`, extend the existing `OperationController` construction with the gate argument:
+**Do NOT modify `Plugin.cs` in this task.** The gate delegate has to read `Plugin.ScanWork` and `Plugin.IndexWork`, and neither property exists yet: Task 9 creates `ScanWork`, Task 10 creates `IndexWork`. Wiring the gate here would not compile.
 
-```csharp
-        OperationController = new Organizer.Operations.OperationController(
-            operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
-            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
-            // Late-bound on purpose: the delegate reads the coordinator properties at invoke time,
-            // never at construction. The controller is constructed before ScanWork/IndexWork are
-            // assigned, and no admission call can happen during the constructor - but the null
-            // guard makes that ordering a non-issue rather than an invariant to remember.
-            externalActivityGate: () => ScanWork is null || IndexWork is null
-                ? null
-                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
-```
+Ownership of the wiring:
+- **Task 9** adds the `externalActivityGate` argument to the `OperationController` construction when it creates `ScanWork`, null-guarding `IndexWork` until Task 10 exists.
+- **Task 10** drops the `IndexWork` null-guard once it adds that coordinator.
+
+This task therefore delivers the pure helper and its tests only. That is still worth its own task: it is the one piece of the gate's logic that can be tested without Dalamud, and both later tasks call into it rather than re-deriving the rule.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -2197,6 +2190,25 @@ Replace the entire body of `Plugin.RunScan()` with:
     }
 ```
 
+**Also wire the admission gate here.** Task 8 built the pure `LibraryWork.LibraryActivityGate.Reason(scan, index)` helper but could not wire it, because the delegate reads `ScanWork`/`IndexWork` and neither existed yet. You create `ScanWork`, so the wiring is yours. Extend the existing `OperationController` construction with the gate argument:
+
+```csharp
+        OperationController = new Organizer.Operations.OperationController(
+            operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
+            // Late-bound on purpose: the delegate reads the coordinator property at invoke time,
+            // never at construction. OperationController is constructed before ScanWork is
+            // assigned, and no admission check can run during the constructor - but the null
+            // guard makes that ordering a non-issue rather than an invariant to remember.
+            // IndexWork does not exist until Task 10; it passes Idle here until then.
+            externalActivityGate: () => ScanWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(
+                    ScanWork.State, LibraryWork.LibraryWorkStateSnapshot.Idle));
+```
+
+Once this is wired, `EnsureAdmitted()` covers library work as well as operations, which is why `RunScan` needs no additional gate check of its own.
+
 Rework `OnFrameworkUpdate` (line 126) so the new per-frame calls sit behind a catch boundary — the framework callback has no caller-side net, which is exactly why `OperationController.Update()` carries its own internal one. The coordinator's `Update` is written not to throw, but "written not to" is an observation, not a boundary:
 
 ```csharp
@@ -2264,6 +2276,8 @@ What still needs changing is the three unguarded recovery call sites, which woul
         if (!OperationController.State.RequiresRecovery)
             TryRequestScan();
 ```
+
+**Before you edit, know this caller exists.** `MainWindow.ConsumeCompletionIfNew()` — added by the operation-state-authority refactor already on `main` — calls the private `RunScan()` wrapper after every Apply and Restore completion. Your change turns that call from "a scan completed" into "a scan started". That is correct (the post-Apply rescan now finishes asynchronously), but it means the wrapper's success-side effects must move to `OnScanPublished()`, or they fire before the scan has done anything. The wrapper is already inside a try/catch, so a rejected start cannot escape `Draw()`.
 
 - [ ] **Step 4: Rewire MainWindow**
 
@@ -2661,6 +2675,18 @@ Replace the entire body of `Plugin.BuildChangedItemIndex()` with:
         IndexWork.Start(new IndexJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
     }
 ```
+
+**Complete the admission gate.** Task 9 wired `externalActivityGate` into the `OperationController` construction, but `IndexWork` did not exist then, so it passes `LibraryWorkStateSnapshot.Idle` as a placeholder. Now that you create `IndexWork`, replace that placeholder with the real state and drop the stale "until Task 10" comment:
+
+```csharp
+            externalActivityGate: () => ScanWork is null || IndexWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
+```
+
+Keep the null guard covering both coordinators: `OperationController` is still constructed before either is assigned, and the guard makes that ordering a non-issue rather than an invariant a future edit has to remember. Until this change, an index build did not block Apply/Restore at all — the placeholder made the gate blind to it.
+
+Also note `Plugin.cs` fully qualifies nested namespace types as `LibraryWork.Pure.X`; a bare `Pure.X` does not resolve, because a `using` of the parent namespace does not alias a nested one. Task 9 hit this. Follow the same form for `IndexSeed`.
 
 Add `IndexWork.Update();` to `OnFrameworkUpdate` **inside the same try/catch boundary** Task 9 added, next to `ScanWork.Update();`, and `IndexWork.Dispose();` to `Dispose()` next to `ScanWork.Dispose();`.
 
