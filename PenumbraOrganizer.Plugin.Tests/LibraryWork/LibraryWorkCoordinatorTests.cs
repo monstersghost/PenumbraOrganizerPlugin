@@ -412,6 +412,9 @@ public class LibraryWorkCoordinatorTests
 
         coordinator.Dispose();
         scheduler.RunToCompletion();
+        // Publish only ever happens inside Update(); without this call the assertion below
+        // would pass vacuously regardless of Dispose()'s behavior. Do not remove it.
+        coordinator.Update();
 
         Assert.Empty(job.Published);
     }
