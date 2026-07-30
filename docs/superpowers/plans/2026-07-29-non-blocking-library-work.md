@@ -2190,6 +2190,25 @@ Replace the entire body of `Plugin.RunScan()` with:
     }
 ```
 
+**Also wire the admission gate here.** Task 8 built the pure `LibraryWork.LibraryActivityGate.Reason(scan, index)` helper but could not wire it, because the delegate reads `ScanWork`/`IndexWork` and neither existed yet. You create `ScanWork`, so the wiring is yours. Extend the existing `OperationController` construction with the gate argument:
+
+```csharp
+        OperationController = new Organizer.Operations.OperationController(
+            operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
+            operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
+            // Late-bound on purpose: the delegate reads the coordinator property at invoke time,
+            // never at construction. OperationController is constructed before ScanWork is
+            // assigned, and no admission check can run during the constructor - but the null
+            // guard makes that ordering a non-issue rather than an invariant to remember.
+            // IndexWork does not exist until Task 10; it passes Idle here until then.
+            externalActivityGate: () => ScanWork is null
+                ? null
+                : LibraryWork.LibraryActivityGate.Reason(
+                    ScanWork.State, LibraryWork.LibraryWorkStateSnapshot.Idle));
+```
+
+Once this is wired, `EnsureAdmitted()` covers library work as well as operations, which is why `RunScan` needs no additional gate check of its own.
+
 Rework `OnFrameworkUpdate` (line 126) so the new per-frame calls sit behind a catch boundary — the framework callback has no caller-side net, which is exactly why `OperationController.Update()` carries its own internal one. The coordinator's `Update` is written not to throw, but "written not to" is an observation, not a boundary:
 
 ```csharp
@@ -2257,6 +2276,8 @@ What still needs changing is the three unguarded recovery call sites, which woul
         if (!OperationController.State.RequiresRecovery)
             TryRequestScan();
 ```
+
+**Before you edit, know this caller exists.** `MainWindow.ConsumeCompletionIfNew()` — added by the operation-state-authority refactor already on `main` — calls the private `RunScan()` wrapper after every Apply and Restore completion. Your change turns that call from "a scan completed" into "a scan started". That is correct (the post-Apply rescan now finishes asynchronously), but it means the wrapper's success-side effects must move to `OnScanPublished()`, or they fire before the scan has done anything. The wrapper is already inside a try/catch, so a rejected start cannot escape `Draw()`.
 
 - [ ] **Step 4: Rewire MainWindow**
 
