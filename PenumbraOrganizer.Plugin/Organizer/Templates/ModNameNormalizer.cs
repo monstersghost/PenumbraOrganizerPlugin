@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -6,7 +6,7 @@ namespace PenumbraOrganizer.Plugin.Organizer.Templates;
 
 /// <summary>
 /// The single normalization used on both sides of a template: the author's mod names at export
-/// and the importer's mod names at import. This is the feature's compatibility surface — changing
+/// and the importer's mod names at import. This is the feature's compatibility surface â€” changing
 /// it changes which entries match in templates that are already published, so any change to it is
 /// a formatVersion question, not a free bug fix. See the spec's "Name normalization" section.
 /// </summary>
@@ -29,7 +29,7 @@ public static class ModNameNormalizer
         var text = name.Trim().ToLowerInvariant();
 
         // Apostrophes are deleted rather than spaced, so "Emperor's" -> "emperors".
-        text = text.Replace("'", string.Empty).Replace("'", string.Empty);
+        text = text.Replace("'", string.Empty).Replace("\u2019", string.Empty);
 
         text = BracketGroups.Replace(text, " ");
         text = text.Replace("(penumbra)", " ");

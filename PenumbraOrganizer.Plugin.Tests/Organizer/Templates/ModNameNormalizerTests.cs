@@ -50,4 +50,13 @@ public class ModNameNormalizerTests
 
         Assert.Equal(once, ModNameNormalizer.Normalize(once));
     }
+
+    [Fact]
+    public void Normalize_CurlyApostrophe_MatchesStraightApostrophe()
+    {
+        Assert.Equal(
+            ModNameNormalizer.Normalize("Emperor's New Fists"),
+            ModNameNormalizer.Normalize("Emperor\u2019s New Fists"));
+        Assert.Equal("emperors new fists", ModNameNormalizer.Normalize("Emperor\u2019s New Fists"));
+    }
 }
