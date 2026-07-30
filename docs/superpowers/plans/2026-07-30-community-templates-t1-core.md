@@ -266,9 +266,23 @@ public class TemplateModelsTests
     [Fact]
     public void TemplateEntry_SerializesWithShortFieldNames()
     {
-        var json = JsonSerializer.Serialize(new TemplateEntry("bibo+ medieval", "Gear/Top"));
+        var json = JsonSerializer.Serialize(
+            new TemplateEntry("bibo+ medieval", "Gear/Top"), TemplateJson.SerializerOptions);
 
         Assert.Equal("{\"n\":\"bibo+ medieval\",\"f\":\"Gear/Top\"}", json);
+    }
+
+    // The default encoder escapes '+' as + and every non-ASCII char as \uXXXX -- six bytes
+    // where one belongs. Mod names are full of both ("Bibo+", "Café"), and payload size decides
+    // whether a share code fits in a chat message, so the relaxed encoder is load-bearing rather
+    // than cosmetic.
+    [Fact]
+    public void SerializerOptions_DoNotEscapePlusOrNonAscii()
+    {
+        var json = JsonSerializer.Serialize(
+            new TemplateEntry("café+", "Gear"), TemplateJson.SerializerOptions);
+
+        Assert.DoesNotContain("\\u", json);
     }
 
     [Fact]
@@ -361,9 +375,30 @@ public static class TemplateLimits
 Create `PenumbraOrganizer.Plugin/Organizer/Templates/TemplateModels.cs`:
 
 ```csharp
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Templates;
+
+/// <summary>
+/// The one set of serializer options for template documents, shared by the models' tests and by
+/// TemplateCodec, so a document written by one path is byte-identical to one written by the other.
+///
+/// The relaxed encoder matters for size, not looks: the default encoder escapes '+' as + and
+/// every non-ASCII character as \uXXXX -- six bytes where one belongs. Mod names are full of both
+/// ("Bibo+", "Café"), and payload size is what decides whether a share code fits in a chat
+/// message. "Unsafe" here refers to embedding output directly in HTML, which templates never do:
+/// they go to a .json file and to the clipboard.
+/// </summary>
+public static class TemplateJson
+{
+    public static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = false,
+    };
+}
 
 /// <summary>
 /// Names one of OrganizerState's seven existing sort strategies, used for mods a template has no
@@ -447,7 +482,7 @@ public sealed record ValidatedOrganizationTemplate(
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateModelsTests"
 ```
 
-Expected: PASS, 12 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1275,10 +1310,10 @@ public static class TemplateCodec
 {
     public const int SupportedFormatVersion = 1;
 
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = false,
-    };
+    // Task 2's shared options, not a second private copy: a document written here must be
+    // byte-identical to one written anywhere else, and the relaxed encoder keeps '+' and
+    // non-ASCII mod names from inflating to six bytes per character.
+    private static JsonSerializerOptions SerializerOptions => TemplateJson.SerializerOptions;
 
     public static string EncodeJson(OrganizationTemplate template) =>
         JsonSerializer.Serialize(template, SerializerOptions);
