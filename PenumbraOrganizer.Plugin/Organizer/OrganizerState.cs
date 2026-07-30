@@ -19,6 +19,14 @@ public sealed class OrganizerState
 
     public bool HasScanned { get; private set; }
 
+    /// <summary>
+    /// Increments every time a scan is published. A template plan is computed for a preview and
+    /// applied on a later frame; if a rescan lands in between, the plan describes rows that no
+    /// longer exist. Callers hold the generation they planned against and refuse to apply a plan
+    /// whose generation no longer matches, rather than applying it partially.
+    /// </summary>
+    public int ScanGeneration { get; private set; }
+
     public IReadOnlyCollection<string> ProtectedModIdentifiers => _protectedModIdentifiers;
 
     public IReadOnlyCollection<string> ProtectedFolders => _protectedFolders;
@@ -91,6 +99,7 @@ public sealed class OrganizerState
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
         HasScanned = true;
+        ScanGeneration++;
     }
 
     public void SetProtected(string identifier, bool value)
