@@ -27,6 +27,17 @@ changed-items set (`GetChangedItems`), then classifies each one. See
 it again whenever mods are installed, removed, or moved outside the plugin. Nothing else on this
 tab, or any other tab, updates automatically.
 
+The scan runs in the background, so the game keeps responding while it works. A progress line
+replaces the button while it's running, with a Cancel button next to it. Cancelling leaves your
+previously loaded library exactly as it was.
+
+Anything that would collide with a running scan is disabled while it runs, with a note explaining
+why: Apply, Restore, Create Backup, Folder Cleanup, the sort strategy buttons, and Import Workbook.
+
+If you add, remove, or move a mod in Penumbra while a scan is running, its results no longer match
+your library, so they're discarded rather than shown. You'll be told the mod list changed and asked
+to run it again.
+
 The mod count and tree view below the button show what's currently loaded. A live event log at the
 bottom reports `ModAdded`, `ModDeleted`, and `ModMoved` events as Penumbra reports them. This log
 is informational only; it doesn't trigger a re-scan.
@@ -179,6 +190,9 @@ Build/Refresh Index scans your installed mods and their changed-items sets into 
 This is separate from the Scan tab's own scan, so click it once here before searching, and again
 after installing or removing mods. A summary line reports what was indexed (mod count, total changed
 items, and a gear-slot breakdown); the index's build time is shown beneath it.
+
+Like the Scan tab's scan, the index build runs in the background with a progress line and a Cancel
+button, and is discarded if your mod list changes while it's running.
 
 Two text boxes narrow the results: "Mod name contains" matches against the mod's name, and "Item
 contains" matches against the names of the items it changes. The Categories row filters by mod
