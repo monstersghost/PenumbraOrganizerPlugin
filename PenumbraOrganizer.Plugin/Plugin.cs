@@ -36,6 +36,12 @@ public sealed class Plugin : IDalamudPlugin
     public readonly Organizer.OrganizerState OrganizerState = new();
     public LibrarySearch.ChangedItemIndex? LibraryIndex { get; private set; }
     public string? LibraryIndexError { get; private set; }
+
+    internal void SetLibraryIndex(LibrarySearch.ChangedItemIndex index)
+    {
+        LibraryIndex = index;
+        LibraryIndexError = null;
+    }
     internal Configuration Config = null!;
     private readonly WorkbookWorkflowService _workbookService;
     private readonly HttpClient _npcHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
@@ -46,6 +52,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal ModEventEpoch ModEvents { get; } = new();
     internal LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow> ScanWork { get; }
+    internal LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod> IndexWork { get; }
 
     private readonly EventSubscriber<string> _modAdded;
     private readonly EventSubscriber<string> _modDeleted;
@@ -68,15 +75,15 @@ public sealed class Plugin : IDalamudPlugin
             operationsAdapter, new Organizer.Operations.StopwatchElapsedTimeSource(),
             operationsDiagnosticsSink, TimeSpan.FromMilliseconds(2), OperationsRoot,
             // Late-bound on purpose: the delegate reads the coordinator property at invoke time,
-            // never at construction. OperationController is constructed before ScanWork is
-            // assigned, and no admission check can run during the constructor - but the null
-            // guard makes that ordering a non-issue rather than an invariant to remember.
-            // IndexWork does not exist until Task 10; it passes Idle here until then.
-            externalActivityGate: () => ScanWork is null
+            // never at construction. OperationController is constructed before ScanWork and
+            // IndexWork are assigned, and no admission check can run during the constructor - but
+            // the null guard makes that ordering a non-issue rather than an invariant to remember.
+            externalActivityGate: () => ScanWork is null || IndexWork is null
                 ? null
-                : LibraryWork.LibraryActivityGate.Reason(
-                    ScanWork.State, LibraryWork.LibraryWorkStateSnapshot.Idle));
+                : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
         ScanWork = new LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow>(
+            () => ModEvents.Current, logWarning: message => Log.Warning(message));
+        IndexWork = new LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod>(
             () => ModEvents.Current, logWarning: message => Log.Warning(message));
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
@@ -155,6 +162,7 @@ public sealed class Plugin : IDalamudPlugin
         _penumbraDisposed.Dispose();
 
         ScanWork.Dispose();
+        IndexWork.Dispose();
 
         WindowSystem.RemoveAllWindows();
         _mainWindow.Dispose();
@@ -201,6 +209,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             _mainWindow.DrainEventLog();
             ScanWork.Update();
+            IndexWork.Update();
         }
         catch (Exception ex)
         {
@@ -245,42 +254,15 @@ public sealed class Plugin : IDalamudPlugin
         return true;
     }
 
+    /// <summary>
+    /// Starts a Search index build. Same three-phase shape as RunScan; a failed or discarded run
+    /// leaves the previous LibraryIndex untouched. Throws InvalidOperationException if a library run
+    /// is already in flight.
+    /// </summary>
     public void BuildChangedItemIndex()
     {
-        try
-        {
-            var allChangedItems = new Penumbra.Api.IpcSubscribers.GetChangedItemAdapterDictionary(PluginInterface).Invoke();
-            using var modList = GetModListAdapterIpc.Invoke();
-
-            var mods = modList
-                .Select(mod => new LibrarySearch.LibraryModEntry(mod.Identifier, mod.Name, mod.Author, mod.ModPath))
-                .ToList();
-
-            var npcNameListResult = NpcNameListStore.Load(NpcNameListPath, ReadEmbeddedNpcNameSeed());
-            if (npcNameListResult.Warning is not null)
-                Log.Warning(npcNameListResult.Warning);
-            var npcNameMatcher = NpcNameListStore.BuildMatcher(npcNameListResult.Document);
-
-            var changedItemIdentifiers = allChangedItems.Keys.ToHashSet(StringComparer.Ordinal);
-
-            LibraryIndex = LibrarySearch.ChangedItemIndexBuilder.Build(
-                mods,
-                changedItemIdentifiers,
-                identifier => allChangedItems.TryGetValue(identifier, out var changedItems)
-                    ? changedItems.Keys
-                    : Enumerable.Empty<string>(),
-                npcNameMatcher);
-            LibraryIndexError = null;
-        }
-        catch (Exception ex)
-        {
-            // Atomic replacement: LibraryIndex is only ever reassigned above, after every step
-            // succeeds. A thrown exception here (e.g. Penumbra unavailable) leaves the previous
-            // index (and its BuiltAt timestamp) exactly as it was -- a failed refresh must not
-            // discard a previously good result.
-            LibraryIndexError = $"Refresh failed: {ex.Message}";
-            Log.Warning(ex, "Library Search index refresh failed.");
-        }
+        EnsureAdmitted(); // same shared admission point as RunScan - see Task 9
+        IndexWork.Start(new LibraryWork.IndexJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
     }
 
     internal void SaveProtectionState()
