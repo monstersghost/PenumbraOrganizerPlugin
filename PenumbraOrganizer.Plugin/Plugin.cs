@@ -397,6 +397,13 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string OperationsRoot => Path.Combine(PluginInterface.ConfigDirectory.FullName, "operations");
 
+    internal string TemplatesDirectory => Path.Combine(PluginInterface.ConfigDirectory.FullName, "templates");
+
+    private Organizer.Templates.TemplateStore? _templateStore;
+
+    internal Organizer.Templates.TemplateStore TemplateStore =>
+        _templateStore ??= new Organizer.Templates.TemplateStore(TemplatesDirectory);
+
     // Penumbra's config dir is a sibling of this plugin's own under Dalamud's pluginConfigs
     // folder — no IPC exposes it (confirmed against the full Penumbra.Api 5.15.1 surface; see
     // the folder-cleanup design spec's Ground truth section).
