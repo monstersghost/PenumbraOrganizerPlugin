@@ -734,6 +734,29 @@ public class TemplateDuplicateResolverTests
         Assert.Equal(forward.Warnings, reversed.Warnings);
     }
 
+    // The reversal test above only exercises valid entries. Invalid entries warn from a different
+    // code path, so they need their own reversal coverage -- this is the case that caught a real
+    // ordering defect during review.
+    [Fact]
+    public void Resolve_InvalidEntriesMixedWithDuplicates_IsOrderIndependent()
+    {
+        TemplateEntry[] entries = [
+            new("bad one", "Gear//Top"),
+            new("dup", "Gear/Top"),
+            new("bad two", "Foo//Bar"),
+            new("dup", "Characters"),
+            new("fine", "Hair"),
+        ];
+
+        var forward = TemplateDuplicateResolver.Resolve(entries);
+        var reversed = TemplateDuplicateResolver.Resolve(entries.Reverse());
+
+        Assert.Equal(forward.Warnings, reversed.Warnings);
+        Assert.Equal(
+            forward.EntriesByNormalizedName.OrderBy(p => p.Key, StringComparer.Ordinal),
+            reversed.EntriesByNormalizedName.OrderBy(p => p.Key, StringComparer.Ordinal));
+    }
+
     [Fact]
     public void Resolve_InvalidDestinationPath_SkipsEntryAndWarns()
     {
@@ -850,7 +873,16 @@ public static class TemplateDuplicateResolver
             resolved[key] = distinct[0];
         }
 
-        return new TemplateDuplicateResolution(resolved, warnings);
+        // Order the warnings deterministically before returning. The invalid-entry pass above
+        // runs in input order while the duplicate pass is key-sorted, so without this a template
+        // holding two invalid entries would produce different warning sequences for identical
+        // content in a different array order -- exactly what the order-independence rule forbids.
+        var orderedWarnings = warnings
+            .OrderBy(warning => warning.Subject, StringComparer.Ordinal)
+            .ThenBy(warning => warning.Code)
+            .ToList();
+
+        return new TemplateDuplicateResolution(resolved, orderedWarnings);
     }
 }
 ```
@@ -861,7 +893,7 @@ public static class TemplateDuplicateResolver
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateDuplicateResolverTests"
 ```
 
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
