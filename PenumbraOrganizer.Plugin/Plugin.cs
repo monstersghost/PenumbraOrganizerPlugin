@@ -125,6 +125,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        _mainWindow.DrainEventLog();
         OperationController.Update();
     }
 

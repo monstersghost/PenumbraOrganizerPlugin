@@ -12,14 +12,13 @@ namespace PenumbraOrganizer.Plugin.Windows;
 
 public sealed class MainWindow : Window, IDisposable
 {
-    private const int MaxEventLogLines = 200;
     private const int RecentOperationsCount = 20;
     private const float StandardPopupWidth = 420f;
     private const float DetailedPopupWidth = 560f;
 
     private readonly Plugin _plugin;
     private readonly CreatorCanonicalizer _creatorCanonicalizer = new();
-    private readonly List<string> _eventLog = [];
+    private readonly EventLogBuffer _eventLog = new();
     private string? _lastError;
     private string _protectFilter = string.Empty;
     private float _protectedFolderListHeight = 220f;
@@ -99,12 +98,14 @@ public sealed class MainWindow : Window, IDisposable
     {
     }
 
-    internal void LogEvent(string message)
-    {
-        _eventLog.Insert(0, $"{DateTime.Now:HH:mm:ss} {message}");
-        if (_eventLog.Count > MaxEventLogLines)
-            _eventLog.RemoveRange(MaxEventLogLines, _eventLog.Count - MaxEventLogLines);
-    }
+    // Called from Penumbra's IPC subscribers, which may be on any thread. The timestamp is captured
+    // here rather than at drain time so it records when the callback fired; display order is queue
+    // arrival order, which is not the same thing and does not claim to be.
+    internal void LogEvent(string message) =>
+        _eventLog.Add($"{DateTime.Now:HH:mm:ss} {message}");
+
+    // Framework thread only, called once per update from Plugin.OnFrameworkUpdate.
+    internal void DrainEventLog() => _eventLog.Drain();
 
     public override void Draw()
     {
@@ -434,7 +435,7 @@ public sealed class MainWindow : Window, IDisposable
         using (var child = ImRaii.Child("EventLog", new Vector2(0, 150), border: true))
         {
             if (child)
-                foreach (var line in _eventLog)
+                foreach (var line in _eventLog.Lines)
                     ImGui.TextUnformatted(line);
         }
     }
@@ -1813,7 +1814,7 @@ public sealed class MainWindow : Window, IDisposable
         sb.AppendLine();
 
         sb.AppendLine("== Session event log (most recent first) ==");
-        foreach (var line in _eventLog)
+        foreach (var line in _eventLog.Lines)
             sb.AppendLine(line);
 
         var path = Path.Combine(Plugin.PluginInterface.ConfigDirectory.FullName, "organizer-diagnostics.txt");
