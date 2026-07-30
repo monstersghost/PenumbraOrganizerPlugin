@@ -51,6 +51,15 @@ public static class TemplateDuplicateResolver
             resolved[key] = distinct[0];
         }
 
-        return new TemplateDuplicateResolution(resolved, warnings);
+        // Order the warnings deterministically before returning. The invalid-entry pass above
+        // runs in input order while the duplicate pass is key-sorted, so without this a template
+        // holding two invalid entries would produce different warning sequences for identical
+        // content in a different array order -- exactly what the order-independence rule forbids.
+        var orderedWarnings = warnings
+            .OrderBy(warning => warning.Subject, StringComparer.Ordinal)
+            .ThenBy(warning => warning.Code)
+            .ToList();
+
+        return new TemplateDuplicateResolution(resolved, orderedWarnings);
     }
 }
