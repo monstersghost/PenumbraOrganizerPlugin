@@ -62,6 +62,22 @@ public sealed class TemplateStoreTests : IDisposable
         Assert.Equal(2, store.List().Templates.Count);
     }
 
+    // Users are told they can drop a .json into the folder by hand, so the on-disk name can be
+    // any case. The taken-name set must therefore compare case-insensitively, matching NTFS: with
+    // an ordinal comparer this slug would look free and the save would target a file that already
+    // exists.
+    [Fact]
+    public void Save_ExistingFileDifferingOnlyByCase_IsTreatedAsTaken()
+    {
+        File.WriteAllText(Path.Combine(_dir, "Layout.json"), Json("Hand dropped"));
+        var store = new TemplateStore(_dir);
+
+        var fileName = store.Save(Json("Layout"), "Layout");
+
+        Assert.Equal("layout-2.json", fileName);
+        Assert.Equal(2, Directory.GetFiles(_dir, "*.json").Length);
+    }
+
     // A hostile display name must not write outside the templates directory.
     [Fact]
     public void Save_HostileDisplayName_StaysInsideTheDirectory()
