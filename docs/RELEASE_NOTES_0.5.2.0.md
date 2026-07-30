@@ -79,4 +79,4 @@ compute on a background thread, publish the result back on the framework thread.
 lives in a namespace with an enforced test that no Dalamud or Penumbra type can be referenced from
 it, so it stays testable without a running game.
 
-883 tests pass on this release.
+886 tests pass on this release.
