@@ -18,7 +18,9 @@
 - Hard limits (verbatim from the spec, all enforced during decode): compressed input 1 MB; decompressed size 8 MB enforced *during* inflation; entries 20,000; folders 5,000; `folderLabels` keys 500; any single string 512 chars; path depth 16 segments; segment length 128 chars.
 - The seven fallback strategy names are exactly: `Creator`, `ModType`, `ModTypeDetailed`, `TypeThenCreator`, `TypeThenCreatorFlat`, `CreatorThenType`, `CreatorThenTypeFlat`.
 - Nothing unvalidated may reach `OrganizerState`: only `ValidatedOrganizationTemplate` is accepted by the planner.
-- Existing behavior must not change. `dotnet build` and the full existing test suite must pass after every task.
+- Existing behavior must not change. `dotnet build` and the full existing test suite must pass after
+  every task. Baseline is 886 passing tests and one pre-existing xUnit2017 warning in
+  `ApplyPlannerTests.cs:306` — introduce no new warnings; do not fix that one here.
 - Commit after every task. Never use `--no-verify`.
 
 ## File Structure
@@ -1666,7 +1668,7 @@ The planner must compute fallback destinations, but the folder-selection express
   public static (string? Primary, string? Secondary) SortFolderSelectors.Select(
       TemplateFallbackStrategy strategy,
       OrganizerModRow row,
-      Func<string, string> canonicalizeCreator,
+      Func<string, string>? canonicalizeCreator = null,
       Func<string, string>? renameFolder = null);
 
   public static string SortFolderSelectors.FlattenToFolder(string? primary, string? secondary);
@@ -1779,6 +1781,18 @@ public class SortFolderSelectorsTests
         Assert.Null(primary);
     }
 
+    // The two type-only strategies have no creator segment, so callers pass no canonicalizer at
+    // all rather than a dummy one whose result is discarded.
+    [Fact]
+    public void Select_TypeOnlyStrategy_NeedsNoCanonicalizer()
+    {
+        var (primary, secondary) = SortFolderSelectors.Select(
+            TemplateFallbackStrategy.ModTypeDetailed, Row(ModCategory.Gear, "Head", "Tsar"));
+
+        Assert.Equal("Gear/Head", primary);
+        Assert.Null(secondary);
+    }
+
     [Theory]
     [InlineData("Gear", "Tsar", "Gear/Tsar")]
     [InlineData("Gear", null, "Gear")]
@@ -1819,25 +1833,34 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 /// </summary>
 public static class SortFolderSelectors
 {
+    /// <param name="canonicalizeCreator">
+    /// Null for the strategies that do not use a creator segment (ModType, ModTypeDetailed), so
+    /// those callers neither supply nor compute one. The local functions below keep every segment
+    /// lazy, so an unused segment is never built.
+    /// </param>
     public static (string? Primary, string? Secondary) Select(
         TemplateFallbackStrategy strategy,
         OrganizerModRow row,
-        Func<string, string> canonicalizeCreator,
+        Func<string, string>? canonicalizeCreator = null,
         Func<string, string>? renameFolder = null)
     {
-        var creator = KnownSegment(canonicalizeCreator(row.Author));
-        var detailed = TypeFolder(row.Category, row.SubCategory, renameFolder);
-        var flat = TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory), renameFolder);
+        string? Creator() =>
+            canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
+
+        string? Detailed() => TypeFolder(row.Category, row.SubCategory, renameFolder);
+
+        string? Flat() =>
+            TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory), renameFolder);
 
         return strategy switch
         {
-            TemplateFallbackStrategy.Creator => (creator, null),
-            TemplateFallbackStrategy.ModType => (flat, null),
-            TemplateFallbackStrategy.ModTypeDetailed => (detailed, null),
-            TemplateFallbackStrategy.TypeThenCreator => (detailed, creator),
-            TemplateFallbackStrategy.TypeThenCreatorFlat => (flat, creator),
-            TemplateFallbackStrategy.CreatorThenType => (creator, detailed),
-            TemplateFallbackStrategy.CreatorThenTypeFlat => (creator, flat),
+            TemplateFallbackStrategy.Creator => (Creator(), null),
+            TemplateFallbackStrategy.ModType => (Flat(), null),
+            TemplateFallbackStrategy.ModTypeDetailed => (Detailed(), null),
+            TemplateFallbackStrategy.TypeThenCreator => (Detailed(), Creator()),
+            TemplateFallbackStrategy.TypeThenCreatorFlat => (Flat(), Creator()),
+            TemplateFallbackStrategy.CreatorThenType => (Creator(), Detailed()),
+            TemplateFallbackStrategy.CreatorThenTypeFlat => (Creator(), Flat()),
             _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown fallback strategy."),
         };
     }
@@ -1891,11 +1914,12 @@ Now replace `OrganizerState.cs` lines 170-195 (the seven `SortBy*` methods plus 
     public int SortByCreator(Func<string, string> canonicalizeCreator) =>
         SortBy(TemplateFallbackStrategy.Creator, canonicalizeCreator);
 
+    // No canonicalizer: these two strategies have no creator segment, so none is computed.
     public int SortByModType() =>
-        SortBy(TemplateFallbackStrategy.ModType, static _ => string.Empty);
+        SortBy(TemplateFallbackStrategy.ModType, null);
 
     public int SortByModTypeDetailed() =>
-        SortBy(TemplateFallbackStrategy.ModTypeDetailed, static _ => string.Empty);
+        SortBy(TemplateFallbackStrategy.ModTypeDetailed, null);
 
     public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
         SortBy(TemplateFallbackStrategy.TypeThenCreator, canonicalizeCreator);
@@ -1909,7 +1933,7 @@ Now replace `OrganizerState.cs` lines 170-195 (the seven `SortBy*` methods plus 
     public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
         SortBy(TemplateFallbackStrategy.CreatorThenTypeFlat, canonicalizeCreator);
 
-    private int SortBy(TemplateFallbackStrategy strategy, Func<string, string> canonicalizeCreator) =>
+    private int SortBy(TemplateFallbackStrategy strategy, Func<string, string>? canonicalizeCreator) =>
         Sort(row => SortFolderSelectors.Select(strategy, row, canonicalizeCreator));
 ```
 
@@ -1921,7 +1945,7 @@ Delete the now-unused private `TypeFolder`, `KnownFolder`, `KnownSegment`, and `
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~SortFolderSelectorsTests"
 ```
 
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 ```bash
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj
@@ -2523,7 +2547,8 @@ Expected: PASS, entire suite.
 dotnet build
 ```
 
-Expected: Build succeeded, 0 errors, 0 warnings.
+Expected: Build succeeded, 0 errors, and no warnings beyond the pre-existing xUnit2017 warning
+in `ApplyPlannerTests.cs:306`, which predates this branch and is out of scope here.
 
 - [ ] **Step 5: Commit**
 
@@ -2688,7 +2713,8 @@ Expected: PASS, entire suite.
 dotnet build
 ```
 
-Expected: Build succeeded, 0 errors, 0 warnings.
+Expected: Build succeeded, 0 errors, and no warnings beyond the pre-existing xUnit2017 warning
+in `ApplyPlannerTests.cs:306`, which predates this branch and is out of scope here.
 
 - [ ] **Step 4: Commit**
 
@@ -2745,7 +2771,8 @@ git commit -m "docs: record community templates T1 in the roadmap"
 
 ## Phase T1 Completion Criteria
 
-- [ ] `dotnet build` succeeds with 0 warnings.
+- [ ] `dotnet build` succeeds and introduces no NEW warnings (one xUnit2017 warning in
+  `ApplyPlannerTests.cs:306` pre-dates this branch and stays).
 - [ ] `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj` passes in full, including every pre-existing test unchanged.
 - [ ] `TemplateInteropTests` passes — a template authored against one synthetic library places mods correctly in a different one, through both transports.
 - [ ] No UI, no file I/O, no clipboard, and no Penumbra IPC was added (T2/T3 scope).
