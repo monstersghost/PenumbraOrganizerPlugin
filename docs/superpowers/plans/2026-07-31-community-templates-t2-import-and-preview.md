@@ -98,7 +98,9 @@ public class TemplateSlugTests
         Assert.False(slug is "." or "..");
         Assert.DoesNotContain("..", slug);
         Assert.False(slug.EndsWith('.') || slug.EndsWith(' '));
-        Assert.DoesNotContain(slug, Path.GetInvalidFileNameChars().Select(c => c.ToString()));
+        Assert.All(
+            slug,
+            character => Assert.DoesNotContain(character, Path.GetInvalidFileNameChars()));
         Assert.Equal(slug, Path.GetFileName(slug));
     }
 
@@ -197,8 +199,9 @@ public static class TemplateSlug
         {
             if (char.IsLetterOrDigit(character) || character == '_')
                 builder.Append(character);
-            else
+            else if (character == ' ')
                 builder.Append('-');
+            // else: skip the character (punctuation, slashes, etc.)
         }
 
         var slug = CollapseDashes(builder.ToString());
