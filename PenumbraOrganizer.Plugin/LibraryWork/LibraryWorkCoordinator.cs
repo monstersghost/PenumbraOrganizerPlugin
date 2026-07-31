@@ -23,6 +23,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     private readonly Func<bool> _isFrameworkThread;
     private readonly BackgroundScheduler _scheduler;
     private readonly Action<string>? _logWarning;
+    private readonly Action<string>? _logInfo;
     private readonly TimeSpan _disposeWait;
 
     private ILibraryWorkJob<TSeed, TResult>? _job;
@@ -33,6 +34,8 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     private int _processed;
     private int _total;
     private bool _disposed;
+    private int _runId;
+    private string? _runLabel;
 
     public LibraryWorkStateSnapshot State { get; private set; } = LibraryWorkStateSnapshot.Idle;
 
@@ -41,13 +44,42 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         Func<bool> isFrameworkThread,
         BackgroundScheduler? scheduler = null,
         Action<string>? logWarning = null,
+        Action<string>? logInfo = null,
         TimeSpan? disposeWait = null)
     {
         _readEpoch = readEpoch;
         _isFrameworkThread = isFrameworkThread;
         _scheduler = scheduler ?? ((work, ct) => Task.Run(work, ct));
         _logWarning = logWarning;
+        _logInfo = logInfo;
         _disposeWait = disposeWait ?? TimeSpan.FromSeconds(2);
+    }
+
+    // Run identity is captured rather than read from State: State.JobDisplayName is null once a run
+    // settles, so a terminal checkpoint would lose its label. Scan and Index are separate instances
+    // whose counters both start at 1, so the label is what tells [Scan:1] from [Index:1].
+    private void Checkpoint(string message) => SafeLog(_logInfo, $"[{_runLabel}:{_runId}] {message}");
+
+    private void Warn(string message) => SafeLog(_logWarning, message);
+
+    private static void SafeLog(Action<string>? sink, string message)
+    {
+        try
+        {
+            sink?.Invoke(message);
+        }
+        catch
+        {
+            // Diagnostic logging must never alter coordinator execution. A delegate throwing inside
+            // Settle would otherwise leave the run non-terminal, permanently gating Scan, Index,
+            // Apply, Restore, cleanup and backup with no recovery short of reloading the plugin.
+        }
+    }
+
+    private void SettleFailure(Exception ex)
+    {
+        Checkpoint($"failed exception={ex.GetType().Name} message={ex.Message}");
+        Settle(LibraryWorkOutcome.Failed, ex.Message);
     }
 
     /// <summary>
@@ -74,7 +106,13 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         // button that appears and vanishes within a frame is worse than no button.
         _cts = new CancellationTokenSource();
 
+        // Assigned before PublishRunning so that no snapshot or callback can observe a running
+        // operation whose diagnostic identity is not yet initialised.
+        _runId++;
+        _runLabel = job.DisplayName;
+
         PublishRunning(LibraryWorkPhase.Materializing);
+        Checkpoint("requested");
     }
 
     /// <summary>
@@ -99,6 +137,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         // catch, so it is the last one to stop watching.
         _startEpoch = _readEpoch();
 
+        Checkpoint("materialize begin");
         LibraryWorkBatch<TSeed, TResult> batch;
         var materializeStarted = Stopwatch.GetTimestamp();
         try
@@ -107,7 +146,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         }
         catch (Exception ex)
         {
-            Settle(LibraryWorkOutcome.Failed, ex.Message);
+            SettleFailure(ex);
             return;
         }
 
@@ -117,9 +156,12 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         // revise once real numbers exist, not a claim about what is achievable.
         var materializeElapsed = Stopwatch.GetElapsedTime(materializeStarted);
         if (materializeElapsed > MaterializeWarningThreshold)
-            _logWarning?.Invoke(
+            Warn(
                 $"{job.DisplayName}: materializing {batch.Items.Count} mods held the framework "
                 + $"thread for {materializeElapsed.TotalMilliseconds:F0}ms.");
+
+        Checkpoint(
+            $"materialize complete items={batch.Items.Count} elapsedMs={materializeElapsed.TotalMilliseconds:F0} epoch={_startEpoch}");
 
         // Penumbra mutated while the snapshot was being taken, so it may describe two different
         // states. Settling now turns a doomed multi-second scan into an immediate, accurate
@@ -142,10 +184,11 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         {
             _task = _scheduler(() => RunBatch(batch, ct), ct)
                 ?? throw new InvalidOperationException("The background scheduler returned no task.");
+            Checkpoint("worker started");
         }
         catch (Exception ex)
         {
-            Settle(LibraryWorkOutcome.Failed, ex.Message);
+            SettleFailure(ex);
         }
     }
 
@@ -206,9 +249,11 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
 
         if (task.IsFaulted)
         {
-            Settle(LibraryWorkOutcome.Failed, task.Exception!.GetBaseException().Message);
+            SettleFailure(task.Exception!.GetBaseException());
             return;
         }
+
+        Checkpoint($"worker complete results={task.Result.Count}");
 
         // Checked BEFORE the epoch and before Publish. The background task can finish in the same
         // frame the user clicks Cancel, leaving a RanToCompletion task and a cancellation the UI has
@@ -221,13 +266,16 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         }
 
         // Checked here rather than at the start of Publish so a stale result is never handed to a
-        // consumer at all, not even briefly.
-        if (_readEpoch() != _startEpoch)
+        // consumer at all, not even briefly. Read once so the log line and the staleness decision
+        // describe the same value.
+        var currentEpoch = _readEpoch();
+        if (currentEpoch != _startEpoch)
         {
             Settle(LibraryWorkOutcome.StaleModList, null);
             return;
         }
 
+        Checkpoint($"publish begin capturedEpoch={_startEpoch} currentEpoch={currentEpoch}");
         PublishRunning(LibraryWorkPhase.Publishing);
         try
         {
@@ -235,10 +283,11 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         }
         catch (Exception ex)
         {
-            Settle(LibraryWorkOutcome.Failed, ex.Message);
+            SettleFailure(ex);
             return;
         }
 
+        Checkpoint("publish complete");
         Settle(LibraryWorkOutcome.Completed, null);
     }
 
@@ -280,7 +329,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
             // code - clearing the fields below does not stop it. A synchronous filesystem call
             // blocked on an unresponsive network share cannot be interrupted at all.
             if (_task is { } task && !task.Wait(_disposeWait))
-                _logWarning?.Invoke(
+                Warn(
                     "Teardown integrity: a library work run was still executing when the plugin "
                     + "unloaded. This is unmanaged risk, not merely a slow run.");
         }
@@ -305,6 +354,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
 
     private void Settle(LibraryWorkOutcome outcome, string? error)
     {
+        Checkpoint($"settled {outcome}");
         _cts?.Dispose();
         _cts = null;
         _task = null;

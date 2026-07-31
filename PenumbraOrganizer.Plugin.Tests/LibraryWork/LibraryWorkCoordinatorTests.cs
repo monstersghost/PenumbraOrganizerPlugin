@@ -24,6 +24,12 @@ public class LibraryWorkCoordinatorTests
 
         public void RunToCompletion()
         {
+            // No-op if Schedule was never called: some terminal paths (materialize failure,
+            // cancellation before scheduling, staleness caught during materialize) settle before
+            // reaching the scheduler at all, and callers exercise a single sequence across all of them.
+            if (_tcs is null)
+                return;
+
             try
             {
                 _tcs!.SetResult(_work!());
@@ -94,12 +100,12 @@ public class LibraryWorkCoordinatorTests
     }
 
     private static (LibraryWorkCoordinator<string, string> Coordinator, ManualScheduler Scheduler, Func<long> Epoch)
-        NewCoordinator(Func<long>? epoch = null)
+        NewCoordinator(Func<long>? epoch = null, Action<string>? logInfo = null)
     {
         var scheduler = new ManualScheduler();
         var readEpoch = epoch ?? (() => 0L);
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            readEpoch, isFrameworkThread: () => true, scheduler.Schedule);
+            readEpoch, isFrameworkThread: () => true, scheduler.Schedule, logInfo: logInfo);
         return (coordinator, scheduler, readEpoch);
     }
 
@@ -745,5 +751,137 @@ public class LibraryWorkCoordinatorTests
         // The abandoned job must not come back to life on a later, correctly-threaded update.
         Assert.Equal(0, job.MaterializeCalls);
         Assert.Equal(0, scheduler.ScheduleCalls);
+    }
+
+    private static List<string> WithoutTimings(IEnumerable<string> lines) =>
+        // Elapsed values are non-deterministic, so the ordered comparison below drops them and the
+        // materialize line's contents are asserted separately.
+        lines.Select(l => System.Text.RegularExpressions.Regex.Replace(l, @" elapsedMs=\d+", "")).ToList();
+
+    [Fact]
+    public void Checkpoints_RecordEveryBoundaryInOrder()
+    {
+        var lines = new List<string>();
+        var (coordinator, scheduler, _) = NewCoordinator(logInfo: lines.Add);
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+
+        coordinator.Start(job);
+        coordinator.Update();
+        scheduler.RunToCompletion();
+        coordinator.Update();
+
+        Assert.Equal(
+        [
+            "[Fake:1] requested",
+            "[Fake:1] materialize begin",
+            "[Fake:1] materialize complete items=1 epoch=0",
+            "[Fake:1] worker started",
+            "[Fake:1] worker complete results=1",
+            "[Fake:1] publish begin capturedEpoch=0 currentEpoch=0",
+            "[Fake:1] publish complete",
+            "[Fake:1] settled Completed",
+        ], WithoutTimings(lines));
+    }
+
+    [Fact]
+    public void Checkpoints_RunIdIncrementsPerRun_AndSurvivesSettlement()
+    {
+        var lines = new List<string>();
+        var (coordinator, scheduler, _) = NewCoordinator(logInfo: lines.Add);
+
+        coordinator.Start(new FakeJob { Items = [], Processor = new FakeProcessor() });
+        coordinator.Update();
+        scheduler.RunToCompletion();
+        coordinator.Update();
+        coordinator.Start(new FakeJob { Items = [], Processor = new FakeProcessor() });
+
+        // The terminal line must still carry its label, which it cannot if identity is read from
+        // State (JobDisplayName is null once settled).
+        Assert.Contains("[Fake:1] settled Completed", lines);
+        Assert.Contains("[Fake:2] requested", lines);
+    }
+
+    [Theory]
+    [InlineData("cancelled")]
+    [InlineData("stale")]
+    [InlineData("materialize-failure")]
+    [InlineData("worker-fault")]
+    [InlineData("scheduler-failure")]
+    [InlineData("publish-failure")]
+    public void Checkpoints_EveryTerminalPath_LogsItsOutcome(string scenario)
+    {
+        var lines = new List<string>();
+        var epoch = 0L;
+        var scheduler = new ManualScheduler();
+        var throwingScheduler = scenario == "scheduler-failure";
+        var job = new FakeJob
+        {
+            Items = ["a"],
+            Processor = new FakeProcessor
+            {
+                ProcessThrows = scenario == "worker-fault" ? new InvalidOperationException("worker") : null,
+            },
+            MaterializeThrows = scenario == "materialize-failure" ? new TimeoutException("no response") : null,
+            PublishThrows = scenario == "publish-failure" ? new InvalidOperationException("publish") : null,
+            DuringMaterialize = scenario == "stale" ? () => epoch = 1L : null,
+        };
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => epoch,
+            isFrameworkThread: () => true,
+            throwingScheduler ? (_, _) => throw new InvalidOperationException("scheduler") : scheduler.Schedule,
+            logInfo: lines.Add);
+
+        coordinator.Start(job);
+        if (scenario == "cancelled")
+            coordinator.RequestCancellation();
+        coordinator.Update();
+        scheduler.RunToCompletion();
+        coordinator.Update();
+
+        Assert.Contains(lines, l => l.Contains("settled"));
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+    }
+
+    [Fact]
+    public void Checkpoints_FailureLogsExceptionType_ButLastErrorStaysUserFacing()
+    {
+        var lines = new List<string>();
+        var (coordinator, _, _) = NewCoordinator(logInfo: lines.Add);
+        var job = new FakeJob
+        {
+            Items = [],
+            Processor = new FakeProcessor(),
+            MaterializeThrows = new TimeoutException("Penumbra did not respond."),
+        };
+
+        coordinator.Start(job);
+        coordinator.Update();
+
+        Assert.Contains(lines, l => l.Contains("TimeoutException"));
+        // The user sees the message, not the type name.
+        Assert.Equal("Penumbra did not respond.", coordinator.State.LastError);
+    }
+
+    [Fact]
+    public void ThrowingLogger_DoesNotStrandTheRun()
+    {
+        var scheduler = new ManualScheduler();
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L,
+            isFrameworkThread: () => true,
+            scheduler.Schedule,
+            logWarning: _ => throw new InvalidOperationException("logger is broken"),
+            logInfo: _ => throw new InvalidOperationException("logger is broken"));
+
+        coordinator.Start(job);
+        coordinator.Update();
+        scheduler.RunToCompletion();
+        coordinator.Update();
+
+        // A diagnostic delegate must never be able to gate the plugin.
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+        Assert.Equal(LibraryWorkOutcome.Completed, coordinator.State.LastOutcome);
+        Assert.Single(job.Published);
     }
 }

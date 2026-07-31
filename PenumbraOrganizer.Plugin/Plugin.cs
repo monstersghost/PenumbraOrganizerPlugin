@@ -84,11 +84,13 @@ public sealed class Plugin : IDalamudPlugin
         ScanWork = new LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow>(
             () => ModEvents.Current,
             () => Framework.IsInFrameworkUpdateThread,
-            logWarning: message => Log.Warning(message));
+            logWarning: message => Log.Warning(message),
+            logInfo: message => Log.Information(message));
         IndexWork = new LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod>(
             () => ModEvents.Current,
             () => Framework.IsInFrameworkUpdateThread,
-            logWarning: message => Log.Warning(message));
+            logWarning: message => Log.Warning(message),
+            logInfo: message => Log.Information(message));
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
         try
@@ -149,6 +151,7 @@ public sealed class Plugin : IDalamudPlugin
         // No separate settings window; the installer's config button opens the main window.
         PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
 
+        Log.Information($"Penumbra Organizer {typeof(Plugin).Assembly.GetName().Version?.ToString(4) ?? "unknown"} starting.");
         Log.Information("Penumbra Organizer (MVP) plugin loaded.");
     }
 
