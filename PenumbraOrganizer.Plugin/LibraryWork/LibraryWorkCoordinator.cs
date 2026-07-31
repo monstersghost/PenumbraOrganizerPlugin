@@ -25,6 +25,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     private readonly TimeSpan _disposeWait;
 
     private ILibraryWorkJob<TSeed, TResult>? _job;
+    private ILibraryWorkJob<TSeed, TResult>? _pendingJob;
     private CancellationTokenSource? _cts;
     private Task<IReadOnlyList<TResult>>? _task;
     private long _startEpoch;
@@ -46,6 +47,11 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         _disposeWait = disposeWait ?? TimeSpan.FromSeconds(2);
     }
 
+    /// <summary>
+    /// Called from the UI thread. Takes ownership of the job and closes every admission gate that
+    /// keys off Phase, but does no Penumbra work: materialization is deferred to the next Update()
+    /// so that all IPC reads happen on the framework thread.
+    /// </summary>
     public void Start(ILibraryWorkJob<TSeed, TResult> job)
     {
         // Without this, anything calling RunScan during teardown schedules fresh background work
@@ -56,10 +62,39 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
             throw new InvalidOperationException($"{State.JobDisplayName} is already running.");
 
         _job = job;
+        _pendingJob = job;
         _processed = 0;
         _total = 0;
-        _startEpoch = _readEpoch();
+
+        // Created here rather than at materialize time so a run can be cancelled during the pending
+        // window. CanCancel stays false for that window on purpose: it is one frame, and a Cancel
+        // button that appears and vanishes within a frame is worse than no button.
+        _cts = new CancellationTokenSource();
+
         PublishRunning(LibraryWorkPhase.Materializing);
+    }
+
+    /// <summary>
+    /// Framework thread. Captures the epoch, takes the Penumbra snapshot, and launches the worker.
+    /// Always terminal for this Update: it either settles the run or starts the background task.
+    /// </summary>
+    private void MaterializePending()
+    {
+        var job = _pendingJob!;
+        _pendingJob = null;
+
+        // Checked before any Penumbra call: a run cancelled while pending must not touch Penumbra.
+        if (_cts?.IsCancellationRequested == true)
+        {
+            Settle(LibraryWorkOutcome.Cancelled, null);
+            return;
+        }
+
+        // Captured BEFORE the snapshot, never after. Capturing after would fold a change that
+        // happened during materialization into the new baseline, letting a snapshot that spans two
+        // Penumbra states publish as valid. That interval is exactly the one this design exists to
+        // catch, so it is the last one to stop watching.
+        _startEpoch = _readEpoch();
 
         LibraryWorkBatch<TSeed, TResult> batch;
         var materializeStarted = Stopwatch.GetTimestamp();
@@ -73,20 +108,27 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
             return;
         }
 
-        // Materialize is the last unbounded piece of per-run work still on the render thread, and
-        // render-thread latency is the entire point of this design - so it is measured rather than
-        // assumed. 100ms is roughly six frames at 60fps: long enough not to fire on a healthy
-        // library, short enough to catch a hitch a user would notice. A starting value to revise
-        // once real numbers exist, not a claim about what is achievable.
+        // Materialization holds the framework thread for its whole duration, so it is measured
+        // rather than assumed. 100ms is roughly six frames at 60fps: long enough not to fire on a
+        // healthy library, short enough to catch a hitch a user would notice. A starting value to
+        // revise once real numbers exist, not a claim about what is achievable.
         var materializeElapsed = Stopwatch.GetElapsedTime(materializeStarted);
         if (materializeElapsed > MaterializeWarningThreshold)
             _logWarning?.Invoke(
                 $"{job.DisplayName}: materializing {batch.Items.Count} mods held the framework "
                 + $"thread for {materializeElapsed.TotalMilliseconds:F0}ms.");
 
+        // Penumbra mutated while the snapshot was being taken, so it may describe two different
+        // states. Settling now turns a doomed multi-second scan into an immediate, accurate
+        // message; waiting for the worker would reach the same verdict much later.
+        if (_readEpoch() != _startEpoch)
+        {
+            Settle(LibraryWorkOutcome.StaleModList, null);
+            return;
+        }
+
         _total = batch.Items.Count;
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var ct = _cts!.Token;
         PublishRunning(LibraryWorkPhase.Computing);
 
         // A scheduler that throws synchronously (or hands back null) would otherwise leave
@@ -126,6 +168,12 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     {
         if (_disposed)
             return;
+
+        if (_pendingJob is not null)
+        {
+            MaterializePending();
+            return;
+        }
 
         if (_task is not { IsCompleted: true })
         {
@@ -195,6 +243,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     public void AbandonRun(string reason)
     {
         _job = null;
+        _pendingJob = null;
         State = new LibraryWorkStateSnapshot(
             LibraryWorkPhase.Idle, JobDisplayName: null,
             Volatile.Read(ref _processed), _total,
@@ -232,6 +281,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         _cts = null;
         _task = null;
         _job = null;
+        _pendingJob = null;
     }
 
     private void PublishRunning(LibraryWorkPhase phase) =>
@@ -247,6 +297,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
         _cts = null;
         _task = null;
         _job = null;
+        _pendingJob = null;
         State = new LibraryWorkStateSnapshot(
             LibraryWorkPhase.Idle, JobDisplayName: null,
             Volatile.Read(ref _processed), _total,

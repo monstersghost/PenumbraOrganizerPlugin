@@ -11,8 +11,11 @@ public class LibraryWorkCoordinatorTests
         private CancellationToken _ct;
         private TaskCompletionSource<IReadOnlyList<string>>? _tcs;
 
+        public int ScheduleCalls { get; private set; }
+
         public Task<IReadOnlyList<string>> Schedule(Func<IReadOnlyList<string>> work, CancellationToken ct)
         {
+            ScheduleCalls++;
             _work = work;
             _ct = ct;
             _tcs = new TaskCompletionSource<IReadOnlyList<string>>();
@@ -67,12 +70,16 @@ public class LibraryWorkCoordinatorTests
         public required ILibraryWorkProcessor<string, string> Processor { get; init; }
         public Exception? MaterializeThrows { get; init; }
         public Exception? PublishThrows { get; init; }
+        public Action? DuringMaterialize { get; init; }
+        public int MaterializeCalls { get; private set; }
 
         public string DisplayName => "Fake";
         public List<IReadOnlyList<string>> Published { get; } = [];
 
         public LibraryWorkBatch<string, string> Materialize()
         {
+            MaterializeCalls++;
+            DuringMaterialize?.Invoke();
             if (MaterializeThrows is not null)
                 throw MaterializeThrows;
             return new LibraryWorkBatch<string, string>(Items, Processor);
@@ -106,13 +113,16 @@ public class LibraryWorkCoordinatorTests
     }
 
     [Fact]
-    public void Start_MovesToComputing_WithoutRunningTheProcessor()
+    public void StartThenUpdate_MovesToComputing_WithoutRunningTheProcessor()
     {
         var processor = new FakeProcessor();
         var job = new FakeJob { Items = ["a", "b"], Processor = processor };
         var (coordinator, _, _) = NewCoordinator();
 
         coordinator.Start(job);
+        Assert.Equal(LibraryWorkPhase.Materializing, coordinator.State.Phase);
+
+        coordinator.Update();
 
         Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
         Assert.Equal(2, coordinator.State.TotalItems);
@@ -130,6 +140,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
@@ -150,6 +161,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
@@ -188,6 +200,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         coordinator.RequestCancellation();
         scheduler.RunToCompletion();
         coordinator.Update();
@@ -206,6 +219,7 @@ public class LibraryWorkCoordinatorTests
         var coordinator = new LibraryWorkCoordinator<string, string>(() => epoch, scheduler.Schedule);
 
         coordinator.Start(job);
+        coordinator.Update();
         epoch = 1; // a Penumbra mod event landed mid-run
         scheduler.RunToCompletion();
         coordinator.Update();
@@ -225,12 +239,15 @@ public class LibraryWorkCoordinatorTests
             Processor = processor,
             MaterializeThrows = new InvalidOperationException("penumbra is not ready"),
         };
-        var (coordinator, _, _) = NewCoordinator();
+        var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
+
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+        Assert.Equal(0, scheduler.ScheduleCalls);
 
         Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
-        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
         Assert.Equal("penumbra is not ready", coordinator.State.LastError);
         Assert.Equal(0, processor.PrepareCalls);
         Assert.Empty(job.Published);
@@ -244,6 +261,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
@@ -260,6 +278,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
@@ -280,6 +299,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
@@ -294,11 +314,13 @@ public class LibraryWorkCoordinatorTests
         var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
         var (coordinator, scheduler, _) = NewCoordinator();
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
         var second = new FakeJob { Items = ["b"], Processor = new FakeProcessor() };
         coordinator.Start(second);
+        coordinator.Update();
 
         Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
     }
@@ -312,6 +334,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         Assert.Equal(0, coordinator.State.ProcessedItems);
         Assert.Equal(4, coordinator.State.TotalItems);
 
@@ -332,6 +355,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.RequestCancellation();
         coordinator.Update();
@@ -348,6 +372,7 @@ public class LibraryWorkCoordinatorTests
             () => 0L, (_, _) => throw new InvalidOperationException("no thread available"));
 
         coordinator.Start(job);
+        coordinator.Update();
 
         Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
         Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
@@ -361,6 +386,7 @@ public class LibraryWorkCoordinatorTests
         var coordinator = new LibraryWorkCoordinator<string, string>(() => 0L, (_, _) => null!);
 
         coordinator.Start(job);
+        coordinator.Update();
 
         Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
         Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
@@ -376,10 +402,12 @@ public class LibraryWorkCoordinatorTests
             (work, ct) => thrown ? throw new InvalidOperationException("boom") : scheduler.Schedule(work, ct));
 
         coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
+        coordinator.Update();
         Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
 
         thrown = false;
         coordinator.Start(new FakeJob { Items = ["b"], Processor = new FakeProcessor() });
+        coordinator.Update();
 
         Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
     }
@@ -391,6 +419,7 @@ public class LibraryWorkCoordinatorTests
         var (coordinator, scheduler, _) = NewCoordinator();
 
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
         coordinator.Update();
 
@@ -409,6 +438,7 @@ public class LibraryWorkCoordinatorTests
         var coordinator = new LibraryWorkCoordinator<string, string>(
             () => 0L, scheduler.Schedule, disposeWait: TimeSpan.Zero);
         coordinator.Start(job);
+        coordinator.Update();
 
         coordinator.Dispose();
         scheduler.RunToCompletion();
@@ -438,6 +468,7 @@ public class LibraryWorkCoordinatorTests
         var coordinator = new LibraryWorkCoordinator<string, string>(
             () => 0L, scheduler.Schedule, disposeWait: TimeSpan.Zero);
         coordinator.Start(job);
+        coordinator.Update();
         scheduler.RunToCompletion();
 
         coordinator.Dispose();
@@ -470,6 +501,7 @@ public class LibraryWorkCoordinatorTests
 
         var second = new FakeJob { Items = ["b"], Processor = new FakeProcessor() };
         coordinator.Start(second);
+        coordinator.Update();
 
         Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
     }
@@ -487,6 +519,7 @@ public class LibraryWorkCoordinatorTests
 
         // And it does not block a subsequent Start.
         coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
+        coordinator.Update();
         Assert.Equal(LibraryWorkPhase.Computing, coordinator.State.Phase);
     }
 
@@ -499,10 +532,155 @@ public class LibraryWorkCoordinatorTests
             () => 0L, scheduler.Schedule,
             logWarning: warnings.Add, disposeWait: TimeSpan.FromMilliseconds(50));
         coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
+        coordinator.Update();
 
         coordinator.Dispose(); // the manual scheduler's task never completes
 
         Assert.Single(warnings);
         Assert.Contains("teardown", warnings[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Start_DoesNotMaterializeOrSchedule_UntilUpdate()
+    {
+        var job = new FakeJob { Items = ["a", "b"], Processor = new FakeProcessor() };
+        var (coordinator, scheduler, _) = NewCoordinator();
+
+        coordinator.Start(job);
+        Assert.Equal(0, job.MaterializeCalls);
+        // Also pins that Start does not schedule a closure that would materialize on a worker.
+        Assert.Equal(0, scheduler.ScheduleCalls);
+
+        coordinator.Update();
+        Assert.Equal(1, job.MaterializeCalls);
+        Assert.Equal(1, scheduler.ScheduleCalls);
+    }
+
+    [Fact]
+    public void Start_ClosesTheGateImmediately_BeforeAnyUpdate()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, _, _) = NewCoordinator();
+
+        coordinator.Start(job);
+
+        Assert.Equal(LibraryWorkPhase.Materializing, coordinator.State.Phase);
+        Assert.True(coordinator.State.IsRunning);
+        Assert.Throws<InvalidOperationException>(() => coordinator.Start(job));
+    }
+
+    [Fact]
+    public void Update_Twice_MaterializesOnlyOnce()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, _, _) = NewCoordinator();
+
+        coordinator.Start(job);
+        coordinator.Update();
+        coordinator.Update();
+
+        Assert.Equal(1, job.MaterializeCalls);
+    }
+
+    [Fact]
+    public void PendingRun_IsCancellableByCode_ButNotOfferedToTheUser()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, scheduler, _) = NewCoordinator();
+
+        coordinator.Start(job);
+
+        // Deliberate asymmetry: the pending window is one frame, so a Cancel button that appears
+        // and vanishes within it would be worse than none. Cancellation still works if code asks.
+        Assert.False(coordinator.State.CanCancel);
+
+        coordinator.RequestCancellation();
+        coordinator.Update();
+
+        Assert.Equal(0, job.MaterializeCalls);
+        Assert.Equal(0, scheduler.ScheduleCalls);
+        Assert.Equal(LibraryWorkPhase.Idle, coordinator.State.Phase);
+        Assert.Equal(LibraryWorkOutcome.Cancelled, coordinator.State.LastOutcome);
+        Assert.Empty(job.Published);
+    }
+
+    [Fact]
+    public void DisposeBeforeUpdate_DoesNotMaterializeOrPublish()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, scheduler, _) = NewCoordinator();
+
+        coordinator.Start(job);
+        coordinator.Dispose();
+        coordinator.Update();
+
+        Assert.Equal(0, job.MaterializeCalls);
+        Assert.Equal(0, scheduler.ScheduleCalls);
+        Assert.Empty(job.Published);
+
+        // Dispose deliberately does NOT normalize the published snapshot. Nothing reads State after
+        // teardown, and rewriting it would invent a terminal outcome that never happened. Asserted
+        // so the choice is explicit rather than accidental.
+        Assert.Equal(LibraryWorkPhase.Materializing, coordinator.State.Phase);
+    }
+
+    [Fact]
+    public void MaterializeFailure_ClearsPendingJob_AndStartIsAllowedAgain()
+    {
+        var boom = new InvalidOperationException("Penumbra is unavailable.");
+        var failing = new FakeJob { Items = [], Processor = new FakeProcessor(), MaterializeThrows = boom };
+        var (coordinator, _, _) = NewCoordinator();
+
+        coordinator.Start(failing);
+        coordinator.Update();
+
+        Assert.Equal(LibraryWorkOutcome.Failed, coordinator.State.LastOutcome);
+        Assert.Equal("Penumbra is unavailable.", coordinator.State.LastError);
+
+        coordinator.Update(); // must not retry the failed job
+        Assert.Equal(1, failing.MaterializeCalls);
+
+        var good = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        coordinator.Start(good);
+        coordinator.Update();
+        Assert.Equal(1, good.MaterializeCalls);
+    }
+
+    [Fact]
+    public void Epoch_ChangedBetweenStartAndUpdate_DoesNotInvalidateTheRun()
+    {
+        var epoch = 10L;
+        var (coordinator, scheduler, _) = NewCoordinator(() => epoch);
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+
+        coordinator.Start(job);
+        epoch = 11L; // the snapshot has not been taken yet, so it will represent epoch 11
+        coordinator.Update();
+        scheduler.RunToCompletion();
+        coordinator.Update();
+
+        Assert.Equal(LibraryWorkOutcome.Completed, coordinator.State.LastOutcome);
+        Assert.Single(job.Published);
+    }
+
+    [Fact]
+    public void Epoch_ChangedDuringMaterialize_InvalidatesTheRunImmediately()
+    {
+        var epoch = 10L;
+        var (coordinator, scheduler, _) = NewCoordinator(() => epoch);
+        var job = new FakeJob
+        {
+            Items = ["a"],
+            Processor = new FakeProcessor(),
+            // Penumbra mutating while the snapshot is taken: it may describe two different states.
+            DuringMaterialize = () => epoch = 11L,
+        };
+
+        coordinator.Start(job);
+        coordinator.Update();
+
+        Assert.Equal(LibraryWorkOutcome.StaleModList, coordinator.State.LastOutcome);
+        Assert.Empty(job.Published);
+        Assert.Equal(0, scheduler.ScheduleCalls); // settled without paying for a doomed worker
     }
 }
