@@ -38,6 +38,10 @@ If you add, remove, or move a mod in Penumbra while a scan is running, its resul
 your library, so they're discarded rather than shown. You'll be told the mod list changed and asked
 to run it again.
 
+If the mod list changes while the plugin is taking its initial snapshot, the scan stops straight away
+and asks you to run it again, rather than spending time on a snapshot that may already be out of
+date.
+
 The mod count and tree view below the button show what's currently loaded. A live event log at the
 bottom reports `ModAdded`, `ModDeleted`, and `ModMoved` events as Penumbra reports them. This log
 is informational only; it doesn't trigger a re-scan.
