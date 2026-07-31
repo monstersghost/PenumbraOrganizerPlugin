@@ -98,7 +98,8 @@ public class LibraryWorkCoordinatorTests
     {
         var scheduler = new ManualScheduler();
         var readEpoch = epoch ?? (() => 0L);
-        var coordinator = new LibraryWorkCoordinator<string, string>(readEpoch, scheduler.Schedule);
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            readEpoch, isFrameworkThread: () => true, scheduler.Schedule);
         return (coordinator, scheduler, readEpoch);
     }
 
@@ -216,7 +217,8 @@ public class LibraryWorkCoordinatorTests
         var epoch = 0L;
         var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
         var scheduler = new ManualScheduler();
-        var coordinator = new LibraryWorkCoordinator<string, string>(() => epoch, scheduler.Schedule);
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => epoch, isFrameworkThread: () => true, scheduler.Schedule);
 
         coordinator.Start(job);
         coordinator.Update();
@@ -369,7 +371,8 @@ public class LibraryWorkCoordinatorTests
     {
         var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            () => 0L, (_, _) => throw new InvalidOperationException("no thread available"));
+            () => 0L, isFrameworkThread: () => true,
+            (_, _) => throw new InvalidOperationException("no thread available"));
 
         coordinator.Start(job);
         coordinator.Update();
@@ -383,7 +386,8 @@ public class LibraryWorkCoordinatorTests
     public void SchedulerReturningNull_FailsInsteadOfWedging()
     {
         var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
-        var coordinator = new LibraryWorkCoordinator<string, string>(() => 0L, (_, _) => null!);
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, isFrameworkThread: () => true, (_, _) => null!);
 
         coordinator.Start(job);
         coordinator.Update();
@@ -398,7 +402,7 @@ public class LibraryWorkCoordinatorTests
         var thrown = true;
         var scheduler = new ManualScheduler();
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            () => 0L,
+            () => 0L, isFrameworkThread: () => true,
             (work, ct) => thrown ? throw new InvalidOperationException("boom") : scheduler.Schedule(work, ct));
 
         coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
@@ -436,7 +440,7 @@ public class LibraryWorkCoordinatorTests
         // Zero dispose timeout: the real 2s wait belongs in the one test that covers the warning,
         // not in every test that happens to dispose.
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            () => 0L, scheduler.Schedule, disposeWait: TimeSpan.Zero);
+            () => 0L, isFrameworkThread: () => true, scheduler.Schedule, disposeWait: TimeSpan.Zero);
         coordinator.Start(job);
         coordinator.Update();
 
@@ -453,7 +457,7 @@ public class LibraryWorkCoordinatorTests
     public void StartAfterDispose_IsRejected()
     {
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            () => 0L, new ManualScheduler().Schedule, disposeWait: TimeSpan.Zero);
+            () => 0L, isFrameworkThread: () => true, new ManualScheduler().Schedule, disposeWait: TimeSpan.Zero);
         coordinator.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() =>
@@ -466,7 +470,7 @@ public class LibraryWorkCoordinatorTests
         var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
         var scheduler = new ManualScheduler();
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            () => 0L, scheduler.Schedule, disposeWait: TimeSpan.Zero);
+            () => 0L, isFrameworkThread: () => true, scheduler.Schedule, disposeWait: TimeSpan.Zero);
         coordinator.Start(job);
         coordinator.Update();
         scheduler.RunToCompletion();
@@ -529,7 +533,7 @@ public class LibraryWorkCoordinatorTests
         var warnings = new List<string>();
         var scheduler = new ManualScheduler();
         var coordinator = new LibraryWorkCoordinator<string, string>(
-            () => 0L, scheduler.Schedule,
+            () => 0L, isFrameworkThread: () => true, scheduler.Schedule,
             logWarning: warnings.Add, disposeWait: TimeSpan.FromMilliseconds(50));
         coordinator.Start(new FakeJob { Items = ["a"], Processor = new FakeProcessor() });
         coordinator.Update();
@@ -682,5 +686,64 @@ public class LibraryWorkCoordinatorTests
         Assert.Equal(LibraryWorkOutcome.StaleModList, coordinator.State.LastOutcome);
         Assert.Empty(job.Published);
         Assert.Equal(0, scheduler.ScheduleCalls); // settled without paying for a doomed worker
+    }
+
+    [Fact]
+    public void Update_OffTheFrameworkThread_ThrowsWithoutMaterializing()
+    {
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var scheduler = new ManualScheduler();
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, isFrameworkThread: () => false, scheduler.Schedule);
+
+        coordinator.Start(job);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => coordinator.Update());
+        Assert.Contains("framework thread", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, job.MaterializeCalls);
+    }
+
+    [Fact]
+    public void Update_OffTheFrameworkThread_DoesNotPublishCompletedWork()
+    {
+        // The case a materialize-only guard would miss entirely: by the time the worker finishes,
+        // _pendingJob is null, so a guard inside MaterializePending never runs again.
+        var onFrameworkThread = true;
+        var scheduler = new ManualScheduler();
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, isFrameworkThread: () => onFrameworkThread, scheduler.Schedule);
+
+        coordinator.Start(job);
+        coordinator.Update();
+        scheduler.RunToCompletion();
+
+        onFrameworkThread = false;
+
+        Assert.Throws<InvalidOperationException>(() => coordinator.Update());
+        Assert.Empty(job.Published);
+    }
+
+    [Fact]
+    public void AbandonRunAfterAWrongThreadThrow_DoesNotStrandThePendingJob()
+    {
+        var onFrameworkThread = false;
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var scheduler = new ManualScheduler();
+        var coordinator = new LibraryWorkCoordinator<string, string>(
+            () => 0L, isFrameworkThread: () => onFrameworkThread, scheduler.Schedule);
+
+        coordinator.Start(job);
+        Assert.Throws<InvalidOperationException>(() => coordinator.Update());
+
+        // This is what Plugin.OnFrameworkUpdate does when Update() throws.
+        coordinator.AbandonRun("Update threw.");
+
+        onFrameworkThread = true;
+        coordinator.Update();
+
+        // The abandoned job must not come back to life on a later, correctly-threaded update.
+        Assert.Equal(0, job.MaterializeCalls);
+        Assert.Equal(0, scheduler.ScheduleCalls);
     }
 }

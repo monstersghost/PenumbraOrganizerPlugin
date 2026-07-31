@@ -82,9 +82,13 @@ public sealed class Plugin : IDalamudPlugin
                 ? null
                 : LibraryWork.LibraryActivityGate.Reason(ScanWork.State, IndexWork.State));
         ScanWork = new LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow>(
-            () => ModEvents.Current, logWarning: message => Log.Warning(message));
+            () => ModEvents.Current,
+            () => Framework.IsInFrameworkUpdateThread,
+            logWarning: message => Log.Warning(message));
         IndexWork = new LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod>(
-            () => ModEvents.Current, logWarning: message => Log.Warning(message));
+            () => ModEvents.Current,
+            () => Framework.IsInFrameworkUpdateThread,
+            logWarning: message => Log.Warning(message));
         var discoveredRecovery = Organizer.Operations.OperationBundleDiscovery.RunStartupDiscovery(OperationsRoot);
         OperationController.RegisterDiscoveredRecovery(discoveredRecovery);
         try

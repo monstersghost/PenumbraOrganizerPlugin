@@ -20,6 +20,7 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     public static readonly TimeSpan MaterializeWarningThreshold = TimeSpan.FromMilliseconds(100);
 
     private readonly Func<long> _readEpoch;
+    private readonly Func<bool> _isFrameworkThread;
     private readonly BackgroundScheduler _scheduler;
     private readonly Action<string>? _logWarning;
     private readonly TimeSpan _disposeWait;
@@ -37,11 +38,13 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
 
     public LibraryWorkCoordinator(
         Func<long> readEpoch,
+        Func<bool> isFrameworkThread,
         BackgroundScheduler? scheduler = null,
         Action<string>? logWarning = null,
         TimeSpan? disposeWait = null)
     {
         _readEpoch = readEpoch;
+        _isFrameworkThread = isFrameworkThread;
         _scheduler = scheduler ?? ((work, ct) => Task.Run(work, ct));
         _logWarning = logWarning;
         _disposeWait = disposeWait ?? TimeSpan.FromSeconds(2);
@@ -168,6 +171,15 @@ public sealed class LibraryWorkCoordinator<TSeed, TResult> : IDisposable
     {
         if (_disposed)
             return;
+
+        // Covers the whole active path, not just materialization: this method also settles the
+        // completed task, reads the epoch and calls Publish. Throws rather than settling Failed,
+        // because calling it off the framework thread is a programming error in plugin code, not a
+        // runtime condition a user can cause or recover from. Idle updates are not guarded: they do
+        // nothing, and throwing on them would turn a harmless call into a crash.
+        if (State.IsRunning && !_isFrameworkThread())
+            throw new InvalidOperationException(
+                "Library work updates must run on the framework thread.");
 
         if (_pendingJob is not null)
         {
