@@ -151,8 +151,7 @@ public sealed class Plugin : IDalamudPlugin
         // No separate settings window; the installer's config button opens the main window.
         PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
 
-        Log.Information($"Penumbra Organizer {typeof(Plugin).Assembly.GetName().Version?.ToString(4) ?? "unknown"} starting.");
-        Log.Information("Penumbra Organizer (MVP) plugin loaded.");
+        Log.Information($"Penumbra Organizer (MVP) {typeof(Plugin).Assembly.GetName().Version?.ToString(4) ?? "unknown"} plugin loaded.");
     }
 
     public void Dispose()

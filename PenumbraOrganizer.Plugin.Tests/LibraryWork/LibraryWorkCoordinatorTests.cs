@@ -517,6 +517,19 @@ public class LibraryWorkCoordinatorTests
     }
 
     [Fact]
+    public void AbandonRun_WhileComputing_LogsATerminalCheckpoint()
+    {
+        var lines = new List<string>();
+        var job = new FakeJob { Items = ["a"], Processor = new FakeProcessor() };
+        var (coordinator, _, _) = NewCoordinator(logInfo: lines.Add);
+        coordinator.Start(job);
+
+        coordinator.AbandonRun("gave up");
+
+        Assert.Contains("[Fake:1] abandoned gave up", lines);
+    }
+
+    [Fact]
     public void AbandonRun_WhenIdle_IsASafeNoOp()
     {
         var (coordinator, _, _) = NewCoordinator();

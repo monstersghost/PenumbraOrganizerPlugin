@@ -6,11 +6,15 @@
 
 When you pressed Refresh mod list, the plugin requested Penumbra's live mod data from the game's
 drawing work rather than from the update work its own design specifies. Those reads now happen where
-they were always meant to, alongside the rest of the plugin's Penumbra work.
+they were always meant to, alongside the rest of the plugin's Penumbra work. This release covers two
+paths: Refresh mod list (Scan) and building the Search index.
 
 This may address reports of the game closing instantly, with no error, on pressing Refresh mod list.
 It is only "may". That crash could not be reproduced here and no crash dump was available for it, so
-its cause remains unconfirmed. The behaviour was wrong regardless, and is now correct.
+its cause remains unconfirmed. The behaviour was wrong regardless, and is now correct. Other actions
+that talk to Penumbra - Restore, its preview popup, Create Backup, Apply, Folder Cleanup, and workbook
+Export/Import - still read Penumbra from the drawing work the same way. That is a known follow-up, not
+covered by this release; if you hit the same crash from one of those, it is not yet fixed.
 
 ### Added: the plugin leaves a trail in the log
 
@@ -38,13 +42,17 @@ noise.
 ## For developers
 
 Materialization moved from `Start` (called in the ImGui draw callback) to the first coordinator
-`Update` (the framework-update callback). An injected predicate asserts the thread for the whole
-active update path, publication included, so the placement cannot silently regress. The staleness
-epoch is captured immediately before the snapshot rather than after, so a mutation during
-materialization invalidates the run instead of becoming its baseline.
+`Update` (the framework-update callback). `Start` itself no longer materializes anything, so the draw
+callback structurally cannot do this Penumbra read regardless of what calls it later - that is the
+actual guarantee. An injected predicate also asserts, at the top of `Update`, that it is running on
+the framework thread; that is a secondary check against a genuine background-thread caller, not a
+guarantee against the draw callback specifically, since the draw callback likely runs on the same
+thread and the predicate cannot distinguish the two. The staleness epoch is captured immediately
+before the snapshot rather than after, so a mutation during materialization invalidates the run
+instead of becoming its baseline.
 
 Materialization is still unbounded and now holds the framework thread instead of the render thread.
 That is a different stall in a different place, not the absence of one. Making it incremental is a
 separate concern.
 
-907 tests pass on this release.
+908 tests pass on this release.
