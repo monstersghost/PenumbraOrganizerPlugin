@@ -110,8 +110,21 @@ public sealed class MainWindow : Window, IDisposable
     // Framework thread only, called once per update from Plugin.OnFrameworkUpdate.
     internal void DrainEventLog() => _eventLog.Drain();
 
+    // TEMPORARY DIAGNOSTIC. Answers whether the draw callback and the framework-update callback
+    // are the same thread, which decides whether the framework-thread guard in
+    // LibraryWorkCoordinator can distinguish them at all. Remove once the answer is recorded.
+    private static bool _threadIdentityLogged;
+
     public override void Draw()
     {
+        if (!_threadIdentityLogged)
+        {
+            _threadIdentityLogged = true;
+            Plugin.Log.Information(
+                $"THREAD PROBE draw: managedThreadId={Environment.CurrentManagedThreadId} "
+                + $"IsInFrameworkUpdateThread={Plugin.Framework.IsInFrameworkUpdateThread}");
+        }
+
         using var theme = PluginTheme.Push();
 
         ConsumeCompletionIfNew();

@@ -209,8 +209,19 @@ public sealed class Plugin : IDalamudPlugin
     private bool _scanWorkFaulted;
     private bool _indexWorkFaulted;
 
+    // TEMPORARY DIAGNOSTIC, paired with the probe in MainWindow.Draw. See the comment there.
+    private static bool _frameworkThreadIdentityLogged;
+
     private void OnFrameworkUpdate(IFramework framework)
     {
+        if (!_frameworkThreadIdentityLogged)
+        {
+            _frameworkThreadIdentityLogged = true;
+            Log.Information(
+                $"THREAD PROBE framework: managedThreadId={Environment.CurrentManagedThreadId} "
+                + $"IsInFrameworkUpdateThread={Framework.IsInFrameworkUpdateThread}");
+        }
+
         OperationController.Update(); // has its own internal exception boundary
 
         // Each of these three gets its own try/catch and its own never-reset latch: they are
