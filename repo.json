@@ -12,12 +12,14 @@
     "InternalName": "PenumbraOrganizer.Plugin",
     "MinimumDalamudVersion": "15.0.0.0",
     "AssemblyVersion": "0.5.2.0",
+    "TestingAssemblyVersion": "0.5.3.0",
     "RepoUrl": "https://github.com/monstersghost/PenumbraOrganizerPlugin",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "IsHide": "False",
     "DownloadLinkInstall": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.2.0/PenumbraOrganizer.Plugin.zip",
     "DownloadLinkUpdate": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.2.0/PenumbraOrganizer.Plugin.zip",
+    "DownloadLinkTesting": "https://github.com/monstersghost/PenumbraOrganizerPlugin/releases/download/0.5.3.0/PenumbraOrganizer.Plugin.zip",
     "IconUrl": "https://raw.githubusercontent.com/monstersghost/PenumbraOrganizerPlugin/main/PenumbraOrganizer.Plugin/images/icon.png"
   }
 ]
