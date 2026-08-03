@@ -1,31 +1,63 @@
 # Move the remaining Penumbra IPC out of the draw callback
 
 Date: 2026-08-03
-Status: **one blocker open — do not implement yet.** Direction approved. Blockers 2, 3 and 4 from
-the second review are resolved in this revision; blocker 1 (the thread probe) is not, and two
-wording items depend on it. See "Open blocker" below and "Revision notes" at the end.
+Status: **premise disproved — do not implement.** The thread probe was run on 2026-08-03 and
+returned the case this spec named as "stop". The design below is retained for its inventory and
+its per-site analysis, which remain accurate and useful, but its stated justification does not
+survive the measurement. See "Probe result" immediately below.
 
-## Open blocker
+## Probe result — 2026-08-03
 
-**The thread probe has never been run.** Uncommitted diagnostics already exist in `Plugin.cs` and
-`MainWindow.cs` (`THREAD PROBE`), written in an earlier session to answer whether the draw callback
-and the framework-update callback share a managed thread. Until the answer is recorded here, this
-spec cannot state whether the dispatcher performs a genuine thread hop or a same-thread phase
-deferral, and cannot confirm that `Framework.IsInFrameworkUpdateThread` distinguishes the two
-contexts at all.
+Measured on the author's machine, from a Debug build of `main` carrying the temporary probe
+(commit `9f6ebaf`), read from `%APPDATA%\XIVLauncher\dalamud.log`:
 
-Record, with the Dalamud version tested: managed thread id and `IsInFrameworkUpdateThread` from
-both callbacks.
+```
+2026-08-03 21:42:09 [INF] THREAD PROBE framework: managedThreadId=2 IsInFrameworkUpdateThread=True
+2026-08-03 21:44:31 [INF] THREAD PROBE draw:      managedThreadId=2 IsInFrameworkUpdateThread=True
+```
 
-| Observation | Consequence for this spec |
-| --- | --- |
-| Different managed ids | The dispatcher is a genuine thread hop; concurrency between the callbacks is real, and the locking in Architecture is load-bearing. |
-| Same id, predicate differs | A phase deferral within one thread. The design still holds, but the crash rationale weakens sharply and the wording throughout must say "framework-update context", not "thread". |
-| Same id, predicate true in both | The guard does not enforce the intended boundary. Stop; the premise under this spec *and* the merged 0.5.3.0 fix needs re-examination. |
+**The draw callback and the framework-update callback run on the same managed thread, and
+`Framework.IsInFrameworkUpdateThread` is true in both.** This is the third row of the table this
+spec previously carried, whose stated consequence was to stop.
 
-Two wording items are deliberately left unresolved until then: this document still says "framework
-thread" in places where "framework-update context" may be the only defensible phrase, and the probe
-records a *managed* thread id, not an OS thread id.
+Three things follow.
+
+1. **There is no thread hop to perform.** Moving a Penumbra call from the draw callback to the
+   framework-update callback changes *when within a frame* it runs, not *which thread* runs it.
+   The dispatcher this spec designs would not do what its name says.
+
+2. **The guard does not enforce the boundary it claims.** `LibraryWorkCoordinator.Update()`'s
+   `if (State.IsRunning && !_isFrameworkThread()) throw` cannot fire from a draw callback, because
+   the predicate is true there too. Any test asserting that guard rejects draw-callback execution
+   is asserting something the runtime does not distinguish.
+
+3. **The leading crash hypothesis is disproved as stated.** It required Penumbra to mutate its
+   collections *while* our draw callback read them. Penumbra's own updates run on the framework
+   thread — thread 2 — which is this same thread. Same-thread work interleaves; it does not
+   overlap. A read from the draw callback cannot be torn by a framework-thread write.
+
+### What the probe does *not* disprove
+
+It says nothing about Penumbra work on **other** threads — background mod indexing, file watchers,
+or any async continuation of its own. A race between such work and our read remains possible and
+untested. But that was never the stated hypothesis, and nothing in this repo's investigation so far
+has evidence for it.
+
+It also does not make the merged 0.5.3.0 change wrong. Moving unbounded materialize work out of the
+draw callback is still defensible on latency and ordering grounds. What it does is remove that
+change's *crash* rationale, which its own release notes already hedged as "may".
+
+### Consequence for this document
+
+The seven-site inventory, the per-site classification, the verified finding that `TryStart`'s
+preparation is not thin, and the mod-root caching design are all independent of the probe and
+remain correct. The dispatcher, its locking, its lifetime handling and its guard are premised on a
+thread boundary that does not exist between these two callbacks, and should not be built on this
+justification.
+
+Two wording items raised in review are now moot rather than pending: the document's use of
+"framework thread" was indeed wrong, and the correct phrase throughout would have been
+"framework-update context" — the probe records a *managed* thread id, and it is the same one.
 
 ## Context
 
