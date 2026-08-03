@@ -291,6 +291,7 @@ public class TemplateCodecJsonTests
             $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","description":"{{huge}}"}""");
 
         Assert.False(result.Succeeded);
+        Assert.Equal(TemplateDecodeError.InvalidMetadata, result.Error);
     }
 
     [Fact]
@@ -301,15 +302,17 @@ public class TemplateCodecJsonTests
             $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","author":"{{huge}}"}""");
 
         Assert.False(result.Succeeded);
+        Assert.Equal(TemplateDecodeError.InvalidMetadata, result.Error);
     }
 
     [Fact]
     public void DecodeJson_ControlCharacterInAuthor_Fails()
     {
         var result = TemplateCodec.DecodeJson(
-            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","author":"ab"}""");
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","author":"a\u0007b"}""");
 
         Assert.False(result.Succeeded);
+        Assert.Equal(TemplateDecodeError.InvalidMetadata, result.Error);
     }
 
     // A description may legitimately span lines.
@@ -318,6 +321,16 @@ public class TemplateCodecJsonTests
     {
         var result = TemplateCodec.DecodeJson(
             """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","description":"line one\nline two"}""");
+
+        Assert.True(result.Succeeded);
+    }
+
+    // Tabs occur in text pasted from a spreadsheet or an indented editor.
+    [Fact]
+    public void DecodeJson_TabInDescription_IsAllowed()
+    {
+        var result = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","description":"a\tb"}""");
 
         Assert.True(result.Succeeded);
     }

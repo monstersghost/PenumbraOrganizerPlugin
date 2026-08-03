@@ -16,6 +16,7 @@ public enum TemplateDecodeError
     UnknownFallbackStrategy,
     LimitExceeded,
     InvalidFolderLabelValue,
+    InvalidMetadata,
 }
 
 public sealed record TemplateDecodeResult(
@@ -180,7 +181,7 @@ public static class TemplateCodec
         if (!IsDisplayable(document.Author) || !IsDisplayable(document.Description))
         {
             return TemplateDecodeResult.Fail(
-                TemplateDecodeError.MissingName,
+                TemplateDecodeError.InvalidMetadata,
                 "Template author or description is too long or contains control characters.");
         }
 
@@ -286,9 +287,9 @@ public static class TemplateCodec
         return new TemplateDecodeResult(validated, null, null, warnings);
     }
 
-    // Newlines are legitimate in a description; every other control character is not.
+    // Newlines and tabs are legitimate in a description; every other control character is not.
     private static bool IsDisplayable(string? value) =>
         value is null
         || (value.Length <= TemplateLimits.MaxStringLength
-            && !value.Any(c => char.IsControl(c) && c != '\n' && c != '\r'));
+            && !value.Any(c => char.IsControl(c) && c != '\n' && c != '\r' && c != '\t'));
 }

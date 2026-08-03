@@ -1338,7 +1338,8 @@ public sealed class MainWindow : Window, IDisposable
                 : $"{stored.Template.Name} — {stored.Template.Author}";
             label = StripImGuiIdMarkers(label);
 
-            if (ImGui.Selectable($"{label}##{stored.FileName}", _selectedTemplate == stored))
+            using var id = ImRaii.PushId(stored.FileName);
+            if (ImGui.Selectable(label, _selectedTemplate == stored))
             {
                 _selectedTemplate = stored;
                 _templatePlan = null;
@@ -1356,8 +1357,9 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawTemplatePreview(Organizer.Templates.StoredTemplate stored, ActivityGates gates)
     {
-        if (!string.IsNullOrWhiteSpace(stored.Template.Description))
-            ImGui.TextWrapped(stored.Template.Description);
+        var previewTemplate = _templatePlanTemplate ?? stored.Template;
+        if (!string.IsNullOrWhiteSpace(previewTemplate.Description))
+            ImGui.TextWrapped(previewTemplate.Description);
 
         ImGui.BeginDisabled(!gates.CanStageProposals);
         if (ImGui.Button("Preview against my library"))
@@ -1396,7 +1398,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Separator();
 
         var tree = Organizer.Templates.TemplateTreeBuilder.Build(
-            (_templatePlanTemplate ?? stored.Template).Folders, plan.FolderCounts);
+            previewTemplate.Folders, plan.FolderCounts);
         DrawTemplateTree(tree);
 
         ImGui.Separator();
@@ -1410,20 +1412,22 @@ public sealed class MainWindow : Window, IDisposable
     {
         foreach (var node in nodes)
         {
+            // PushID hashes the string as an opaque id rather than parsing it for "##"/"###"
+            // markers, so an untrusted folder segment containing '#' cannot collapse two nodes
+            // onto one id. Stripping '#' from the path instead would make "#a" and "a" collide.
+            using var id = ImRaii.PushId(node.FullPath);
+
             var label = node.TotalCount == 0
-                ? $"{node.Segment} (empty)"
-                : $"{node.Segment} ({node.TotalCount})";
-            label = StripImGuiIdMarkers(label);
+                ? $"{StripImGuiIdMarkers(node.Segment)} (empty)"
+                : $"{StripImGuiIdMarkers(node.Segment)} ({node.TotalCount})";
 
             if (node.Children.Count == 0)
             {
-                ImGui.TreeNodeEx(
-                    $"{label}##{node.FullPath}",
-                    ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen);
+                ImGui.TreeNodeEx(label, ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen);
                 continue;
             }
 
-            using var treeNode = ImRaii.TreeNode($"{label}##{node.FullPath}");
+            using var treeNode = ImRaii.TreeNode(label);
             if (treeNode)
                 DrawTemplateTree(node.Children);
         }
