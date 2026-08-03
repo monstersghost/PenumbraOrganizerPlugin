@@ -2,6 +2,8 @@
 
 ## Changes since v0.5.2.0
 
+**This is a testing build.** You are seeing it because you opted in to plugin testing builds.
+
 ### Fixed: the plugin was asking Penumbra for your mod list from the wrong place
 
 When you pressed Refresh mod list, the plugin requested Penumbra's live mod data from the game's
@@ -9,12 +11,19 @@ drawing work rather than from the update work its own design specifies. Those re
 they were always meant to, alongside the rest of the plugin's Penumbra work. This release covers two
 paths: Refresh mod list (Scan) and building the Search index.
 
-This may address reports of the game closing instantly, with no error, on pressing Refresh mod list.
-It is only "may". That crash could not be reproduced here and no crash dump was available for it, so
-its cause remains unconfirmed. The behaviour was wrong regardless, and is now correct. Other actions
-that talk to Penumbra - Restore, its preview popup, Create Backup, Apply, Folder Cleanup, and workbook
-Export/Import - still read Penumbra from the drawing work the same way. That is a known follow-up, not
-covered by this release; if you hit the same crash from one of those, it is not yet fixed.
+**This is unlikely to fix the reports of the game closing instantly, and the honest answer is that
+the cause is still unknown.** An earlier version of these notes said it "may" fix them. That was
+based on the idea that Penumbra could be changing its mod list at the same moment the plugin read
+it. That idea has since been measured and does not hold: the game's drawing work and its update
+work run on the same thread, so they take turns rather than overlapping, and the plugin's read
+cannot be disturbed part-way through by Penumbra's own update. The old placement was still wrong by
+the plugin's own design, and is now correct, but it should not be sold as a crash fix.
+
+Other actions that talk to Penumbra - Restore, its preview popup, Create Backup, Apply, Folder
+Cleanup, and workbook Export/Import - still read Penumbra from the drawing work. Those are unchanged
+here, and given the above there is no longer reason to think that placement is what closes the game.
+
+If the game still closes on you, the logging below is what will actually help.
 
 ### Added: the plugin leaves a trail in the log
 
@@ -44,15 +53,25 @@ noise.
 Materialization moved from `Start` (called in the ImGui draw callback) to the first coordinator
 `Update` (the framework-update callback). `Start` itself no longer materializes anything, so the draw
 callback structurally cannot do this Penumbra read regardless of what calls it later - that is the
-actual guarantee. An injected predicate also asserts, at the top of `Update`, that it is running on
-the framework thread; that is a secondary check against a genuine background-thread caller, not a
-guarantee against the draw callback specifically, since the draw callback likely runs on the same
-thread and the predicate cannot distinguish the two. The staleness epoch is captured immediately
-before the snapshot rather than after, so a mutation during materialization invalidates the run
-instead of becoming its baseline.
+actual guarantee. The staleness epoch is captured immediately before the snapshot rather than after,
+so a mutation during materialization invalidates the run instead of becoming its baseline.
 
-Materialization is still unbounded and now holds the framework thread instead of the render thread.
-That is a different stall in a different place, not the absence of one. Making it incremental is a
-separate concern.
+The previous draft of this section guessed that the draw callback "likely runs on the same thread"
+as the framework update. That has now been measured, and it does. A probe logging
+`Environment.CurrentManagedThreadId` and `IFramework.IsInFrameworkUpdateThread` from both callbacks
+reports the same managed thread id from each, with `IsInFrameworkUpdateThread` **true in both**.
+
+Two consequences worth writing down:
+
+- The injected predicate asserted at the top of `Update` cannot distinguish a draw-callback caller
+  from a framework-update caller, because it is true in both. It remains a check against a genuine
+  background-thread caller and nothing more. Do not read it as enforcing the draw/update boundary.
+- Materialization did not move from one thread to another - it moved to a different point on the
+  same thread. It is still unbounded, so this is a stall relocated within a frame, not a stall
+  removed, and not a thread hop. Making it incremental remains a separate concern.
+
+This build carries that probe. It logs one line per callback, once per session, at Information
+level. It exists to confirm the same result on other machines and is intended to be removed
+afterwards.
 
 908 tests pass on this release.
