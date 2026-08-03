@@ -145,6 +145,23 @@ public sealed class TemplateStoreTests : IDisposable
         Assert.Contains(stored.Warnings, w => w.Code == TemplateWarningCode.InvalidFolderPath);
     }
 
+    // The share-code transport caps its payload during inflation. A file dropped into the folder
+    // by hand must hit the same ceiling, or opening the tab reads it entirely into memory first.
+    [Fact]
+    public void List_OversizedFile_IsReportedWithoutBeingRead()
+    {
+        var store = new TemplateStore(_dir);
+        store.Save(Json("Good one"), "Good one");
+        var oversized = Path.Combine(_dir, "huge.json");
+        using (var stream = new FileStream(oversized, FileMode.CreateNew))
+            stream.SetLength(TemplateLimits.MaxDecompressedBytes + 1);
+
+        var listing = store.List();
+
+        Assert.Single(listing.Templates);
+        Assert.Equal(["huge.json"], listing.UnreadableFiles);
+    }
+
     [Fact]
     public void Save_FailedWriteLeavesNoPartialFile()
     {

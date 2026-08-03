@@ -174,6 +174,16 @@ public static class TemplateCodec
         if (string.IsNullOrWhiteSpace(document.Name) || document.Name.Length > TemplateLimits.MaxStringLength)
             return TemplateDecodeResult.Fail(TemplateDecodeError.MissingName, "Template name is missing or too long.");
 
+        // The spec's 512-char limit applies to every string, not just the name. These two are
+        // rendered in the templates list and the preview header, so an unbounded value is laid
+        // out by ImGui on every frame the template is selected.
+        if (!IsDisplayable(document.Author) || !IsDisplayable(document.Description))
+        {
+            return TemplateDecodeResult.Fail(
+                TemplateDecodeError.MissingName,
+                "Template author or description is too long or contains control characters.");
+        }
+
         // Enum.TryParse accepts numeric strings ("0") and comma-joined flag-style lists
         // ("Creator,ModType") for any enum, not only [Flags] ones, and both can resolve to a
         // defined member despite not being a name a template author ever wrote. Requiring the
@@ -275,4 +285,10 @@ public static class TemplateCodec
 
         return new TemplateDecodeResult(validated, null, null, warnings);
     }
+
+    // Newlines are legitimate in a description; every other control character is not.
+    private static bool IsDisplayable(string? value) =>
+        value is null
+        || (value.Length <= TemplateLimits.MaxStringLength
+            && !value.Any(c => char.IsControl(c) && c != '\n' && c != '\r'));
 }

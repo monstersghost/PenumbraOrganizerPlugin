@@ -59,6 +59,7 @@ public sealed class MainWindow : Window, IDisposable
     private Organizer.Templates.TemplateStoreListing? _templateListing;
     private Organizer.Templates.StoredTemplate? _selectedTemplate;
     private Organizer.Templates.TemplateApplicationPlan? _templatePlan;
+    private Organizer.Templates.ValidatedOrganizationTemplate? _templatePlanTemplate;
     private int _templatePlanScanGeneration = -1;
     private string? _templateStatus;
 
@@ -1271,6 +1272,8 @@ public sealed class MainWindow : Window, IDisposable
             _templateListing = _plugin.TemplateStore.List();
             _selectedTemplate = null;
             _templatePlan = null;
+            _templatePlanTemplate = null;
+            _templateStatus = null;
         }
 
         ImGui.SameLine();
@@ -1287,6 +1290,7 @@ public sealed class MainWindow : Window, IDisposable
             catch (Exception ex)
             {
                 _lastError = $"Could not open the templates folder: {ex.Message}";
+                _templateStatus = null;
             }
         }
 
@@ -1332,11 +1336,13 @@ public sealed class MainWindow : Window, IDisposable
             var label = string.IsNullOrWhiteSpace(stored.Template.Author)
                 ? stored.Template.Name
                 : $"{stored.Template.Name} — {stored.Template.Author}";
+            label = StripImGuiIdMarkers(label);
 
             if (ImGui.Selectable($"{label}##{stored.FileName}", _selectedTemplate == stored))
             {
                 _selectedTemplate = stored;
                 _templatePlan = null;
+                _templatePlanTemplate = null;
                 _templateStatus = null;
             }
         }
@@ -1390,7 +1396,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Separator();
 
         var tree = Organizer.Templates.TemplateTreeBuilder.Build(
-            stored.Template.Folders, plan.FolderCounts);
+            (_templatePlanTemplate ?? stored.Template).Folders, plan.FolderCounts);
         DrawTemplateTree(tree);
 
         ImGui.Separator();
@@ -1407,6 +1413,7 @@ public sealed class MainWindow : Window, IDisposable
             var label = node.TotalCount == 0
                 ? $"{node.Segment} (empty)"
                 : $"{node.Segment} ({node.TotalCount})";
+            label = StripImGuiIdMarkers(label);
 
             if (node.Children.Count == 0)
             {
@@ -1421,6 +1428,10 @@ public sealed class MainWindow : Window, IDisposable
                 DrawTemplateTree(node.Children);
         }
     }
+
+    // ImGui reads "###" as "the ID is everything after this", so a '#' in a stranger's template
+    // name or folder segment would let two distinct widgets collapse onto one ID and share state.
+    private static string StripImGuiIdMarkers(string text) => text.Replace("#", string.Empty);
 
     private static string DescribeWarning(Organizer.Templates.TemplateWarning warning) =>
         warning.Code switch
@@ -1453,12 +1464,15 @@ public sealed class MainWindow : Window, IDisposable
             if (!decoded.Succeeded)
             {
                 _lastError = $"Template could not be read: {decoded.ErrorDetail}";
+                _templateStatus = null;
                 _templatePlan = null;
+                _templatePlanTemplate = null;
                 return;
             }
 
             _templatePlan = Organizer.Templates.TemplatePlanner.PlanFromDecoded(
                 decoded, _plugin.OrganizerState.Mods, _creatorCanonicalizer.Canonicalize);
+            _templatePlanTemplate = decoded.Template;
             _templatePlanScanGeneration = _plugin.OrganizerState.ScanGeneration;
             _templateStatus = null;
             _lastError = null;
@@ -1466,7 +1480,9 @@ public sealed class MainWindow : Window, IDisposable
         catch (Exception ex)
         {
             _lastError = $"Template preview failed: {ex.Message}";
+            _templateStatus = null;
             _templatePlan = null;
+            _templatePlanTemplate = null;
         }
     }
 
@@ -1481,13 +1497,16 @@ public sealed class MainWindow : Window, IDisposable
         if (_templatePlanScanGeneration != _plugin.OrganizerState.ScanGeneration)
         {
             _templatePlan = null;
+            _templatePlanTemplate = null;
             _lastError = "Your library was rescanned after this preview. Preview again before applying.";
+            _templateStatus = null;
             return;
         }
 
         if (!CurrentGates().CanStageProposals)
         {
             _lastError = "Applying the template was cancelled because library work started.";
+            _templateStatus = null;
             return;
         }
 
@@ -1502,6 +1521,16 @@ public sealed class MainWindow : Window, IDisposable
     {
         try
         {
+            var info = new FileInfo(path);
+            if (info.Length > Organizer.Templates.TemplateLimits.MaxDecompressedBytes)
+            {
+                _lastError =
+                    $"That file is {info.Length / 1024 / 1024} MB; templates are limited to "
+                    + $"{Organizer.Templates.TemplateLimits.MaxDecompressedBytes / 1024 / 1024} MB.";
+                _templateStatus = null;
+                return;
+            }
+
             var json = File.ReadAllText(path);
             var fileName = _plugin.TemplateStore.Save(json, Path.GetFileNameWithoutExtension(path));
 
@@ -1509,12 +1538,14 @@ public sealed class MainWindow : Window, IDisposable
             _selectedTemplate = _templateListing.Templates
                 .FirstOrDefault(t => string.Equals(t.FileName, fileName, StringComparison.OrdinalIgnoreCase));
             _templatePlan = null;
+            _templatePlanTemplate = null;
             _templateStatus = $"Imported as {fileName}.";
             _lastError = null;
         }
         catch (Exception ex)
         {
             _lastError = $"Template import failed: {ex.Message}";
+            _templateStatus = null;
         }
     }
 

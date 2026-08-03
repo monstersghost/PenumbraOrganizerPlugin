@@ -280,4 +280,45 @@ public class TemplateCodecJsonTests
             warning.Subject.Length <= TemplateText.PreviewLength + 3,
             $"Warning subject should be bounded, was {warning.Subject.Length} chars."));
     }
+
+    // The spec's 512-char limit is not name-only. Author and description are rendered every
+    // frame while a template is selected.
+    [Fact]
+    public void DecodeJson_OverlongDescription_Fails()
+    {
+        var huge = new string('d', TemplateLimits.MaxStringLength + 1);
+        var result = TemplateCodec.DecodeJson(
+            $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","description":"{{huge}}"}""");
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void DecodeJson_OverlongAuthor_Fails()
+    {
+        var huge = new string('a', TemplateLimits.MaxStringLength + 1);
+        var result = TemplateCodec.DecodeJson(
+            $$"""{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","author":"{{huge}}"}""");
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void DecodeJson_ControlCharacterInAuthor_Fails()
+    {
+        var result = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","author":"ab"}""");
+
+        Assert.False(result.Succeeded);
+    }
+
+    // A description may legitimately span lines.
+    [Fact]
+    public void DecodeJson_NewlineInDescription_IsAllowed()
+    {
+        var result = TemplateCodec.DecodeJson(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType","description":"line one\nline two"}""");
+
+        Assert.True(result.Succeeded);
+    }
 }

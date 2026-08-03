@@ -49,6 +49,28 @@ public sealed class TemplateStore(string directory)
         foreach (var path in paths.OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase))
         {
             var fileName = Path.GetFileName(path);
+
+            FileInfo info;
+            try
+            {
+                info = new FileInfo(path);
+            }
+            catch (IOException)
+            {
+                unreadable.Add(fileName);
+                continue;
+            }
+
+            // The share-code transport caps its payload during inflation; a file dropped into
+            // this folder must be held to the same ceiling. Without this, opening the tab reads
+            // an arbitrarily large stranger-supplied file into memory inside a draw call, where
+            // an OutOfMemoryException is not catchable by the IO guards below.
+            if (info.Length > TemplateLimits.MaxDecompressedBytes)
+            {
+                unreadable.Add(fileName);
+                continue;
+            }
+
             string json;
             try
             {
