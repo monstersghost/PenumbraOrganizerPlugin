@@ -1,8 +1,44 @@
 # Move the remaining Penumbra IPC off the render thread
 
 Date: 2026-08-03
-Status: approved, not yet implemented. Revised once after an external design review — see
-"Revision notes".
+Status: **design review pending — do not implement.** Direction approved; four blockers open. A
+second external review found them after the first revision. See "Open blockers" immediately below
+and "Revision notes" at the end.
+
+## Open blockers
+
+These must close before an implementation plan is written.
+
+1. **The thread probe has never been run.** Uncommitted diagnostics already exist in `Plugin.cs`
+   and `MainWindow.cs` (`THREAD PROBE`), added to answer whether the draw callback and the
+   framework-update callback share a managed thread. Until that is recorded, this spec cannot say
+   whether the dispatcher performs a genuine thread hop or a same-thread phase deferral, and
+   whether `Framework.IsInFrameworkUpdateThread` distinguishes the two contexts at all. If the
+   predicate is true in both callbacks, the guard does not enforce the intended boundary and the
+   design's premise needs re-examination. Record managed thread id and predicate value from both
+   callbacks, with the Dalamud version tested.
+2. **Pattern C is wrong as specified — verified 2026-08-03.** `StartApplyOperation`'s preparation
+   delegate is not thin. Before the IPC it runs `OrganizerState.Validate()` and a per-row
+   equivalence pass, then `ReadExistingOrganizationFolderPaths()` which reads and parses
+   `organization.json`; after the IPC it runs `CaptureSnapshot`, `AppendSnapshot` (rewrites the
+   history JSON), `BuildApplyPlan`, and two `Save` calls writing the plan and snapshot files.
+   `StartRestoreOperation` is comparable. Deferring the whole `TryStart` call would put one file
+   read, three file writes and three O(mods) passes on the framework thread — the exact failure
+   this spec rejects for the workbook paths. Preparation must be split: framework-thread Penumbra
+   capture, then plan construction and persistence elsewhere, then admission on immutable
+   prepared input.
+3. **Work outliving the dispatcher is undefined.** `Dispose()` settles only *queued* requests. A
+   Pattern B request that already captured and scheduled its background step can still be running
+   at plugin unload and publish into disposed state. Needs a plugin-lifetime `CancellationToken`
+   threaded through every background continuation, no publication after disposal, and an explicit
+   statement that cancellation prevents later phases without interrupting a non-cancellable
+   library call already in progress.
+4. **The queue has no synchronization model, and settlement's thread guarantee is
+   self-contradictory.** `TryEnqueue`, `Drain` and `Dispose` are specified as though they cannot
+   overlap, which blocker 1 has not established. Separately, the spec claims `Settle` always runs
+   on the framework thread, yet enqueue rejection settles from the draw callback and disposal may
+   settle from whichever thread unloads the plugin. Admission failure must be separated from
+   dispatch completion, and one locking policy must be stated.
 
 ## Context
 
