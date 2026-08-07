@@ -19,7 +19,9 @@
 - **Both directions are enforced.** Every topic carrying `body` must appear in a section list; every topic carrying `step` must appear in the step list. Otherwise adding a `step` to the resource does nothing at all, since step order lives in code.
 - **Call sites take `HelpTopic`, never `string`.** A mistyped literal must not compile.
 - **`Help.Tooltip` is called immediately after its widget and outside any `BeginDisabled` scope**, and passes `ImGuiHoveredFlags.AllowWhenDisabled`. Get either wrong and tooltips silently never appear on disabled controls, which is the case they most need to work.
-- **Two controls have more than one disabled reason** and are converted by hand, not swept: Apply (`result.HasIssues || !gates.CanStartApply`) and Folder Cleanup (`_selectedOrphans.Count == 0 || !gates.CanRunFolderCleanup`). The comment at `MainWindow.cs:1564-1566` explains why the operation-in-progress message must not show when the real reason is "nothing selected".
+- **Two controls have more than one disabled reason** and are converted by hand, not swept: Apply (`result.HasIssues || !gates.CanStartApply`, `MainWindow.cs:988`) and Folder Cleanup (`_selectedOrphans.Count == 0 || !gates.CanRunFolderCleanup`, `MainWindow.cs:1560`). The comment at `MainWindow.cs:1562-1565` explains why the operation-in-progress message must not show when the real reason is "nothing selected".
+- **Every type this plan creates or tests against must be `public`.** This repo has **no `InternalsVisibleTo`** — verified, not assumed. `Help`, `HelpTopic`, `HelpTopics`, `HelpTopicUsage`, `HelpTab` and `FirstRunSteps` are all referenced from `PenumbraOrganizer.Plugin.Tests`, so `internal` on any of them is a CS0122 at build time, not a design preference.
+- **Anything a test drives must live outside a `Window` subclass and call no ImGui.** The test project cannot construct a Dalamud `Window` or enter an ImGui frame. This is why Task 5 splits `FirstRunSteps` from `FirstRunWindow`.
 
 ---
 
@@ -79,7 +81,28 @@ git commit -m "feat: write tooltip content for every non-obvious control"
 - Consumes: the topics from Task 1.
 - Produces: nothing later tasks depend on.
 
-- [ ] **Step 1: Add the reverse-direction test first**
+- [ ] **Step 1: Create the declared-usage list**
+
+The test below reads `HelpTopicUsage.ReferencedByControls`, which no earlier task defines. Create it first, in `PenumbraOrganizer.Plugin/Windows/HelpTopicUsage.cs`. It is `public` because the test project reads it and there is no `InternalsVisibleTo`:
+
+```csharp
+namespace PenumbraOrganizer.Plugin.Windows;
+
+/// <summary>
+/// The topics a control is intended to show as a tooltip. Hand-maintained: adding a
+/// <c>Help.Tooltip</c> call means adding the topic here too. See the comment on
+/// <c>EveryTopicWithAShort_IsDeclaredAsUsedByAControl</c> for what this does and does not prove.
+/// </summary>
+public static class HelpTopicUsage
+{
+    public static IReadOnlyList<HelpTopic> ReferencedByControls { get; } =
+    [
+        // One entry per topic wired in Step 3, in tab order.
+    ];
+}
+```
+
+- [ ] **Step 2: Add the reverse-direction test**
 
 ```csharp
 [Fact]
@@ -91,7 +114,7 @@ public void EveryTopicWithAShort_IsDeclaredAsUsedByAControl()
     // in help-content.json, in HelpTopics, and in this list while the widget has no call at all.
     //
     // Actual wiring is protected by three things, none of them this test: code review of the
-    // call-site convention, the immediately-after-widget rule, and Step 4's manual in-game pass
+    // call-site convention, the immediately-after-widget rule, and Step 5's manual in-game pass
     // over every control including disabled ones.
     var declared = HelpTopicUsage.ReferencedByControls;
     var withShort = HelpTopics.All.Where(t => Help.Short(t) is not null);
@@ -99,11 +122,11 @@ public void EveryTopicWithAShort_IsDeclaredAsUsedByAControl()
 }
 ```
 
-- [ ] **Step 2: Add `Help.Tooltip(...)` after each widget**
+- [ ] **Step 3: Add `Help.Tooltip(...)` after each widget**
 
-Placement is a hard requirement, not a style note. Follow the existing pattern at `MainWindow.cs:424-430`: the call goes **after** the widget and **outside** the `BeginDisabled`/`EndDisabled` scope.
+Placement is a hard requirement, not a style note. Follow the existing pattern at `MainWindow.cs:426-431`, which is the "Refresh mod list" button — `BeginDisabled` / `Button` / `EndDisabled`, then the `IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)` check **after** the widget and **outside** the disabled scope. Add each topic you wire to `HelpTopicUsage.ReferencedByControls` in the same edit; the Step 2 test fails otherwise.
 
-- [ ] **Step 3: Convert the two multi-reason sites by hand**
+- [ ] **Step 4: Convert the two multi-reason sites by hand**
 
 Apply and Folder Cleanup each have two disable conditions. The call site decides which reason applies:
 
@@ -115,13 +138,13 @@ Help.Tooltip(
     : null);
 ```
 
-Do the same for Folder Cleanup, preserving the distinction the comment at `MainWindow.cs:1564-1566` documents. Review these two individually.
+Do the same for Folder Cleanup, preserving the distinction the comment at `MainWindow.cs:1562-1565` documents — with nothing selected, the reason is "nothing chosen yet" and the operation message must not appear. Review these two individually.
 
-- [ ] **Step 4: In-game pass**
+- [ ] **Step 5: In-game pass**
 
 Hover every control that gained a topic, including disabled ones. A tooltip that never appears on a disabled control means `AllowWhenDisabled` was missed.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add PenumbraOrganizer.Plugin/Windows/ PenumbraOrganizer.Plugin.Tests/Windows/
@@ -171,7 +194,17 @@ public void TheGitHubLink_CarriesAVersionTag_NotMain()
 
 - [ ] **Step 3: Implement**
 
+`HelpTab` is `public` (no `InternalsVisibleTo`; the tests above read `HelpTab.GuideUrl`). Define that constant here — it is the one member the tests touch:
+
+```csharp
+/// Pinned to a release tag, never to main: main serves the newest guide to someone on an older build.
+public const string GuideUrl =
+    "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.0/docs/USER_GUIDE.md";
+```
+
 `HelpTab` is a **tab-drawing type inside `MainWindow`'s tab bar, not a `Window`**. It touches nothing outside the plugin: no Penumbra IPC, no mod-library read or write, no file write. Piece 5's walkthrough button is compatible with that and is not a violation.
+
+It is a standalone type rather than a `MainWindow.HelpTab.cs` partial, deliberately breaking piece 0's one-partial-per-tab convention: this tab's content is the only tab content worth unit-testing, and a partial of `MainWindow` cannot be reached from a test without constructing `MainWindow`. Note the deviation in the commit message so a later reader does not "restore consistency".
 
 `MainWindow` gains one tab entry after Search and one dispatch call. Tab dispatch is the one place all these features converge and stays in `MainWindow.cs`.
 
@@ -198,26 +231,28 @@ git commit -m "feat: add an in-game Help tab"
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `Configuration.FirstRunTutorialSeen` as `bool?`, resolved at load.
+- Produces: `Configuration.FirstRunTutorialSeen` as `bool?`, and `Configuration.ResolveFirstRunFlag(Configuration, bool)` returning `bool`.
 
 **This is the task most likely to produce a user-visible bug**, and it is why it is its own task rather than a step inside Task 5. A plain `bool` cannot distinguish "old config predating this field" from "new config with the default" — both deserialise to `false`, and every existing user gets a tutorial on upgrade.
 
+**The resolver lives on `Configuration`, not on `Plugin`.** An earlier draft of this plan put it on `Plugin` as `internal static` and had the tests call `Plugin.ResolveFirstRunFlag`. That does not compile: there is no `InternalsVisibleTo` in this repo, so the test project cannot see an `internal` member — and even `public` on `Plugin` would make the test project load a type whose every member is a Dalamud service. `Configuration` is already `public sealed` and already has a test file. Put it there.
+
 - [ ] **Step 1: Write the tests**
+
+In the existing `PenumbraOrganizer.Plugin.Tests/ConfigurationTests.cs`:
 
 ```csharp
 [Fact]
 public void PreExistingConfig_WithoutTheField_DefaultsToSeen()
 {
     var loaded = new Configuration();          // property absent -> null
-    var resolved = Plugin.ResolveFirstRunFlag(loaded, configExisted: true);
-    Assert.True(resolved);
+    Assert.True(Configuration.ResolveFirstRunFlag(loaded, configExisted: true));
 }
 
 [Fact]
 public void GenuinelyFreshConfig_DefaultsToUnseen()
 {
-    var resolved = Plugin.ResolveFirstRunFlag(new Configuration(), configExisted: false);
-    Assert.False(resolved);
+    Assert.False(Configuration.ResolveFirstRunFlag(new Configuration(), configExisted: false));
 }
 
 [Fact]
@@ -225,29 +260,37 @@ public void ExplicitFalse_IsRespected_AndNotTreatedAsAbsent()
 {
     // The case a non-nullable bool loses entirely.
     var loaded = new Configuration { FirstRunTutorialSeen = false };
-    Assert.False(Plugin.ResolveFirstRunFlag(loaded, configExisted: true));
+    Assert.False(Configuration.ResolveFirstRunFlag(loaded, configExisted: true));
+}
+
+[Fact]
+public void Resolving_WritesTheAnswerBack_SoTheNullIsNeverReDerived()
+{
+    var loaded = new Configuration();
+    Configuration.ResolveFirstRunFlag(loaded, configExisted: true);
+    Assert.True(loaded.FirstRunTutorialSeen);
 }
 ```
 
 - [ ] **Step 2: Implement**
 
-```csharp
-public bool? FirstRunTutorialSeen { get; set; }
-```
+In `Configuration.cs`:
 
 ```csharp
+public bool? FirstRunTutorialSeen { get; set; }
+
 // The null check IS the signal and it exists only here. Resolve it immediately and write back,
 // so the distinction never has to be re-derived.
-internal static bool ResolveFirstRunFlag(Configuration config, bool configExisted) =>
+public static bool ResolveFirstRunFlag(Configuration config, bool configExisted) =>
     config.FirstRunTutorialSeen ??= configExisted;
 ```
 
-At `Plugin.cs:68`:
+Then replace the config load in the `Plugin` constructor (currently the single line `Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();`, around `Plugin.cs:68` — confirm the line before editing, since piece 0 does not touch this file but earlier pieces may):
 
 ```csharp
 var loaded = PluginInterface.GetPluginConfig() as Configuration;
 Config = loaded ?? new Configuration();
-ResolveFirstRunFlag(Config, configExisted: loaded is not null);
+Configuration.ResolveFirstRunFlag(Config, configExisted: loaded is not null);
 PluginInterface.SavePluginConfig(Config);
 ```
 
@@ -263,6 +306,7 @@ git commit -m "feat: distinguish a pre-existing config from a fresh one for firs
 ### Task 5: The guided first run window
 
 **Files:**
+- Create: `PenumbraOrganizer.Plugin/Windows/FirstRunSteps.cs`
 - Create: `PenumbraOrganizer.Plugin/Windows/FirstRunWindow.cs`
 - Modify: `PenumbraOrganizer.Plugin/Windows/HelpTab.cs` (the reserved third button)
 - Modify: `PenumbraOrganizer.Plugin/Plugin.cs` (window registration)
@@ -270,10 +314,36 @@ git commit -m "feat: distinguish a pre-existing config from a fresh one for firs
 - Test: `PenumbraOrganizer.Plugin.Tests/Windows/FirstRunStepsTests.cs`
 
 **Interfaces:**
-- Consumes: `ResolveFirstRunFlag` (Task 4), `Help.Step`, `HelpTab`'s third button slot.
+- Consumes: `Configuration.ResolveFirstRunFlag` (Task 4), `Help.Step`, `HelpTab`'s third button slot.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the navigation and lifecycle tests**
+- [ ] **Step 1: Define the testable half first**
+
+Every test below drives navigation, and none of them can construct a Dalamud `Window` or enter an ImGui frame. So the state machine is its own `public` type with no ImGui and no Dalamud reference; `FirstRunWindow` owns one and draws it. Without this split the test file named in **Files** cannot be written at all.
+
+```csharp
+namespace PenumbraOrganizer.Plugin.Windows;
+
+/// Navigation and completion for the walkthrough. Deliberately free of ImGui and Dalamud
+/// so it can be tested; FirstRunWindow is the thin drawing shell around it.
+public sealed class FirstRunSteps(IReadOnlyList<HelpTopic> steps, bool penumbraAvailable)
+{
+    public int Index { get; private set; }
+    public bool IsFinished { get; private set; }
+
+    /// True when the run reached a real ending. False after the Penumbra-unavailable path,
+    /// which makes no decision and so must not consume the first run.
+    public bool ShouldMarkSeen { get; private set; }
+
+    public HelpTopic Current => ...;   // the explanatory topic when !penumbraAvailable
+    public void Next();                // past the last step -> IsFinished, ShouldMarkSeen = penumbraAvailable
+    public void Back();                // no-op at Index 0
+    public void Skip();                // IsFinished, ShouldMarkSeen = true
+    public void Closed();              // same outcome as Skip: the X is the likeliest exit
+}
+```
+
+- [ ] **Step 2: Write the navigation and lifecycle tests**
 
 ```csharp
 [Fact] public void NextPastTheLastStep_ClosesAndMarksSeen() { }
@@ -302,26 +372,26 @@ public void WithPenumbraUnavailable_ShowsOneExplanatoryStep_AndDoesNotMarkSeen()
 public void EveryStepIdResolves_AndEveryTopicWithAStepIsInTheStepList() { }
 ```
 
-- [ ] **Step 2: Implement**
+- [ ] **Step 3: Implement**
 
-`FirstRunWindow` is a second Dalamud `Window`. It **opens on the first time `MainWindow` opens**, not on plugin load — a window appearing over someone's gameplay because a plugin loaded is hostile.
+`FirstRunWindow` is a second Dalamud `Window`, and holds a `FirstRunSteps`. It contributes no logic of its own: it draws `Current`, routes the three buttons and the close to `Next`/`Back`/`Skip`/`Closed`, and on `IsFinished` writes the config flag **only if `ShouldMarkSeen`**. It **opens on the first time `MainWindow` opens**, not on plugin load — a window appearing over someone's gameplay because a plugin loaded is hostile.
 
 Both windows are placed explicitly with `ImGuiCond.FirstUseEver`: a default size and an offset initial position so they do not both centre and overlap, which would defeat a side-by-side walkthrough. The body pushes a wrap position.
 
 Step text names tabs and control labels, which is what compensates for not highlighting live controls. **List the labels each step references in a comment beside the step**, so a rename has one place to check.
 
-- [ ] **Step 3: Add the Help tab button**
+- [ ] **Step 4: Add the Help tab button**
 
 "Show the walkthrough" reopens it regardless of the flag and does **not** clear the flag.
 
-- [ ] **Step 4: In-game pass**
+- [ ] **Step 5: In-game pass**
 
 Fresh config: the walkthrough appears on first opening the window. Existing config: it does not. Close midway, reopen the plugin: it does not reappear. Disable Penumbra, wipe the flag, reopen: one explanatory step, and it appears again next time.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add PenumbraOrganizer.Plugin/Windows/FirstRunWindow.cs PenumbraOrganizer.Plugin/Windows/HelpTab.cs PenumbraOrganizer.Plugin/Plugin.cs PenumbraOrganizer.Plugin/Resources/help-content.json PenumbraOrganizer.Plugin.Tests/Windows/FirstRunStepsTests.cs
+git add PenumbraOrganizer.Plugin/Windows/FirstRunSteps.cs PenumbraOrganizer.Plugin/Windows/FirstRunWindow.cs PenumbraOrganizer.Plugin/Windows/HelpTab.cs PenumbraOrganizer.Plugin/Plugin.cs PenumbraOrganizer.Plugin/Resources/help-content.json PenumbraOrganizer.Plugin.Tests/Windows/FirstRunStepsTests.cs
 git commit -m "feat: add a guided walkthrough on first run"
 ```
 
