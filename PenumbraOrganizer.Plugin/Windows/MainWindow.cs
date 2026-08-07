@@ -52,7 +52,8 @@ public sealed class MainWindow : Window, IDisposable
     private bool _folderReloadRequired;
     private Organizer.FolderCleanupResult? _lastCleanupResult;
     private Organizer.FolderRollbackResult? _lastFolderRollbackResult;
-    private Task? _npcRefreshTask;
+    // No _npcRefreshTask while the refresh button is disabled for 0.5.3.1; RefreshNpcNamesAsync and
+    // the result panel below are kept so re-enabling is a one-line change.
     private Organizer.NpcNames.NpcNameRefreshResult? _npcRefreshResult;
     private readonly FileDialogManager _fileDialogManager = new();
 
@@ -110,21 +111,8 @@ public sealed class MainWindow : Window, IDisposable
     // Framework thread only, called once per update from Plugin.OnFrameworkUpdate.
     internal void DrainEventLog() => _eventLog.Drain();
 
-    // TEMPORARY DIAGNOSTIC. Answers whether the draw callback and the framework-update callback
-    // are the same thread, which decides whether the framework-thread guard in
-    // LibraryWorkCoordinator can distinguish them at all. Remove once the answer is recorded.
-    private static bool _threadIdentityLogged;
-
     public override void Draw()
     {
-        if (!_threadIdentityLogged)
-        {
-            _threadIdentityLogged = true;
-            Plugin.Log.Information(
-                $"THREAD PROBE draw: managedThreadId={Environment.CurrentManagedThreadId} "
-                + $"IsInFrameworkUpdateThread={Plugin.Framework.IsInFrameworkUpdateThread}");
-        }
-
         using var theme = PluginTheme.Push();
 
         ConsumeCompletionIfNew();
@@ -825,21 +813,19 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        var npcRefreshInFlight = _npcRefreshTask is { IsCompleted: false };
-        ImGui.BeginDisabled(npcRefreshInFlight);
-        if (ImGui.Button("Refresh NPC list from wiki"))
-        {
-            _npcRefreshResult = null;
-            _lastError = null;
-            _npcRefreshTask = RefreshNpcNamesAsync();
-        }
+        // Disabled in 0.5.3.1 rather than removed: a full scrape produces roughly 21,000 names, and
+        // building the matcher from a list that size is implicated in reports of the game closing
+        // instantly during Scan and the Search index build. Re-enabled once the matcher no longer
+        // builds one giant compiled alternation per category.
+        ImGui.BeginDisabled(true);
+        ImGui.Button("Refresh NPC list from wiki");
         ImGui.EndDisabled();
-
-        if (npcRefreshInFlight)
-        {
-            ImGui.SameLine();
-            ImGui.TextUnformatted("Refreshing... (this can take a few minutes for a full scrape)");
-        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Temporarily unavailable in this version. See the 0.5.3.1 release notes.");
+        TextColoredWrapped(ImGuiColors.DalamudYellow,
+            "Refreshing the NPC list is turned off in this version. A full refresh produced a list "
+            + "large enough to crash the game on the next scan. NPC classification still works from "
+            + "the list that ships with the plugin.");
 
         if (_npcRefreshResult is not null)
         {

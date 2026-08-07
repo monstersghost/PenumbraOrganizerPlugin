@@ -91,4 +91,70 @@ public class NpcNameListStoreTests
 
         Assert.NotNull(matcher.Match("Y'shtola Overhaul"));
     }
+
+    private static string ListJson(int npcs, int enemies = 0, int bosses = 0)
+    {
+        static string Block(string prefix, int count) =>
+            string.Join(",", Enumerable.Range(0, count).Select(i => $"\"{prefix} Name {i}\""));
+        return $$"""
+            {"Version":1,"NPCs":[{{Block("Npc", npcs)}}],"Enemies":[{{Block("Enemy", enemies)}}],"Bosses":[{{Block("Boss", bosses)}}],"Excluded":[]}
+            """;
+    }
+
+    [Fact]
+    public void Load_OversizedList_FallsBackToTheSeedAndWarns()
+    {
+        var path = MakeTempPath();
+        File.WriteAllText(path, ListJson(NpcNameListStore.MaxSafeNameCount + 1));
+
+        var result = NpcNameListStore.Load(path, SeedJson);
+
+        Assert.Equal(["Y'shtola"], result.Document.NPCs);
+        Assert.NotNull(result.Warning);
+        Assert.Contains("bundled", result.Warning);
+    }
+
+    [Fact]
+    public void Load_OversizedList_ReplacesTheFileAndKeepsABackup()
+    {
+        var path = MakeTempPath();
+        File.WriteAllText(path, ListJson(NpcNameListStore.MaxSafeNameCount + 1));
+
+        NpcNameListStore.Load(path, SeedJson);
+
+        // Replaced rather than ignored: leaving the oversized file in place would re-arm the
+        // problem on every later scan and index build.
+        var reloaded = NpcNameListStore.Load(path, SeedJson);
+        Assert.Null(reloaded.Warning);
+        Assert.Equal(["Y'shtola"], reloaded.Document.NPCs);
+
+        var backups = Directory.GetFiles(Path.GetDirectoryName(path)!, "*.oversized-*.json");
+        Assert.Single(backups);
+        Assert.Contains("Npc Name 0", File.ReadAllText(backups[0]));
+    }
+
+    [Fact]
+    public void Load_ListExactlyAtTheLimit_IsAccepted()
+    {
+        var path = MakeTempPath();
+        File.WriteAllText(path, ListJson(NpcNameListStore.MaxSafeNameCount));
+
+        var result = NpcNameListStore.Load(path, SeedJson);
+
+        Assert.Null(result.Warning);
+        Assert.Equal(NpcNameListStore.MaxSafeNameCount, result.Document.NPCs.Count);
+    }
+
+    [Fact]
+    public void Load_CountsAllThreeCategories_NotJustNpcs()
+    {
+        var path = MakeTempPath();
+        var perCategory = NpcNameListStore.MaxSafeNameCount / 3 + 10;
+        File.WriteAllText(path, ListJson(perCategory, perCategory, perCategory));
+
+        var result = NpcNameListStore.Load(path, SeedJson);
+
+        Assert.NotNull(result.Warning);
+        Assert.Equal(["Y'shtola"], result.Document.NPCs);
+    }
 }
