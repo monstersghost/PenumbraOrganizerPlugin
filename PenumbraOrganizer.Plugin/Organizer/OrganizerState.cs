@@ -192,6 +192,46 @@ public sealed class OrganizerState
         return results;
     }
 
+    /// <summary>
+    /// The single sort entry point. The seven <c>SortBy*</c> methods below are the legacy surface
+    /// this replaces; they remain only as the equivalence oracle for
+    /// <c>OrganizerStateSortTests</c> and go away once it is green.
+    /// </summary>
+    /// <remarks>
+    /// The two splits are independent of each other and both are ignored by
+    /// <see cref="SortStrategy.CreatorOnly"/>, which never consults the category at all. That gives
+    /// 1 + (3 x 2 x 2) = 13 selections, of which the seven buttons offered seven; the six new ones
+    /// are the whole splitNpc: false column, which had no button because NPC subdivision used to be
+    /// unconditional.
+    /// </remarks>
+    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc,
+                    Func<string, string> canonicalizeCreator)
+    {
+        // Composed, not switched over: the two flatteners are independent decisions about the same
+        // subcategory, so applying them in sequence is what makes all four combinations reachable
+        // without writing four variants of each strategy.
+        string? Sub(OrganizerModRow row)
+        {
+            var sub = row.SubCategory;
+            if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
+            if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
+            return sub;
+        }
+
+        return strategy switch
+        {
+            SortStrategy.CreatorOnly =>
+                Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), null)),
+            SortStrategy.TypeOnly =>
+                Sort(row => (TypeFolder(row.Category, Sub(row)), null)),
+            SortStrategy.TypeThenCreator =>
+                Sort(row => (TypeFolder(row.Category, Sub(row)), KnownSegment(canonicalizeCreator(row.Author)))),
+            SortStrategy.CreatorThenType =>
+                Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, Sub(row)))),
+            _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, null),
+        };
+    }
+
     public int SortByCreator(Func<string, string> canonicalizeCreator) =>
         Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), null));
 
@@ -218,6 +258,12 @@ public sealed class OrganizerState
     // "flat" sort variant so Gear/Feet vs Gear stays a single decision point.
     private static string? FlattenGearSubCategory(ModCategory? category, string? subCategory) =>
         category == ModCategory.Gear ? null : subCategory;
+
+    // The NPC mirror of the above. Unlike gear, this had no button: NPC mods were always split into
+    // NPC/NPCs, NPC/Bosses and NPC/Enemies. Turning it off yields plain "NPC", which is the shape of
+    // all six newly reachable combinations.
+    private static string? FlattenNpcSubCategory(ModCategory? category, string? subCategory) =>
+        category == ModCategory.NPC ? null : subCategory;
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
