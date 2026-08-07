@@ -1,7 +1,7 @@
 # Help tab
 
 Date: 2026-08-07
-Part of `2026-08-07-ui-overhaul-umbrella-design.md` (piece 4 of 5)
+Part of `2026-08-07-ui-overhaul-umbrella-design.md` (piece 4 of 6, built after piece 3)
 
 ## The problem
 
@@ -17,7 +17,14 @@ wrong".
 
 ### A seventh tab, last
 
-`Help` sits at the end of the tab bar, after Search. It is read-only: nothing in it changes state,
+`Help` sits at the end of the tab bar, after Search. It **touches nothing outside the plugin**: no
+Penumbra IPC, no mod library, no file writes, nothing that can be interrupted or need recovery.
+
+That is the invariant, and it is narrower than an earlier draft's "nothing in it changes state".
+Piece 5 adds a **Show the walkthrough** button here, which opens a window and is therefore
+state-changing in the literal sense. That is expected and allowed: it affects only which plugin
+windows are open. Piece 5 owns adding the button and the three-button layout that results; this spec
+reserves the space. Nothing in it changes state,
 starts work, or touches Penumbra.
 
 ### Structure
@@ -63,9 +70,26 @@ introduces, keyed by the same ids. A section is a topic with a `body`; a tooltip
 This is the whole reason the umbrella spec exists. Writing help text separately from tooltip text
 guarantees they diverge, and the tooltip is the one users see most.
 
-Much of the prose adapts from `docs/USER_GUIDE.md`, which is accurate and current. Adapts, not
-copies: the guide is reference documentation organised by tab, and several Help sections
-("The safety rules", "When something goes wrong") cut across tabs and have no counterpart there.
+Much of the prose adapts from `docs/USER_GUIDE.md`. Adapts, not copies: the guide is reference
+documentation organised by tab, and several Help sections ("The safety rules", "When something goes
+wrong") cut across tabs and have no counterpart there.
+
+**The guide is not currently accurate, and this piece fixes that.** An earlier draft called it
+"accurate and current" and made it canonical. As of this overhaul it says "The six tabs" (line 20)
+and "Five buttons compute a proposed folder path" (line 81) — piece 4 makes it seven tabs and piece 2
+replaces those buttons with a dropdown. **Piece 2 updates the Sort section; this piece updates the
+tab list and adds the Help tab.** Shipping either without its guide edit means the canonical document
+is wrong on release day.
+
+**Section topics are not control topics.** Sections like "The safety rules" carry a `body` and no
+`short`, which the umbrella's schema permits (a topic needs `title` plus at least one content field).
+A section is an **ordered list of topic ids**: the section's own `body` renders first, then the `body`
+of each control topic it covers. Without that composition rule a flat schema cannot express "the Sort
+section is these five controls in this order", which is what this tab actually needs.
+
+**The GitHub link is version-pinned.** "Open the full guide on GitHub" pointing at `main` serves the
+newest guide to someone running an older build, which is worse than no link. The URL carries the
+release tag the plugin was built from.
 
 **The guide remains the deeper document.** The Help tab is not trying to replace it, and the button
 linking to it is not an afterthought.
@@ -101,8 +125,11 @@ none of this content lands there.
   mode as piece 3's tooltip test, same reason for having it.
 - The paragraph and bullet conventions render as specified, tested against the pure formatter rather
   than through ImGui.
-- The tab is read-only: no plugin method that mutates state is reachable from it. Enforced by review
-  rather than a test, and stated here so the constraint is explicit.
+- The tab touches nothing outside the plugin: no Penumbra IPC, no mod-library read or write, no file
+  write. Enforced by review rather than a test, and stated here so the constraint is explicit. Piece
+  5's **Show the walkthrough** button is compatible with this and is not a violation.
+- Every section's topic list resolves, and each listed topic has a non-empty `body`.
+- The GitHub link carries a version tag rather than `main`.
 
 ## Out of scope
 

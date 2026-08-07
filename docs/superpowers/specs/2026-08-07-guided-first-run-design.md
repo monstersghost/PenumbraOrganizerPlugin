@@ -1,11 +1,11 @@
 # Guided first run
 
 Date: 2026-08-07
-Part of `2026-08-07-ui-overhaul-umbrella-design.md` (piece 5 of 5, built last)
+Part of `2026-08-07-ui-overhaul-umbrella-design.md` (piece 5 of 6, built last, depends on piece 4)
 
 ## The problem
 
-A new user opens the plugin to six tabs, a mod list they have to populate, and a set of operations
+A new user opens the plugin to seven tabs, a mod list they have to populate, and a set of operations
 that rearrange their Penumbra library. Nothing indicates where to start, and the two things that
 would reassure them — that nothing moves until Apply, and that every operation is undoable — are not
 visible anywhere.
@@ -47,21 +47,67 @@ is abandonment, not incompetence.
 
 ### When it appears
 
-On first run only, detected by a config flag:
+**It opens on the first time `MainWindow` is opened**, not on plugin load. Opening a window over
+someone's gameplay because a plugin loaded is hostile; the tutorial is about the plugin's window, so
+it waits until they look at it.
+
+#### The flag, and how the distinction is actually made
+
+A plain `bool` **cannot** distinguish "old config that predates this field" from "new config with the
+default", because both deserialise to `false`. An earlier draft specified the outcome and not the
+mechanism, which is exactly how every existing user ends up seeing a tutorial on upgrade.
+
+The mechanism:
 
 ```csharp
-public bool FirstRunTutorialSeen { get; set; }
+// Nullable on purpose. null means "this config predates the field".
+public bool? FirstRunTutorialSeen { get; set; }
 ```
 
-The flag is set when the user reaches the last step **or** presses Skip. Either way they have made a
-decision and it is not offered again unasked.
+and at the single place the config is loaded (`Plugin.cs:68`):
+
+```csharp
+var loaded = PluginInterface.GetPluginConfig() as Configuration;
+Config = loaded ?? new Configuration();
+
+// The null check IS the signal, and it exists only here. Resolve it immediately.
+Config.FirstRunTutorialSeen ??= loaded is not null;   // pre-existing config -> seen
+PluginInterface.SavePluginConfig(Config);
+```
+
+So: property present, respect it. Property absent but a config file existed, treat as **seen**.
+Genuinely first run, **unseen**. The value is written back at once so the distinction never has to be
+re-derived.
+
+`Configuration.Version` is currently `1` with no migration path in the repo. This piece does not
+introduce one; if a general migration mechanism is added later, this resolves into it.
+
+The flag is set to `true` when the user reaches the last step **or** presses Skip **or** closes the
+window. All three are a decision, and the most likely exit is the close button — a Dalamud `Window`
+renders one by default. An earlier draft wrote the flag only on Next-from-last-step and Skip, which
+would hand step 1 to anyone who closed it, every session, forever.
+
+**Progress is not resumed.** Closing at step 3 and reopening later starts at step 1. Tracking a
+position is state nobody asked for, and the walkthrough is short enough that restarting costs
+nothing.
 
 It is always reachable afterwards from a **Show the walkthrough** button on the Help tab, which is
-also how anyone testing it avoids editing config by hand.
+also how anyone testing it avoids editing config by hand. **This piece adds that button**; the Help
+tab spec reserves space for it.
 
-**It does not open automatically on upgrade.** An existing user who has been using the plugin for
-months should not be handed a tutorial because they updated. The flag defaults to *seen* for any
-config that already exists on disk, and to *unseen* only for a genuinely fresh config.
+#### If Penumbra is not running
+
+Every step from "press Refresh mod list" onwards describes results the user will not see, and a
+first-run user is the one most likely to have Penumbra disabled. When Penumbra's IPC is unavailable,
+the window opens on a single step saying so and offering Close, and **does not set the flag** — this
+is the one case where the user has not made a decision. It appears again next time.
+
+#### Adding steps in a later release
+
+A single `bool` cannot offer new steps to someone who completed the old walkthrough. That is
+**accepted, not overlooked**: the tutorial is orientation for new users, not a changelog. Anyone can
+reopen it from Help. If a future release genuinely needs to re-onboard existing users, that needs a
+step-set version and is out of scope here.
 
 That distinction is the one piece of real logic here and it is easy to get wrong: a naive default of
 `false` would show the tutorial to every existing user exactly once, which is precisely the outcome
@@ -80,20 +126,40 @@ to avoid.
 ### Where the code goes
 
 `Windows/FirstRunWindow.cs`, a second Dalamud `Window` registered alongside `MainWindow`, not a tab
-and not a popup. `MainWindow.cs` is around 2,000 lines and three other pieces of this overhaul touch
-it; the tutorial does not add to it.
+and not a popup. It is the one piece of this overhaul that does **not** add UI to `MainWindow`; its
+only integration point there is the Help tab button, which it adds.
+
+**Both windows are placed, not left to Dalamud.** Two windows defaulting to centre would overlap,
+which defeats a side-by-side walkthrough entirely. `FirstRunWindow` gets a default size and an
+initial position offset from `MainWindow`, set with `ImGuiCond.FirstUseEver` so the user's own
+placement survives. Its body pushes a wrap position; long step text otherwise sets the window width.
 
 Step content is data, so step navigation is a pure index over a list and is testable without ImGui.
+
+**Step text names tabs and control labels**, which is deliberate — it is what compensates for not
+highlighting live controls — but it means renaming a button in `MainWindow.cs` silently makes a step
+wrong while every id still resolves and every test passes. The mitigation is that the labels a step
+references are listed in the spec alongside the step, so a rename has one place to check. Piece 2's
+"press Sort" and "choose how to group" refer to controls that do not exist until piece 2 lands, which
+is why this piece is built last.
 
 ## Testing
 
 - Step navigation: Next past the last step closes and marks seen; Back from the first is a no-op;
   Skip at any step marks seen.
-- The flag is written once and the window does not reopen on the next construction.
+- **Closing the window marks seen**, and the next construction does not reopen it.
+- The flag is written once.
 - **A pre-existing config defaults to seen; a fresh config defaults to unseen.** This is the test
-  that matters most, because getting it wrong spams every existing user.
-- Every step id resolves to a topic with a non-empty `step`, same failure mode as the tooltip and
-  Help section tests.
+  that matters most, because getting it wrong spams every existing user. It is testable because the
+  resolution happens at one seam: a loader that returns `null` versus one that returns a config with
+  `FirstRunTutorialSeen == null`. Both cases go through `Configuration` directly, matching how
+  `ConfigurationTests` already constructs it.
+- **A config with `FirstRunTutorialSeen == false` explicitly set still shows the tutorial.** This is
+  what distinguishes "absent" from "present and false" and is the case a non-nullable `bool` loses.
+- With Penumbra unavailable, the window shows the single explanatory step and **does not** set the
+  flag.
+- Every step id resolves to a topic with a non-empty `step`, and every topic carrying `step` appears
+  in the step list — both directions, per piece 3's rule.
 - Show the walkthrough reopens it regardless of the flag, and doing so does not clear the flag.
 
 ## Out of scope

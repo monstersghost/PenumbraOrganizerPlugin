@@ -3,9 +3,14 @@
 Date: 2026-08-07
 Branch: `design/ui-overhaul` (not merged; main is being tested separately)
 
-This is the parent for six pieces of work. Each has its own spec, each ships independently, and
-this document exists for the two things that only make sense across all of them: **the shared
-content model** and **the order they are built in**.
+This is the parent for six pieces of work. Each has its own spec and can be **implemented and
+reviewed independently**; they **ship as one release**, with the cross-piece dependencies defined
+below. This document exists for the three things that only make sense across all of them: **the
+shared content model**, **the dependency graph**, and **the order they are built in**.
+
+An earlier draft of this document said "each ships independently". That was wrong: pieces 3, 4 and 5
+form a content chain, piece 5 has no entry point without piece 4, and piece 2 is a worse release
+without piece 1. Independence is a property of the *work*, not of the release.
 
 ## The six pieces
 
@@ -61,16 +66,40 @@ Rules that make this hold:
   string literal. Changing wording is a resource edit, not a code edit.
 - **`short` is one line and unformatted.** It is a tooltip. If an explanation cannot fit, that is a
   signal the control needs a better label, not a longer tooltip.
-- **`body` may be absent** when a control needs a tooltip but not a Help section. **`step` may be
-  absent** for anything the tutorial does not walk through. `short` is required.
-- **A referenced id that does not exist is a build-time failure**, not a silent empty tooltip. A
-  test enumerates every id referenced in code and asserts each resolves. This is the whole reason
-  the indirection is worth having.
+- **`id` and `title` are required. `short`, `body` and `step` are each optional, and a topic must
+  carry at least one of them.** An earlier draft made `short` mandatory. That was wrong: the Help tab
+  has sections with no control at all ("The safety rules", "When something goes wrong", "Where your
+  files are"), and the tutorial has steps that are reassurance rather than instruction. Requiring
+  `short` on those would force a meaningless tooltip string to be invented purely to satisfy a test,
+  and it would ship unread.
+- **Validation is by consumer, not by field:**
+  - every tooltip reference must resolve to a topic with a non-empty `short`
+  - every Help-section reference must resolve to a topic with a non-empty `body`
+  - every walkthrough-step reference must resolve to a topic with a non-empty `step`
+  - and, in the other direction, every topic carrying `body` must appear in some section list, and
+    every topic carrying `step` must appear in the tutorial's step list
+- **Topics are of two scopes and the schema says which.** Control topics (`sort.gear-detail`) back a
+  widget and carry `short`. Section topics (`help.safety-rules`) back a Help section and carry
+  `body`. A section is composed of an ordered list of topics, so a Help section may render its own
+  `body` followed by the `body` of the control topics it covers. Without this a flat schema cannot
+  express "the Sort section is these five controls in this order", which is what the Help tab
+  actually needs.
+- **A referenced id that does not exist fails a test, not the build.** An earlier draft claimed
+  build-time enforcement; nothing here delivers that. A test enumerates ids and asserts each
+  resolves. To make it meaningful, **call sites take a typed topic constant, not a `string`**, so a
+  mistyped literal cannot compile in the first place. Without that, `Help.Tooltip("sort.gear-detial")`
+  compiles, ships, and passes every test in all three specs.
 - The resource is embedded, matching how `npc-name-list-seed.json` already ships, so there is no
   new file to lose or corrupt at runtime.
+- **Text is static.** No substitution or state-dependent wording. Controls whose meaning changes with
+  state (Toggle protect all is a true toggle in both directions) need one explanation covering both.
+- **Tooltips do not wrap on their own.** `ImGui.SetTooltip` lays out one line as wide as it needs, so
+  a long `short` produces a tooltip wider than the viewport. Tooltip rendering pushes a fixed wrap
+  position; so does the tutorial window.
 
-Piece 3 defines the schema and loader because it is the first consumer. Pieces 4 and 5 add fields to
-existing topics rather than inventing their own stores.
+Piece 3 defines the schema and loader because it is the first consumer. Pieces 4 and 5 add both new
+topics and new fields on existing topics; an earlier draft said they only add fields, which is not
+true of the cross-cutting Help sections or the tutorial's reassurance steps.
 
 ## Build order, and why
 
@@ -94,27 +123,73 @@ prose can be adapted from `docs/USER_GUIDE.md`, which is current and accurate.
 **5. Guided first run.** Last. It is the only piece needing persistent state and flow control, and
 by the time it is built every step's text has been written and reviewed twice.
 
-Headings above use the piece numbers from the table, so build order and piece number are the same
-thing and cannot drift.
+Piece numbers identify the dependency sequence for the UI work. **Piece 1 is deliberately parallel:
+it may land any time after piece 0, but must be merged before piece 2 is considered release-ready.**
+Build order is therefore not a total order over piece numbers, and an earlier draft's claim that
+"build order and piece number are the same thing and cannot drift" was false in the document
+asserting it.
+
+```
+0 ──┬── 1 ──────────────┐
+    └── 2 ── 3 ── 4 ── 5 ┴── release
+```
+
+### The dependency graph, stated once
+
+| Piece | Hard-depends on | Why |
+|---|---|---|
+| 0 | nothing | |
+| 1 | 0 (soft) | only to avoid editing a file mid-split |
+| 2 | 0, **3** | its disabled-checkbox tooltip needs the tooltip mechanism |
+| 3 | 0 | defines the schema and loader |
+| 4 | 3 | renders `body` from the shared resource |
+| 5 | 3, **4** | its only re-entry point is a button on the Help tab |
+| release | 1 **and** 2 together | see below |
+
+**Piece 2 depends on piece 3, which contradicts building 2 before 3.** Piece 2 disables both split
+checkboxes when Group by is Creator and shows a tooltip explaining why; that tooltip is the
+mechanism piece 3 builds. Resolution: **piece 3's schema and loader move to the front of piece 2**,
+so piece 2 is the first consumer rather than piece 3. Piece 3 then becomes the sweep across the
+remaining controls. The alternative — an inline literal in `SortPanel.cs` to be replaced later — is
+the exact thing piece 3 exists to eliminate, with no test that would catch it being left behind.
 
 ### Where piece 1 sits
 
-Piece 1 has **two gates, not one**, and conflating them was an error in an earlier draft of this
-document:
+Piece 1 has **two gates, not one**:
 
-- **The static list and the new matcher are ungated.** This is the part that fixes users' crashes
-  and the silently broken Detailed sort. It ships with the overhaul.
+- **The static list and the new matcher are ungated.** They remove the oversized compiled-regex path
+  that correlates with the reported crashes, restore classification quality, and fix the silently
+  broken Detailed sort. **This must not be described as a proven crash fix**: piece 1 establishes
+  that resetting the large list stops the observed crash and that the mechanism is unknown, and the
+  new matcher has not been shown to remove the fatal path. The justification for shipping it is
+  correctness and classification quality, which stand on their own.
 - **Only the opt-in toggle for the scraped list is gated**, on reproducing the crash and verifying
   the new matcher in-game against a full 20,115-name list. That toggle ships **disabled**, which
   costs users nothing because the static list is the better default anyway.
 
-So piece 1 is in the release, not alongside it. It is sequenced loosely against pieces 0 and 2 to 5
-only so that an investigation of unknown duration holds up one checkbox rather than five features.
+**Piece 1 also adds one control to the Sort tab** — the "Also use the NPC list scraped from the wiki"
+checkbox, default off. It lands in `SortPanel.cs` (piece 2's file), it is covered by piece 3's
+tooltip sweep, and its topic id is `sort.scraped-npc-list`. Piece 1 additionally leaves the wiki
+refresh button disabled, which piece 2's out-of-scope list must not contradict.
 
-One real interaction argues for shipping them together rather than apart: **piece 2 adds "split NPC
-mods by kind", and piece 1 decides which mods are NPCs at all.** With the 20,000-name list in play
-nearly everything classifies as NPC, so that new checkbox would appear broken. Piece 2 without piece
-1 is a worse release than either alone.
+One real interaction forces pieces 1 and 2 into the same release: **piece 2 adds "split NPC mods by
+kind", and piece 1 decides which mods are NPCs at all.** With the 20,000-name list in play nearly
+everything classifies as NPC, so that new checkbox would appear broken.
+
+### What is not part of this overhaul
+
+`2026-08-07-library-work-breadcrumbs-design.md` sits on the same branch and is **not** one of the six
+pieces. It is a diagnostic for the same crash piece 1 correlates with, and **the crash cause remains
+open**: nothing in this overhaul closes that investigation.
+
+Its implementation is **postponed until after piece 1 ships and we see whether crashes persist**. The
+reason is specific: the suspect matcher is built in `ScanProcessor.Prepare`, which
+`LibraryWorkCoordinator.RunBatch` calls **before** the per-item loop. If death occurs there, per-item
+breadcrumbs yield a header and no item at all. The breadcrumb spec handles that case correctly and
+refuses to blame item 1, but its diagnostic value against *this* crash is much lower than when it was
+written. If crashes stop after piece 1, we avoid adding a per-item flushed write nobody needs; if
+they continue, breadcrumbs are then instrumenting a residual crash rather than a path already
+replaced.
 
 ## What this overhaul does not change
 
@@ -125,11 +200,17 @@ nearly everything classifies as NPC, so that new checkbox would appear broken. P
 
 ## Risk worth naming once
 
-Four of these five pieces touch `MainWindow.cs`, which is already around 2,000 lines and is the
-largest file in the project. Adding a Help tab, a tutorial window, tooltip plumbing and a rebuilt
-sort panel to it without restructuring would make it materially worse.
+**Three** of these pieces modify `MainWindow`'s UI surface — piece 2 (the sort block), piece 3
+(tooltips at ~30 call sites) and piece 4 (a tab entry plus dispatch). Piece 5 does **not**: it
+registers `FirstRunWindow` as a second Dalamud `Window` and integrates through a button on the Help
+tab. An earlier draft said "pieces 2 to 5 all add UI to it", which is not true, and three consumers
+is ample justification without inflating it.
 
-Each spec therefore puts its own UI in its own file (`HelpTab.cs`, `FirstRunWindow.cs`,
-`SortPanel.cs`) rather than adding to `MainWindow`. That is not opportunistic refactoring: it is the
-only way to add four features to one file without compounding an existing problem. `MainWindow`
-keeps tab dispatch and shared state; the panels own their own drawing.
+`MainWindow.cs` is 2,080 lines and the largest file in the project. Adding tooltip plumbing, a tab
+and a rebuilt sort panel without restructuring would make it materially worse, which is what piece 0
+addresses.
+
+Each spec puts its own UI in its own file (`SortPanel.cs`, `HelpTab.cs`, `FirstRunWindow.cs`).
+`MainWindow` keeps tab dispatch and shared state; the panels own their drawing. **Tab dispatch is the
+one place all of them converge**, so it stays in `MainWindow.cs` after piece 0's split and is the
+expected growth point.

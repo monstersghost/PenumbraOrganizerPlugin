@@ -1,7 +1,8 @@
 # Two NPC name lists, and a matcher that cannot explode
 
 Date: 2026-08-07
-Branch: `design/two-list-npc-names` (not merged; main is being tested separately)
+Part of `2026-08-07-ui-overhaul-umbrella-design.md` (piece 1 of 6, parallel to 2-5, release-required)
+Branch: `design/ui-overhaul` (not merged; main is being tested separately)
 
 ## The problem
 
@@ -310,9 +311,15 @@ release. Two internal steps ship; two do not.
 Steps 1 and 2 are safe to ship without step 3, because with the toggle off nobody loads a large list.
 
 **The gate is on the toggle, not on this piece.** Stating it that way matters: the static list and
-the new matcher are what actually fix users' crashes and the silently broken Detailed sort, and
-holding them behind a crash reproduction of unknown duration would withhold the fix to preserve a
-disabled checkbox.
+the new matcher remove the oversized compiled-regex path that correlates with the reported crashes,
+restore classification quality, and fix the silently broken Detailed sort. Holding them behind a
+crash reproduction of unknown duration would withhold that to preserve a disabled checkbox.
+
+**They are not a proven crash fix, and this document must not be quoted as saying they are.** What is
+established: resetting the large list stops the observed crash, and the mechanism is unknown. The new
+matcher has not been shown to remove the fatal path, because the fatal path has not been identified.
+The justification for shipping is correctness and classification quality, which stand on their own
+evidence and do not depend on the crash question resolving either way.
 
 Against the rest of the overhaul, this piece is ordered loosely, for the same reason. But it must
 ship in the **same release** as piece 2: piece 2 adds "split NPC mods by kind", and this piece
