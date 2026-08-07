@@ -39,9 +39,33 @@ These are the regression boundary. Each asserts the new entry point produces exa
 ```csharp
 public class OrganizerStateSortTests
 {
-    private static OrganizerState WithMods() { /* three mods: one Gear with a resolved slot,
-        one NPC-classified, one Unknown. Follow the fixture style in the existing
-        OrganizerState tests. */ }
+    // The fixture is load-bearing. Each row below exists to make a specific pair of legacy
+    // combinations produce DIFFERENT output; drop one and the theory passes while proving nothing.
+    private static OrganizerState WithMods()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            // Separates gear-split on from off. The slot must be one GetFolder accepts:
+            // Head/Top/Hands/Legs/Feet/Ears/Neck/Wrists/Rings.
+            new OrganizerModRow { Identifier = "gear", Name = "Gear Mod", Author = "Ann",
+                CurrentPath = "Gear Mod", ProposedPath = "Gear Mod",
+                Category = ModCategory.Gear, SubCategory = "Feet" },
+
+            // Separates NPC-split on from off. SubCategory MUST be set: it is nullable, and
+            // GetFolder(NPC, null) already returns "NPC", so a null here makes every
+            // Sort_NpcSplitOff assertion pass against a completely no-op flattener.
+            new OrganizerModRow { Identifier = "npc", Name = "Npc Mod", Author = "Bob",
+                CurrentPath = "Npc Mod", ProposedPath = "Npc Mod",
+                Category = ModCategory.NPC, SubCategory = "Bosses" },
+
+            // Separates the three strategies through the creator segment, and covers the
+            // no-category fallback.
+            new OrganizerModRow { Identifier = "unknown", Name = "Unknown Mod", Author = "Cy",
+                CurrentPath = "Unknown Mod", ProposedPath = "Unknown Mod" },
+        ], new HashSet<string>());
+        return state;
+    }
 
     private static string Canon(string s) => s;
 
@@ -140,13 +164,43 @@ private static string? FlattenNpcSubCategory(ModCategory? category, string? subC
 
 `Sort` composes the two flatteners over the existing derivation, then dispatches on `strategy` exactly as the seven methods did.
 
-- [ ] **Step 4: Run, then remove the old methods in a separate commit**
+**There is already a `private int Sort(Func<OrganizerModRow, (string?, string?)>)` at `OrganizerState.cs:226`.** The new public method is a legal overload and should *call* it, exactly as the seven `SortBy*` methods do. Do not rename or replace the private one.
+
+- [ ] **Step 4: Run, then retire the oracle in a separate commit**
 
 ```bash
 dotnet test PenumbraOrganizer.Plugin.Tests
 ```
 
-Then delete the seven `SortBy*` methods and rewrite Step 1's `RunLegacyEquivalent` to hold the **expected paths as literals** captured from the passing run. The oracle has done its job; keeping it would keep the old code alive.
+Once green, the oracle has done its job and the seven `SortBy*` methods can go. **Do not hand-write the expected literals** — an earlier draft said to "rewrite `RunLegacyEquivalent` to hold expected paths as literals", which is not mechanically possible as described (`RunLegacyEquivalent` is `void` and works by mutating `viaOld`), and hand-writing them invites getting the order wrong and then "fixing" the expectations until green, which destroys the guarantee.
+
+Two things make hand-writing error-prone: `OrganizerState.Mods` is ordered by `Name` (`OrganizerState.cs:16-17`), not insertion order, and `FinishProposals`/`CollisionDisambiguator` can rewrite paths after the sort (`OrganizerState.cs:272-281`).
+
+Instead, **capture them mechanically**. Add a temporary throwaway test that prints the actual output for all seven rows:
+
+```csharp
+[Fact(Skip = "one-shot: capture expectations, then delete")]
+public void CaptureLegacyExpectations()
+{
+    foreach (var (strategy, splitGear) in AllLegacyRows())
+    {
+        var s = WithMods();
+        s.Sort(strategy, splitGear, splitNpc: true, Canon);
+        Console.WriteLine($"[InlineData(SortStrategy.{strategy}, {splitGear.ToString().ToLower()}, " +
+            string.Join(", ", s.Mods.Select(m => $"\"{m.ProposedPath}\"")) + ")]");
+    }
+}
+```
+
+Run it once with `Skip` removed, paste the emitted `[InlineData]` lines into the theory, delete the capture test and the seven `SortBy*` methods. The expectations are then observed output, not invention.
+
+- [ ] **Step 4a: Add the missing switch arm**
+
+`RunLegacyEquivalent`'s switch is non-exhaustive over four strategies × two bools and emits **CS8509**. No project sets `TreatWarningsAsErrors`, so it builds — but piece 0 established a zero-new-warnings baseline that this piece inherits. Add:
+
+```csharp
+            _ => throw new ArgumentOutOfRangeException(nameof(strategy), (strategy, splitGear), null),
+```
 
 - [ ] **Step 5: Commit both steps separately**
 
@@ -248,7 +302,26 @@ git commit -m "feat: add the shared help content resource and typed topic ids"
 
 **Interfaces:**
 - Consumes: `OrganizerState.Sort(...)` and `SortStrategy` (Task 1); `Help.Tooltip` (Task 2).
-- Produces: `SortPanel`, an instance held by `MainWindow`.
+- Produces: `public sealed class SortPanel` and `public readonly record struct SortSelection`, an instance of the former held by `MainWindow`.
+
+**Both types are `public`.** There is no `InternalsVisibleTo` anywhere in this repo — verified — so
+`internal` types are unreachable from `PenumbraOrganizer.Plugin.Tests` and Step 1's test would fail
+with CS0122. `WorkbookStrategyOptionsTests` uses reflection precisely because of this. Do not add
+`InternalsVisibleTo` as a side effect of this task; make the two types public.
+
+**`SortSelection` is defined here, in full.** An earlier draft used it in four places and defined it
+nowhere:
+
+```csharp
+// A record struct, not a class: the staleness check compares the current selection against the one
+// last sorted with, and that needs value equality.
+public readonly record struct SortSelection(SortStrategy Strategy, bool SplitGear, bool SplitNpc)
+{
+    // By Creator never consults category, so neither split can change its output. Both checkboxes
+    // are disabled when this is false.
+    public bool SplitsApply => Strategy != SortStrategy.CreatorOnly;
+}
+```
 
 - [ ] **Step 1: Write the dispatch tests**
 
@@ -263,11 +336,21 @@ public class SortSelectionTests
     }
 
     [Fact]
-    public void ItemOrder_IsDerivedFromTheEnum_NotDuplicated()
+    public void Groupings_CoverEveryStrategyExactlyOnce()
     {
-        // MainWindow.cs:81-83 already carries a warning about index-based strategy selection.
-        // The combo's labels come from the enum so index and meaning cannot drift apart.
-        Assert.Equal(Enum.GetValues<SortStrategy>().Length, SortPanel.GroupingLabels.Count);
+        // An earlier draft compared only the COUNT of a labels array against the enum's length,
+        // which passes with the labels in the wrong order. A single tuple array makes the
+        // relationship structural, and this asserts coverage rather than arithmetic.
+        Assert.Equal(
+            Enum.GetValues<SortStrategy>().Order(),
+            SortPanel.Groupings.Select(g => g.Strategy).Order());
+    }
+
+    [Fact]
+    public void Groupings_DefaultIndexSelectsTypeThenCreator()
+    {
+        // The default must survive someone reordering the array.
+        Assert.Equal(SortStrategy.TypeThenCreator, SortPanel.Groupings[2].Strategy);
     }
 }
 ```
@@ -275,40 +358,138 @@ public class SortSelectionTests
 - [ ] **Step 2: Implement `SortPanel`**
 
 ```csharp
-internal sealed class SortPanel
+public sealed class SortPanel
 {
     // Instance, not static: ImGui.Combo(ref int) and Checkbox(ref bool) need backing storage that
     // survives between frames. A per-frame instance would reset the selection every frame.
-    private int _strategyIndex = (int)SortStrategy.TypeThenCreator;
+    //
+    // These four are SESSION state. A sort strategy is a choice about the action you are about to
+    // take, not a preference worth persisting.
+    private int _groupingIndex = 2;       // index into Groupings below: "Type then creator"
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
-    private bool _useScrapedNpcList;      // piece 1's checkbox
     private SortSelection? _lastSorted;
 
-    public static IReadOnlyList<string> GroupingLabels { get; } = [...];
+    // ONE mapping, not two parallel arrays. An earlier draft had a labels array whose only test
+    // compared Count against the enum's length, which passes with the labels in the wrong order.
+    // This also removes the assumption that enum numeric values double as UI indices.
+    public static readonly (SortStrategy Strategy, string Label)[] Groupings =
+    [
+        (SortStrategy.CreatorOnly,     "Creator"),
+        (SortStrategy.TypeOnly,        "Mod type"),
+        (SortStrategy.TypeThenCreator, "Type then creator"),
+        (SortStrategy.CreatorThenType, "Creator then type"),
+    ];
 
     public void Draw(
         OrganizerState state,
         ActivityGates gates,
-        Func<string, string> canonicalizeCreator,
-        FileDialogManager fileDialogs);
+        Configuration config,             // the scraped-list opt-in is persistent, not session
+        Action saveConfig,
+        Func<string, string> canonicalizeCreator);
 }
 ```
 
-Inside `Draw`, in order:
+**`public`, not `internal`.** There is no `InternalsVisibleTo` anywhere in this repo — verified — so
+an internal type is unreachable from `PenumbraOrganizer.Plugin.Tests` and Step 1's test fails with
+CS0122. `WorkbookStrategyOptionsTests` uses reflection precisely because of that. Do not add
+`InternalsVisibleTo` as a side effect of this task.
 
-1. `ImGui.BeginDisabled(!gates.CanStageProposals)` around the whole block — **this is the gate that must not be lost**.
-2. The Group by combo, selecting by value through `GroupingLabels`, never by bare index.
-3. Both checkboxes, each `ImGui.BeginDisabled(!selection.SplitsApply)` with `Help.Tooltip(HelpTopics.SortSplitGear)` after the widget and outside the disabled scope.
-4. The Sort button, labelled `Sort##sort-mods` — **an explicit id suffix**, because a label varying with mod count makes the widget id vary with it, and a background scan publishing mid-click would silently drop the click. If a count is displayed it goes in adjacent text and counts **unprotected** mods only, since `Sort()` touches nothing else.
-5. When `_lastSorted` differs from the current selection, a muted line: `Selection changed since the last sort.`
-6. `ImGui.EndDisabled()`, then the existing gate tooltip.
+**No `FileDialogManager` parameter.** An earlier draft passed one while also stating Import Workbook
+stays in `MainWindow.SortTab.cs`. It stays there; the panel has no use for it.
+
+**The scraped-list opt-in lives in `Configuration`, not in a private field.** An earlier draft
+declared `_useScrapedNpcList` here beside piece 1's `Configuration.UseScrapedNpcNameList` — two
+sources of truth for one setting, and the private one was never rendered, never bound and never
+saved. Dead state on the seam between two plans is exactly where a feature survives every individual
+task review while not existing.
+
+```
+SortPanel
+  _groupingIndex, _splitGear, _splitNpc, _lastSorted   session
+  config.UseScrapedNpcNameList                          persistent, read and written through config
+```
+
+`Draw`'s body is given as code, not as an ordered list. **ImGui is positional** — `IsItemHovered`
+binds to whichever widget was submitted last — so prose cannot express which item a tooltip attaches
+to, and an earlier draft's ordered list hid a real bug in exactly that spot:
+
+```csharp
+public void Draw(OrganizerState state, ActivityGates gates, Configuration config,
+                 Action saveConfig, Func<string, string> canonicalizeCreator)
+{
+    var selection = new SortSelection(
+        Groupings[_groupingIndex].Strategy, _splitGear, _splitNpc);
+
+    ImGui.BeginDisabled(!gates.CanStageProposals);
+
+    ImGui.SetNextItemWidth(220);
+    var labels = Groupings.Select(g => g.Label).ToArray();
+    ImGui.Combo("Group by", ref _groupingIndex, labels, labels.Length);
+    Help.Tooltip(HelpTopics.SortGrouping);
+
+    ImGui.BeginDisabled(!selection.SplitsApply);
+    ImGui.Checkbox("Split gear by equipment slot", ref _splitGear);
+    ImGui.EndDisabled();
+    Help.Tooltip(HelpTopics.SortSplitGear,
+        selection.SplitsApply ? null : "Grouping by creator alone never uses the mod's type.");
+
+    ImGui.BeginDisabled(!selection.SplitsApply);
+    ImGui.Checkbox("Split NPC mods by kind", ref _splitNpc);
+    ImGui.EndDisabled();
+    Help.Tooltip(HelpTopics.SortSplitNpc,
+        selection.SplitsApply ? null : "Grouping by creator alone never uses the mod's type.");
+
+    // Piece 1's opt-in. Bound directly to config, saved on change, and force-disabled for 0.6.0
+    // through the SAME gate the backend consults - so a config value left true cannot quietly
+    // enable a path the UI says is off.
+    ImGui.BeginDisabled(!Configuration.ScrapedNpcListFeatureEnabled);
+    var useScraped = config.UseScrapedNpcNameList;
+    if (ImGui.Checkbox("Also use the NPC list scraped from the wiki", ref useScraped))
+    {
+        config.UseScrapedNpcNameList = useScraped;
+        saveConfig();
+    }
+    ImGui.EndDisabled();
+    Help.Tooltip(HelpTopics.SortScrapedNpcList,
+        Configuration.ScrapedNpcListFeatureEnabled ? null : "Not available in this version.");
+
+    // Stable id: a label varying with mod count makes the widget id vary with it, so a background
+    // scan publishing mid-click would change the active id and the click would be dropped.
+    if (ImGui.Button("Sort##sort-mods"))
+    {
+        state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, canonicalizeCreator);
+        _lastSorted = selection;
+    }
+    Help.Tooltip(HelpTopics.SortButton);
+
+    // THE GATE TOOLTIP GOES HERE, immediately after the last widget inside the disabled scope.
+    // An earlier draft put it after EndDisabled and after the staleness line, where IsItemHovered
+    // would have bound to a text label - or to nothing consistent, since the staleness line only
+    // renders sometimes.
+    if (!gates.CanStageProposals && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+        ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+
+    ImGui.EndDisabled();
+
+    if (_lastSorted is { } last && last != selection)
+        ImGui.TextDisabled("Selection changed since the last sort.");
+}
+```
 
 `MainWindow.SortTab.cs` keeps Import Workbook, the NPC refresh button and manual assignment, and calls `_sortPanel.Draw(...)` where the button row used to be. **Import Workbook must be re-established explicitly**: it was the eighth element of the same `DrawWrappingButtonRow`, sharing that row's `BeginDisabled` scope and the trailing `IsItemHovered` tooltip at `MainWindow.cs:803`. Its behaviour — including the re-check inside the dialog callback — is unchanged.
 
-- [ ] **Step 3: Fix the reflective test piece 0 warned about**
+- [ ] **Step 3: Confirm `WorkbookStrategyOptions` is untouched**
 
-`WorkbookStrategyOptionsTests` reads `MainWindow`'s private static `WorkbookStrategyOptions` by name. If this task moves that field, the test fails at **runtime** with an `InvalidOperationException` from the reflection lookup, not a compile error. Either leave the field on `MainWindow` or update the test to point at its new home. Say which you did in the report.
+Piece 0 predicted a reflective-test breakage here, and on inspection it cannot occur: `WorkbookStrategyOptions` backs the **workbook export** dropdown, not the sort buttons, and piece 0 forbids moving any field. Nothing in this task should go near it.
+
+Confirm with a grep rather than assuming, and report the result:
+
+```bash
+grep -n "WorkbookStrategyOptions" PenumbraOrganizer.Plugin/Windows/*.cs
+```
+
+Expected: still declared in `MainWindow.cs`, still used by `DrawReviewTab`. If this task has moved it, stop — that is scope creep, and `WorkbookStrategyOptionsTests` will fail at runtime with an `InvalidOperationException` rather than a compile error.
 
 - [ ] **Step 4: Run the full suite, then commit**
 

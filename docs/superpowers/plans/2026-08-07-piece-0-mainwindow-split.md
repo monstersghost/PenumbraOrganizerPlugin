@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **This is a mechanical move and nothing else.** A reviewer must be able to confirm it by diffing method bodies and finding them byte-identical.
-- **Do not move any field, static or instance.** Static field initializers in different partial files run in an order the C# specification does not guarantee. Moving `SearchableCategories` into `MainWindow.SearchTab.cs` can make `_librarySearchCategories = new(SearchableCategories)` observe a null array depending on `<Compile>` ordering — compiles cleanly, passes diff review, may not reproduce on your machine. **All fields stay in `MainWindow.cs`.**
+- **Do not move any field, static or instance. All fields stay in `MainWindow.cs`.** The reason is not that a specific field would break today — no static-to-static initializer dependency exists in this file, and the one an earlier draft cited (`_librarySearchCategories = new(SearchableCategories)`) provably cannot fail: `_librarySearchCategories` is an *instance* field, so its initializer runs in the constructor, necessarily after type initialization. The rule stands because **ordering among static initializers across partial declaration parts is unspecified in C#**, and such a dependency is invisible in a diff. Introducing one later, after fields have been scattered, would produce a null that compiles cleanly, passes review, and may not reproduce on the reviewer's machine. Keeping every field in one file makes the hazard impossible to create by accident.
 - **Do not reorder any ImGui call.** Moving a method between files preserves ID-stack behaviour and `Begin`/`End` balance; reordering calls does not.
 - **Do not rename anything, change any access modifier, extract any helper, merge any duplicate, or fix anything noticed in passing.** If you spot a bug, write it down and leave it.
 - No test renders this code. The safety net is the compiler, diff review, and an in-game pass. That is why the rules above are absolute rather than advisory.
@@ -78,7 +78,7 @@ Cut the whole method including its XML doc comment and any comment block immedia
 
 Building after each move means a mistake is attributable to one method rather than six.
 
-**`DrawHistoryTab` needs care.** It contains an `EndPopup()` followed by `continue` inside a `foreach` inside a popup body, around lines 1145-1149. Begin/End balance there depends on control flow rather than lexical structure, and one dropped line produces an ImGui assertion at runtime, not a compile error. Move it whole, then diff that block character by character before moving on.
+**`DrawHistoryTab` needs care.** It contains an `EndPopup()` followed by `continue` inside a `foreach` inside a popup body, at lines 1147-1148. Begin/End balance there depends on control flow rather than lexical structure, and one dropped line produces an ImGui assertion at runtime, not a compile error. Move it whole, then diff that block character by character before moving on.
 
 - [ ] **Step 4: Verify no field moved**
 
@@ -182,7 +182,7 @@ Build Debug, reload the plugin in-game, and confirm each of Scan, Protect, Sort,
 
 - [ ] **Step 4: In-game pass over the modals**
 
-Step 3 opens no popups, and popups are the highest-risk construct in this file — `MainWindow.cs:37-41` documents that `BeginTabBar` pushes an ID override, so popup scope is coupled to where it is opened. There are eleven `BeginPopupModal` blocks.
+Step 3 opens no popups, and popups are the highest-risk construct in this file — `MainWindow.cs:36-40` documents that `BeginTabBar` pushes an ID override, so popup scope is coupled to where it is opened. There are nine `BeginPopupModal` blocks (lines 223, 241, 274, 295, 313, 995, 1011, 1136, 1573); the checklist below covers six of them.
 
 Cover at minimum:
 

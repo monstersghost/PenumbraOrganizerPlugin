@@ -83,13 +83,19 @@ git commit -m "feat: write tooltip content for every non-obvious control"
 
 ```csharp
 [Fact]
-public void EveryTopicWithAShort_IsReferencedByAControl()
+public void EveryTopicWithAShort_IsDeclaredAsUsedByAControl()
 {
-    // Without this, a topic can carry text nothing renders and no test notices.
-    // The referenced set is collected by the same reflection HelpTopics.All uses.
-    var referenced = HelpTopicUsage.ReferencedByControls;   // maintained list, asserted in review
+    // NAMED FOR WHAT IT PROVES. HelpTopicUsage.ReferencedByControls is a hand-maintained list,
+    // so this is a DECLARED-USAGE CONSISTENCY check: it catches a topic whose tooltip text nobody
+    // ever intends to show. It does NOT prove any control calls Help.Tooltip - a topic can appear
+    // in help-content.json, in HelpTopics, and in this list while the widget has no call at all.
+    //
+    // Actual wiring is protected by three things, none of them this test: code review of the
+    // call-site convention, the immediately-after-widget rule, and Step 4's manual in-game pass
+    // over every control including disabled ones.
+    var declared = HelpTopicUsage.ReferencedByControls;
     var withShort = HelpTopics.All.Where(t => Help.Short(t) is not null);
-    Assert.Empty(withShort.Except(referenced));
+    Assert.Empty(withShort.Except(declared));
 }
 ```
 

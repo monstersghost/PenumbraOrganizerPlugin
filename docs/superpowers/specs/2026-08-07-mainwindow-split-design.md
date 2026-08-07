@@ -87,7 +87,7 @@ modes, and none of it is needed to make the file smaller.
   `Begin`/`End` balance; reordering calls does not.
 - **Moving any field, static or instance.** This is the one that can produce a bug the diff review
   passes. Static field initializers in different partial files run in an order the C# specification
-  does not guarantee, so dragging `SearchableCategories` into `MainWindow.SearchTab.cs` can make
+  does not guarantee, so dragging a static field into a sibling partial file could make
   `_librarySearchCategories = new(SearchableCategories)` observe a null array depending on `<Compile>`
   ordering. That compiles cleanly, leaves every method body identical, and may not reproduce on the
   reviewer's machine. **All fields stay in `MainWindow.cs`.**
@@ -98,7 +98,7 @@ modes, and none of it is needed to make the file smaller.
 A reviewer must be able to confirm this stage by diffing method bodies and finding them identical.
 
 **One method needs naming in the review checklist.** `DrawHistoryTab` contains an `EndPopup()`
-followed by `continue` inside a `foreach` inside a popup body (around lines 1145-1149). Begin/End
+followed by `continue` inside a `foreach` inside a popup body (at lines 1147-1148). Begin/End
 balance there depends on control flow, not on lexical structure, and a single dropped line produces
 an ImGui assertion at runtime rather than a compile error. Diff that block character by character.
 
@@ -132,8 +132,8 @@ No test renders this code, so verification is explicit:
 4. **In-game pass over all six tabs**: Scan, Protect, Sort, Review Changes, History, Search. Each
    renders and each control responds.
 5. **In-game pass over every modal**, because item 4 opens none of them and popups are the highest-risk
-   construct in this file. `MainWindow.cs:37-41` documents why: `BeginTabBar` pushes an ID override,
-   so popup scope is coupled to where it is opened. There are eleven `BeginPopupModal` blocks. Cover
+   construct in this file. `MainWindow.cs:36-40` documents why: `BeginTabBar` pushes an ID override,
+   so popup scope is coupled to where it is opened. There are nine `BeginPopupModal` blocks (lines 223, 241, 274, 295, 313, 995, 1011, 1136, 1573); the checklist below covers six of them. Cover
    at minimum: Apply confirm, the post-Apply reminder, per-snapshot Restore confirm, snapshot Delete,
    "Clean up folders?", and the single-root recovery path.
 6. **The multi-root recovery branch (`MainWindow.cs:189-260`) will not be verified.** It is

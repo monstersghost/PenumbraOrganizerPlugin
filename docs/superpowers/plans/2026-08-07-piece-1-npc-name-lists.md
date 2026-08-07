@@ -13,7 +13,9 @@
 ## Global Constraints
 
 - **This is not a proven crash fix and must not be described as one** in code comments, release notes, or commit messages. What is established: resetting the large list stops the observed crash, and the mechanism is unknown. Justify the work on correctness and classification quality.
-- **No `Regex` in `NpcNameMatcher`.** Enforced by an architecture test in Task 3, so the giant alternation cannot return by accident.
+- **No `Regex` in `NpcNameMatcher`.** Task 3's test proves only that no `Regex` is *stored in a field* — a method-local `new Regex(...)` would pass it. The real regression defence is the timing test beside it. Do not describe the architecture test as stronger than that.
+- **`NpcNameMatch.Name` changes meaning.** The regex returned the text as it appeared in the mod title; the index returns the list's canonical spelling. Nothing consumes it today (`ModTypeClassifier` uses only `.Kind`), but the spec's entry-pruning argument turns on exactly this, so it must be recorded rather than discovered.
+- **Case folding moves from culture-sensitive to ordinal.** `RegexOptions.IgnoreCase` without `CultureInvariant` used the current culture; the index uses `OrdinalIgnoreCase` throughout. This diverges for Turkish dotted/dotless I. It is an improvement, and it is a third behaviour change.
 - **The epoch of behaviour change is deliberate and documented.** Two semantics change: Rune-based tokenization (fixes inconsistent splitting of non-BMP characters) and separator loosening (`Y'shtola` will also match `Y-shtola`). Both must be asserted by tests, not discovered.
 - **Category precedence stays NPC, then Boss, then Enemy**, matching `Match` today. `SubCategoryFor` and every caller downstream are unchanged.
 - **The scraped-list toggle ships disabled.** It is gated on reproducing the crash and verifying the new matcher in-game against a full 20,115-name list. That gate is a release decision, not a task here.
@@ -25,7 +27,7 @@
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin/Organizer/Classification/NpcNameMatcher.cs`
-- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/Classification/NpcNameMatcherTests.cs` (create if absent)
+- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/Classification/NpcNameMatcherTests.cs` — **this file already exists and holds 13 tests. APPEND to it. Do not create, do not overwrite.** Overwriting deletes regression guards including `Match_RegexMetacharactersInName_DoNotBreakMatching` and `Match_UnicodeBoundary_RejectsAdjacentLetterOrDigit`, which are exactly what Step 5's "no existing test may fail" gate relies on. All 13 pass under the new implementation.
 
 **Interfaces:**
 - Consumes: nothing.
@@ -33,15 +35,20 @@
 
 - [ ] **Step 1: Write the semantics tests, including the two deliberate changes**
 
+Append these into the existing class in the existing file, which is already in
+`namespace PenumbraOrganizer.Plugin.Tests.Organizer.Classification`. Add a `Make` helper only if
+one is not already present.
+
 ```csharp
-public class NpcNameMatcherTests
-{
     private static NpcNameMatcher Make(string[]? npcs = null, string[]? enemies = null, string[]? bosses = null) =>
         new(npcs ?? [], enemies ?? [], bosses ?? []);
 
     [Fact]
     public void Match_IsCaseInsensitive()
-        => Assert.NotNull(Make(npcs: ["Y'shtola"]).Match("YSHTOLA hair"));
+        // The apostrophe matters: the list entry is "Y'shtola", so the mod title must contain one
+        // too. "YSHTOLA" would fail against BOTH implementations - the old regex matches an escaped
+        // literal, and the new tokenizer splits on the apostrophe so the bucket key is "Y".
+        => Assert.NotNull(Make(npcs: ["Y'shtola"]).Match("Y'SHTOLA hair"));
 
     [Fact]
     public void Match_RequiresWholeTokenBoundaries_NotSubstrings()
@@ -67,11 +74,22 @@ public class NpcNameMatcherTests
     }
 
     [Fact]
-    public void Match_LongestIsByTokenCount_ThenLength()
+    public void Match_PrefersMoreTokensOverFewer()
     {
-        // Both are two tokens; the longer string wins the tie-break.
-        var m = Make(npcs: ["Foo Bar", "Foo Barbara"]);
-        Assert.Equal("Foo Barbara", m.Match("A Foo Barbara Thing")!.Name);
+        // Three tokens beats two at the same start position.
+        var m = Make(npcs: ["Alka Zolka", "Alka Zolka Junior"]);
+        Assert.Equal("Alka Zolka Junior", m.Match("Alka Zolka Junior Hair")!.Name);
+    }
+
+    [Fact]
+    public void Match_CategoryOrderBeatsPosition()
+    {
+        // THE regression guard for this rewrite. The regex version ran three regexes in category
+        // order, so an NPC anywhere beat a Boss anywhere. A position-first loop would answer Boss
+        // here, and with 679 bosses against 133 NPCs in the shipped list that would silently
+        // reclassify a lot of mods.
+        var m = Make(npcs: ["Y'shtola"], bosses: ["Titan"]);
+        Assert.Equal(NpcNameKind.Npc, m.Match("Titan Slaying Y'shtola")!.Kind);
     }
 
     [Fact]
@@ -100,13 +118,19 @@ public class NpcNameMatcherTests
     }
 
     [Fact]
-    public void Match_DeliberateChange_TokenizesByRuneNotChar()
+    public void Match_DeliberateChange_NonBmpLettersAreLetters()
     {
-        // NEW behaviour. char.IsLetterOrDigit works on UTF-16 units and mishandles non-BMP
-        // characters; mod titles here routinely contain emoji. A non-BMP char is a separator,
-        // consistently, rather than splitting into two unpaired surrogates.
+        // NEW behaviour, and it is a TIGHTENING, not a loosening. An earlier draft of this plan
+        // asserted the opposite using an emoji, which proves nothing: an emoji is not a letter or
+        // digit under either implementation, so both treat it as a separator and both match.
+        //
+        // The only inputs where char-vs-Rune actually diverge are non-BMP characters that ARE
+        // letters or digits, such as U+1D400 (MATHEMATICAL BOLD CAPITAL A). The old regex tests
+        // each UTF-16 surrogate, neither of which is \p{L}, so it sees a boundary and matches.
+        // Rune sees a letter, so the character joins the token and "Zenos" is no longer a whole
+        // token. New behaviour is correct; old behaviour was an accident of UTF-16.
         var m = Make(npcs: ["Zenos"]);
-        Assert.NotNull(m.Match("\U0001F600 Zenos \U0001F600"));
+        Assert.Null(m.Match("\U0001D400Zenos"));
     }
 
     [Fact]
@@ -125,7 +149,15 @@ public class NpcNameMatcherTests
 dotnet test PenumbraOrganizer.Plugin.Tests --filter "NpcNameMatcherTests"
 ```
 
-Expected: most pass (they describe existing behaviour), and the two named `DeliberateChange` tests **fail**. That is the point — they are the specification of what this task changes. Record the actual output.
+Expected, precisely:
+
+- The **13 existing tests** in this file pass, as they do today.
+- Most new tests pass, because they describe behaviour the regex version already has.
+- **`Match_DeliberateChange_SeparatorsAreInterchangeable` fails.** The old regex matches the escaped literal `Y'shtola` only.
+- **`Match_DeliberateChange_NonBmpLettersAreLetters` fails.** The old regex sees two non-letter surrogates, finds a boundary, and matches; the assertion is `Assert.Null`.
+- **`Match_CategoryOrderBeatsPosition` passes**, because the regex version is already category-first. It is a regression guard for the rewrite, not a new behaviour.
+
+Record the actual output. If anything else fails, a test is wrong — stop and report rather than editing the implementation to suit it.
 
 - [ ] **Step 3: Replace the implementation**
 
@@ -206,20 +238,38 @@ public sealed class NpcNameMatcher
         if (tokens.Length == 0)
             return null;
 
-        for (var start = 0; start < tokens.Length; start++)
+        // CATEGORY ORDER IS THE OUTER LOOP. This is not a style choice.
+        //
+        // The regex version ran three separate regexes in category order, so any NPC match
+        // anywhere in the title beat any Boss match anywhere. Scanning token positions outermost
+        // instead would make the earliest-positioned name win regardless of category:
+        // "Titan Slaying Y'shtola" would classify as Boss rather than NPC. With 679 bosses
+        // against 133 NPCs in the shipped list, boss tokens usually appear first, so that would
+        // silently reclassify a large number of mods into different folders.
+        foreach (var kind in (ReadOnlySpan<NpcNameKinds>)[NpcNameKinds.Npc, NpcNameKinds.Boss, NpcNameKinds.Enemy])
         {
-            if (!_byFirstToken.TryGetValue(tokens[start], out var candidates))
-                continue;
-
-            foreach (var candidate in candidates)
+            for (var start = 0; start < tokens.Length; start++)
             {
-                if (MatchesAt(tokens, start, candidate.Tokens))
-                    return new NpcNameMatch(candidate.Display, Resolve(candidate.Kinds));
+                if (!_byFirstToken.TryGetValue(tokens[start], out var candidates))
+                    continue;
+
+                foreach (var candidate in candidates)
+                {
+                    if (candidate.Kinds.HasFlag(kind) && MatchesAt(tokens, start, candidate.Tokens))
+                        return new NpcNameMatch(candidate.Display, ToKind(kind));
+                }
             }
         }
 
         return null;
     }
+
+    private static NpcNameKind ToKind(NpcNameKinds kind) => kind switch
+    {
+        NpcNameKinds.Npc => NpcNameKind.Npc,
+        NpcNameKinds.Boss => NpcNameKind.Boss,
+        _ => NpcNameKind.Enemy,
+    };
 
     private static bool MatchesAt(string[] modTokens, int start, string[] nameTokens)
     {
@@ -234,12 +284,6 @@ public sealed class NpcNameMatcher
 
         return true;
     }
-
-    // Same precedence the regex version applied by checking NPC, then Boss, then Enemy in order.
-    private static NpcNameKind Resolve(NpcNameKinds kinds) =>
-        kinds.HasFlag(NpcNameKinds.Npc) ? NpcNameKind.Npc
-        : kinds.HasFlag(NpcNameKinds.Boss) ? NpcNameKind.Boss
-        : NpcNameKind.Enemy;
 
     // Maximal runs of letters or digits, iterated by Rune rather than char: char.IsLetterOrDigit
     // works on UTF-16 code units and mishandles anything outside the BMP, and mod titles here
@@ -405,10 +449,13 @@ public class NpcNameMatcherScaleTests
     [Fact]
     public void Build_And_MatchAtFullWikiScale_CompletesQuickly()
     {
-        // 25,000 names, above the 20,115 a full scrape produces. The old implementation needed
-        // ~240ms to build and ~4s of JIT on first match at this scale; this asserts a budget
-        // generous enough not to be flaky on CI but tight enough to catch a return to that shape.
-        var names = Enumerable.Range(0, 25_000).Select(i => $"Synthetic Name {i}").ToArray();
+        // 25,000 names, above the 20,115 a full scrape produces.
+        //
+        // The FIRST token must vary. "Synthetic Name {i}" puts all 25,000 into a single bucket,
+        // which is the exact opposite of the real distribution (9,886 buckets, median 1, max 185)
+        // and turns every Match into a linear scan of 25,000 candidates. That measures nothing
+        // useful and would likely blow this test's own budget.
+        var names = Enumerable.Range(0, 25_000).Select(i => $"Synth{i} Name {i}").ToArray();
 
         var sw = Stopwatch.StartNew();
         var matcher = new NpcNameMatcher(names, [], []);
@@ -416,7 +463,7 @@ public class NpcNameMatcherScaleTests
 
         sw.Restart();
         for (var i = 0; i < 2_000; i++)
-            matcher.Match($"Some Mod About Synthetic Name {i} And Things");
+            matcher.Match($"Some Mod About Synth{i} Name {i} And Things");
         var matched = sw.ElapsedMilliseconds;
 
         Assert.True(built < 2_000, $"build took {built}ms");
@@ -424,14 +471,14 @@ public class NpcNameMatcherScaleTests
     }
 
     [Fact]
-    public void NpcNameMatcher_DoesNotUseRegex()
+    public void NpcNameMatcher_StoresNoRegexState()
     {
-        // The giant compiled alternation must not come back by accident. Checking the referenced
-        // types rather than the source text means a using-directive change cannot defeat it.
-        var type = typeof(NpcNameMatcher);
-        var referenced = type.Assembly.GetTypes()
-            .Where(t => t.Namespace == type.Namespace && t.Name.Contains("NpcName"))
-            .SelectMany(t => t.GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
+        // Named for what it actually proves. It inspects FIELD TYPES, so it catches a stored
+        // Regex - the shape that caused the original problem - but a method-local `new Regex(...)`
+        // or a static `Regex.IsMatch` call would pass. The real defence against a return to
+        // pattern matching at scale is the timing test above, not this.
+        var referenced = typeof(NpcNameMatcher)
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
             .Select(f => f.FieldType.FullName ?? "");
 
         Assert.DoesNotContain(referenced, n => n.Contains("System.Text.RegularExpressions"));
@@ -509,8 +556,13 @@ public void StaticList_ContainsBothScionsAndPrimals()
 
 In `Plugin.cs`, beside the existing `ReadEmbeddedNpcNameSeed`:
 
+**`public`, not `internal`.** There is no `InternalsVisibleTo` anywhere in this repo — verified — so
+an `internal` accessor is unreachable from the test project and Step 2's test will not compile. The
+neighbouring `ReadEmbeddedNpcNameSeed` is `internal` and has no test, which is why nobody has hit
+this before. Do not add `InternalsVisibleTo` as a side effect of this task.
+
 ```csharp
-internal static string ReadEmbeddedStaticNpcNameList()
+public static string ReadEmbeddedStaticNpcNameList()
 {
     var assembly = typeof(Plugin).Assembly;
     const string resourceName = "PenumbraOrganizer.Plugin.Organizer.NpcNames.npc-name-list-static.json";
@@ -543,7 +595,14 @@ git commit -m "feat: ship the curated static NPC name list as an embedded resour
 - Modify: `PenumbraOrganizer.Plugin/Organizer/NpcNames/NpcNameRefreshService.cs`
 - Modify: `PenumbraOrganizer.Plugin/Configuration.cs`
 - Modify: `PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanProcessor.cs`, `IndexProcessor.cs`
+- Modify: `PenumbraOrganizer.Plugin/LibraryWork/ScanJob.cs`, `IndexJob.cs` — they construct the processors and must pass the new arguments
+- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` — the `MigrateLegacyList` call site, and `NpcNameListPath` if it becomes unused
 - Test: `PenumbraOrganizer.Plugin.Tests/Organizer/NpcNames/NpcNameListStoreTests.cs`
+- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/NpcNames/NpcNameRefreshServiceTests.cs`
+
+An earlier draft's prose described changes to `ScanJob`, `IndexJob` and `Plugin.cs` while omitting
+all three from this list and from the `git add`. The plan would have described edits its own commit
+excluded.
 
 **Interfaces:**
 - Consumes: `ReadEmbeddedStaticNpcNameList()` (Task 4), `NpcNameMatcher` (Task 1).
@@ -620,11 +679,88 @@ public void LoadForMatching_CorruptScrapedFile_DegradesToStaticWithAWarning()
 
 `MigrateLegacyList(string configDir)` implements the four-case table from the spec: legacy-only renames; both-present leaves both and logs; neither or scraped-only is a no-op. Wrap the rename in `try`/`catch (IOException or UnauthorizedAccessException)` and degrade to a warning — a failed migration must not prevent the plugin loading.
 
-`LoadForMatching(string configDir, bool useScraped)` parses the embedded static list, and when `useScraped` is true additionally parses `npc-name-list-scraped.json`, unions the three name collections, and honours `Excluded` from the scraped document. A malformed or oversized scraped file degrades to static-only with a warning, reusing the `MaxSafeNameCount` guard already in this file.
+`LoadForMatching(string configDir, bool useScraped)` parses the embedded static list, and when
+`useScraped` is true additionally parses `npc-name-list-scraped.json` and unions the three name
+collections.
+
+**Every cell of the matrix is defined. Do not leave any to judgement:**
+
+| Scraped file state | `useScraped` | Behaviour |
+|---|---|---|
+| any | `false` | static only; the scraped file is not opened, not created, not touched |
+| missing | `true` | static only, no warning. **Do not write a seed file** — `Load`'s existing missing-file branch does exactly that, which would create the file the migration table assumes is absent |
+| `Ok`, within cap | `true` | union of static and scraped |
+| `Ok`, over cap | `true` | **warn only, do not rewrite** — see below |
+| `MalformedJson` | `true` | static only, warning naming the file |
+| `UnsupportedVersion` | `true` | static only, warning naming the file |
+
+**The oversize guard must NOT be reused as-is.** `MaxSafeNameCount` is 2,000 and the scraped list
+this feature exists to load is ~20,115 names, so the existing path would trip on every single
+opted-in load — and it does not merely warn: it copies the file to `.oversized-<timestamp>.json`
+and **overwrites the original with the seed** (`NpcNameListStore.cs:51-54`). Reusing it would
+silently destroy the file the refresh just wrote, every time, for a list the user deliberately
+enabled.
+
+For the opted-in path, add a separate, higher ceiling (25,000, above a full scrape) and make
+exceeding it **warn and fall back in memory only**, writing nothing. The 2,000 guard stays exactly
+as it is on the legacy `Load` path, which 0.5.3.1 relies on.
+
+**`Excluded` applies to the scraped names only**, not to the static list. The static list is
+curated and the user did not choose its contents through the refresh UI; letting a stale exclusion
+silently remove `Shiva` (present in both `Enemies` and `Bosses`) from the bundled list would be
+surprising. State this in a comment.
+
+**Union duplicates are harmless.** `Sanitize` de-dups within an array but not across, so a name in
+static-NPCs and scraped-Bosses appears twice; the matcher merges them into one entry with both
+flags. No de-dup pass is needed.
+
+**Two warnings can occur at once** (migration failed, and the scraped file is corrupt). Join them
+with a space into the single `Warning` slot rather than dropping one.
 
 `Configuration` gains `public bool UseScrapedNpcNameList { get; set; }` — default `false`.
 
 `ScanProcessor` and `IndexProcessor` change their `Prepare` to call `LoadForMatching(configDir, useScraped)`; both take the two values through their constructors, which `ScanJob` and `IndexJob` supply from `Plugin.Config` on the framework thread.
+
+**`MigrateLegacyList` needs a production call site, and this is the step that gives it one.** Without
+it every migration test in Step 1 can pass while the plugin never migrates anything. Call it once
+during plugin construction, after the config directory is known and **before any library work can be
+admitted**, so no scan or index build can read the lists first:
+
+```csharp
+// In Plugin's constructor, near the other config-directory setup.
+var migrationWarning = Organizer.NpcNames.NpcNameListStore.MigrateLegacyList(
+    PluginInterface.ConfigDirectory.FullName);
+if (migrationWarning is not null)
+    Log.Warning(migrationWarning);
+```
+
+`MigrateLegacyList` returns `string?` so a failed rename surfaces without throwing during plugin
+construction, which would take the whole plugin down over a diagnostic concern.
+
+**The scraped-list opt-in is gated in the backend, not only in the UI.** Add to `Configuration`:
+
+```csharp
+public bool UseScrapedNpcNameList { get; set; }
+```
+
+and, alongside it, a compile-time feature gate:
+
+```csharp
+// 0.6.0 ships with the scraped list unavailable: the crash whose correlation motivated this work
+// has not been reproduced, so nothing may load a 20,000-name list yet. Flipping this to true is a
+// deliberate release decision, made after that verification, not a config edit.
+internal const bool ScrapedNpcListFeatureEnabled = false;
+```
+
+Every consumer reads the **conjunction**, never the config value alone:
+
+```csharp
+var useScraped = Configuration.ScrapedNpcListFeatureEnabled && Config.UseScrapedNpcNameList;
+```
+
+This matters because greying out a checkbox does not enforce anything. A `true` left in config by
+testing or hand-editing would otherwise load the full list while the UI claims the feature is off,
+which breaks the one guarantee this release makes.
 
 - [ ] **Step 3: Refresh writes a snapshot, not a merge**
 
@@ -634,13 +770,55 @@ Add:
 
 ```csharp
 [Fact]
-public void Refresh_ReplacesRatherThanGrowing()
+public async Task Refresh_ReplacesRatherThanGrowing()
 {
-    // Two refreshes returning the same wiki data must not double the file.
+    // The unbounded growth this whole piece exists to stop. Two refreshes returning identical
+    // wiki data must leave the file the same size, not double it.
+    var dir = MakeTempDir();
+    var path = Path.Combine(dir, "npc-name-list-scraped.json");
+    var service = MakeServiceReturning(npcs: ["Alpha", "Beta"], enemies: [], bosses: []);
+
+    await service.RefreshAsync(path, SeedJson, CancellationToken.None);
+    var afterFirst = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
+
+    await service.RefreshAsync(path, SeedJson, CancellationToken.None);
+    var afterSecond = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
+
+    Assert.Equal(afterFirst.NPCs.Count, afterSecond.NPCs.Count);
+    Assert.Equal(["Alpha", "Beta"], afterSecond.NPCs.Order());
+}
+
+[Fact]
+public async Task Refresh_DropsNamesTheWikiNoLongerReturns()
+{
+    // The other half of snapshot semantics, and the direction MergeAdditive could never do.
+    var dir = MakeTempDir();
+    var path = Path.Combine(dir, "npc-name-list-scraped.json");
+
+    await MakeServiceReturning(npcs: ["Alpha", "Beta"], [], []).RefreshAsync(path, SeedJson, CancellationToken.None);
+    await MakeServiceReturning(npcs: ["Alpha"], [], []).RefreshAsync(path, SeedJson, CancellationToken.None);
+
+    Assert.Equal(["Alpha"], NpcNameListCodec.Parse(File.ReadAllText(path)).Data!.NPCs);
 }
 ```
 
-with the fake scraper the existing `NpcNameRefreshServiceTests` already uses.
+using the fake scraper the existing `NpcNameRefreshServiceTests` already provides.
+
+**Three existing behaviours change with snapshot semantics and each needs handling here, not
+discovering later:**
+
+- **`RefreshAsync_NeverRemovesExistingNames` (`NpcNameRefreshServiceTests.cs:101`) exists to pin
+  `MergeAdditive` and MUST now fail.** Delete it and say so in the report — it pins behaviour this
+  task deliberately removes. This is the one existing-test failure that is expected; anything else
+  failing means something is wrong.
+- **`AddedCount` (`NpcNameRefreshService.cs:44-46`)** is computed as merged-minus-existing per
+  category and becomes meaningless or negative under snapshots. Change it to report the count in
+  the new snapshot, and update the UI text that shows it from "+N" to a plain total.
+- **`LoadForRefresh` (`NpcNameRefreshService.cs:57-67`)** falls back to the **seed document** on a
+  missing or corrupt file. Under snapshot semantics that would inject bundled seed names into the
+  scraped file. It must fall back to an **empty document** instead: a refresh's output is the wiki's
+  contents, nothing else. `Excluded` is carried forward from the previous scraped file if one
+  parsed, and is otherwise empty.
 
 - [ ] **Step 4: Full suite, then commit**
 
