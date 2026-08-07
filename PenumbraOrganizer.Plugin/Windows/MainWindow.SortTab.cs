@@ -23,13 +23,17 @@ public sealed partial class MainWindow
         ImGui.BeginDisabled(!gates.CanStageProposals);
         DrawWrappingButtonRow(
         [
-            ("By Creator", () => _plugin.OrganizerState.SortByCreator(_creatorCanonicalizer.Canonicalize)),
-            ("By Mod Type", () => _plugin.OrganizerState.SortByModType()),
-            ("By Mod Type Detailed", () => _plugin.OrganizerState.SortByModTypeDetailed()),
-            ("By Type Then Creator", () => _plugin.OrganizerState.SortByTypeThenCreatorFlat(_creatorCanonicalizer.Canonicalize)),
-            ("By Type Then Creator (Detailed)", () => _plugin.OrganizerState.SortByTypeThenCreator(_creatorCanonicalizer.Canonicalize)),
-            ("By Creator Then Type", () => _plugin.OrganizerState.SortByCreatorThenTypeFlat(_creatorCanonicalizer.Canonicalize)),
-            ("By Creator Then Type (Detailed)", () => _plugin.OrganizerState.SortByCreatorThenType(_creatorCanonicalizer.Canonicalize)),
+            // Temporary: these seven buttons are what piece 2 Task 3 replaces with a dropdown and
+            // two checkboxes. They now route through the parameterised entry point, so the mapping
+            // below IS the legacy mapping table - splitNpc is true throughout because NPC
+            // subdivision used to be unconditional, and "Detailed" meant splitGear.
+            ("By Creator", () => Sort(Organizer.SortStrategy.CreatorOnly, splitGear: false)),
+            ("By Mod Type", () => Sort(Organizer.SortStrategy.TypeOnly, splitGear: false)),
+            ("By Mod Type Detailed", () => Sort(Organizer.SortStrategy.TypeOnly, splitGear: true)),
+            ("By Type Then Creator", () => Sort(Organizer.SortStrategy.TypeThenCreator, splitGear: false)),
+            ("By Type Then Creator (Detailed)", () => Sort(Organizer.SortStrategy.TypeThenCreator, splitGear: true)),
+            ("By Creator Then Type", () => Sort(Organizer.SortStrategy.CreatorThenType, splitGear: false)),
+            ("By Creator Then Type (Detailed)", () => Sort(Organizer.SortStrategy.CreatorThenType, splitGear: true)),
             ("Import Workbook", () => _fileDialogManager.OpenFileDialog(
                 "Import Workbook",
                 ".xlsx",
@@ -151,4 +155,8 @@ public sealed partial class MainWindow
             }
         }
     }
+
+    // Goes away with the button row it serves, when piece 2 Task 3 introduces SortPanel.
+    private int Sort(Organizer.SortStrategy strategy, bool splitGear) =>
+        _plugin.OrganizerState.Sort(strategy, splitGear, splitNpc: true, _creatorCanonicalizer.Canonicalize);
 }

@@ -35,40 +35,42 @@ public class OrganizerStateSortTests
 
     private static string Canon(string s) => s;
 
+    // The complete selection space: 4 strategies x splitGear x splitNpc. Seven of these sixteen are
+    // what the old buttons produced, and these expectations were CAPTURED from the seven SortBy*
+    // methods while they still existed rather than hand-written - hand-writing them invites getting
+    // the order wrong and then "fixing" the expectations until green, which destroys the guarantee.
+    // Mods is ordered by Name, not insertion order, and FinishProposals can rewrite paths after the
+    // sort, so the order below is observed output.
+    //
+    // Rows read: gear (Gear/Feet, by Ann), npc (NPC/Bosses, by Bob), unknown (no category, by Cy).
     [Theory]
-    [InlineData(SortStrategy.CreatorOnly, false, true)]
-    [InlineData(SortStrategy.TypeOnly, false, true)]
-    [InlineData(SortStrategy.TypeOnly, true, true)]
-    [InlineData(SortStrategy.TypeThenCreator, false, true)]
-    [InlineData(SortStrategy.TypeThenCreator, true, true)]
-    [InlineData(SortStrategy.CreatorThenType, false, true)]
-    [InlineData(SortStrategy.CreatorThenType, true, true)]
-    public void Sort_LegacyCombinations_MatchTheOldMethodExactly(
-        SortStrategy strategy, bool splitGear, bool splitNpc)
+    [InlineData(SortStrategy.CreatorOnly, false, false, "Ann/Gear Mod", "Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorOnly, false, true, "Ann/Gear Mod", "Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorOnly, true, false, "Ann/Gear Mod", "Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorOnly, true, true, "Ann/Gear Mod", "Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.TypeOnly, false, false, "Gear/Gear Mod", "NPC/Npc Mod", "Review/Unknown Mod")]
+    [InlineData(SortStrategy.TypeOnly, false, true, "Gear/Gear Mod", "NPC/Bosses/Npc Mod", "Review/Unknown Mod")]
+    [InlineData(SortStrategy.TypeOnly, true, false, "Gear/Feet/Gear Mod", "NPC/Npc Mod", "Review/Unknown Mod")]
+    [InlineData(SortStrategy.TypeOnly, true, true, "Gear/Feet/Gear Mod", "NPC/Bosses/Npc Mod", "Review/Unknown Mod")]
+    [InlineData(SortStrategy.TypeThenCreator, false, false, "Gear/Ann/Gear Mod", "NPC/Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.TypeThenCreator, false, true, "Gear/Ann/Gear Mod", "NPC/Bosses/Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.TypeThenCreator, true, false, "Gear/Feet/Ann/Gear Mod", "NPC/Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.TypeThenCreator, true, true, "Gear/Feet/Ann/Gear Mod", "NPC/Bosses/Bob/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorThenType, false, false, "Ann/Gear/Gear Mod", "Bob/NPC/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorThenType, false, true, "Ann/Gear/Gear Mod", "Bob/NPC/Bosses/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorThenType, true, false, "Ann/Gear/Feet/Gear Mod", "Bob/NPC/Npc Mod", "Cy/Unknown Mod")]
+    [InlineData(SortStrategy.CreatorThenType, true, true, "Ann/Gear/Feet/Gear Mod", "Bob/NPC/Bosses/Npc Mod", "Cy/Unknown Mod")]
+    public void Sort_ProducesTheExpectedPaths(
+        SortStrategy strategy, bool splitGear, bool splitNpc,
+        string expectedGear, string expectedNpc, string expectedUnknown)
     {
-        var viaOld = WithMods();
-        RunLegacyEquivalent(viaOld, strategy, splitGear);
-
-        var viaNew = WithMods();
-        viaNew.Sort(strategy, splitGear, splitNpc, Canon);
+        var state = WithMods();
+        state.Sort(strategy, splitGear, splitNpc, Canon);
 
         Assert.Equal(
-            viaOld.Mods.Select(m => m.ProposedPath),
-            viaNew.Mods.Select(m => m.ProposedPath));
+            [expectedGear, expectedNpc, expectedUnknown],
+            state.Mods.Select(m => m.ProposedPath));
     }
-
-    private static void RunLegacyEquivalent(OrganizerState s, SortStrategy strategy, bool splitGear) =>
-        _ = (strategy, splitGear) switch
-        {
-            (SortStrategy.CreatorOnly, _) => s.SortByCreator(Canon),
-            (SortStrategy.TypeOnly, false) => s.SortByModType(),
-            (SortStrategy.TypeOnly, true) => s.SortByModTypeDetailed(),
-            (SortStrategy.TypeThenCreator, false) => s.SortByTypeThenCreatorFlat(Canon),
-            (SortStrategy.TypeThenCreator, true) => s.SortByTypeThenCreator(Canon),
-            (SortStrategy.CreatorThenType, false) => s.SortByCreatorThenTypeFlat(Canon),
-            (SortStrategy.CreatorThenType, true) => s.SortByCreatorThenType(Canon),
-            _ => throw new ArgumentOutOfRangeException(nameof(strategy), (strategy, splitGear), null),
-        };
 
     [Theory]
     [InlineData(SortStrategy.TypeOnly, false)]

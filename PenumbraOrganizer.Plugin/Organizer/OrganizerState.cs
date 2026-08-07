@@ -193,9 +193,9 @@ public sealed class OrganizerState
     }
 
     /// <summary>
-    /// The single sort entry point. The seven <c>SortBy*</c> methods below are the legacy surface
-    /// this replaces; they remain only as the equivalence oracle for
-    /// <c>OrganizerStateSortTests</c> and go away once it is green.
+    /// The single sort entry point, replacing the seven <c>SortBy*</c> methods that preceded it.
+    /// Their behaviour is pinned by <c>OrganizerStateSortTests</c>, whose expectations were captured
+    /// from those methods while they still existed.
     /// </summary>
     /// <remarks>
     /// The two splits are independent of each other and both are ignored by
@@ -231,27 +231,6 @@ public sealed class OrganizerState
             _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, null),
         };
     }
-
-    public int SortByCreator(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), null));
-
-    public int SortByModType() =>
-        Sort(row => (TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory)), null));
-
-    public int SortByModTypeDetailed() =>
-        Sort(row => (TypeFolder(row.Category, row.SubCategory), null));
-
-    public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (TypeFolder(row.Category, row.SubCategory), KnownSegment(canonicalizeCreator(row.Author))));
-
-    public int SortByTypeThenCreatorFlat(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory)), KnownSegment(canonicalizeCreator(row.Author))));
-
-    public int SortByCreatorThenType(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, row.SubCategory)));
-
-    public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
-        Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory))));
 
     // Gear only: always the flat folder, ignoring any resolved slot subcategory. Every other
     // category keeps its normal subfolder behavior via GetFolder unchanged. Shared by every
