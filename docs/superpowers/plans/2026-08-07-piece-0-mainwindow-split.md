@@ -17,7 +17,7 @@
 - **Do not reorder any ImGui call.** Moving a method between files preserves ID-stack behaviour and `Begin`/`End` balance; reordering calls does not.
 - **Do not rename anything, change any access modifier, extract any helper, merge any duplicate, or fix anything noticed in passing.** If you spot a bug, write it down and leave it.
 - No test renders this code. The safety net is the compiler, diff review, and an in-game pass. That is why the rules above are absolute rather than advisory.
-- Baseline: **912 tests passing** on `main` at `263682b`. This piece adds none and must not change the count.
+- Baseline: **912 tests passing** on `main` at `2044227` (verified 2026-08-08, after the docs merge). Diff against that commit, not `263682b`: 0.5.3.1 changed `MainWindow.cs` in between, and including that change would obscure the byte-identical check. This piece adds none and must not change the count.
 
 ---
 
@@ -161,7 +161,7 @@ git commit -m "refactor: move recovery panel and shared widgets to partial files
 - [ ] **Step 1: Diff every moved method body**
 
 ```bash
-git diff 263682b..HEAD -- PenumbraOrganizer.Plugin/Windows/
+git diff 2044227..HEAD -- PenumbraOrganizer.Plugin/Windows/
 ```
 
 Every moved method must be byte-identical to its previous form. This is the real gate and the reason the forbidden list exists. Read it; do not skim it.
