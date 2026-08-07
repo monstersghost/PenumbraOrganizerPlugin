@@ -1,0 +1,92 @@
+using PenumbraOrganizer.Plugin.Windows;
+
+namespace PenumbraOrganizer.Plugin.Tests.Windows;
+
+public class HelpContentTests
+{
+    [Fact]
+    public void EveryTopicConstant_ResolvesInTheResource()
+    {
+        var missing = HelpTopics.All.Where(t => !Help.TryGet(t, out _)).Select(t => t.Id);
+        Assert.Empty(missing);
+    }
+
+    [Fact]
+    public void TopicsAreDiscoveredByReflection_NotAnEmptyList()
+    {
+        // HelpTopics.All is built by reflection, so a bug there would make every other test in this
+        // class pass vacuously over zero topics.
+        Assert.NotEmpty(HelpTopics.All);
+    }
+
+    [Fact]
+    public void EveryTopicHasATitle()
+        => Assert.All(HelpTopics.All, t => Assert.False(string.IsNullOrWhiteSpace(Help.Title(t))));
+
+    [Fact]
+    public void EveryTopicHasAtLeastOneContentField()
+    {
+        // short/body/step are each optional, but a topic with none of them is dead weight.
+        Assert.All(HelpTopics.All, t =>
+            Assert.True(Help.Short(t) is not null || Help.Body(t) is not null || Help.Step(t) is not null));
+    }
+
+    [Fact]
+    public void NoShortContainsANewlineOrExceedsTheLengthCap()
+    {
+        foreach (var t in HelpTopics.All)
+        {
+            var s = Help.Short(t);
+            if (s is null) continue;
+            Assert.DoesNotContain('\n', s);
+            Assert.True(s.Length <= 200, $"{t.Id} short is {s.Length} chars");
+        }
+    }
+
+    [Fact]
+    public void MissingResource_ThrowsWithAMessageNamingIt()
+    {
+        // A packaging bug, not a runtime condition - the same treatment NpcNameListStore gives its
+        // seed. The message has to name the resource, because that is the only clue a report from
+        // a user's log will carry.
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => Help.ReadEmbedded(typeof(Help).Assembly, "PenumbraOrganizer.Plugin.Resources.no-such-file.json"));
+
+        Assert.Contains("no-such-file.json", ex.Message);
+    }
+
+    [Fact]
+    public void TheRealResourceIsActuallyEmbedded()
+    {
+        // Guards the csproj entry specifically. Without it every accessor above returns null and
+        // the failure surfaces in-game as tooltips that never appear, with nothing in the log.
+        Assert.False(string.IsNullOrWhiteSpace(
+            Help.ReadEmbedded(typeof(Help).Assembly, Help.ResourceName)));
+    }
+
+    [Fact]
+    public void DuplicateIds_AreRejectedRatherThanSilentlyWinning()
+    {
+        // Dictionary construction would throw anyway, but with a message that names neither the
+        // file nor the id. Two entries for one control is a plausible merge outcome.
+        const string json = """
+            {"topics":[{"id":"a","title":"A","short":"x"},{"id":"a","title":"A again","short":"y"}]}
+            """;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Help.Parse(json, "test.json"));
+
+        Assert.Contains("test.json", ex.Message);
+        Assert.Contains("a", ex.Message);
+    }
+
+    [Fact]
+    public void EveryTopicIdIsUsedByAConstant_NotOrphanedInTheResource()
+    {
+        // The other direction: content written for an id no constant references can never be shown.
+        var declared = HelpTopics.All.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+        var inResource = Help.Parse(
+            Help.ReadEmbedded(typeof(Help).Assembly, Help.ResourceName), Help.ResourceName).Keys;
+
+        Assert.Empty(inResource.Where(id => !declared.Contains(id)));
+    }
+}

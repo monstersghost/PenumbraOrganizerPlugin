@@ -1,0 +1,34 @@
+{
+  "topics": [
+    {
+      "id": "sort.grouping",
+      "title": "Group by",
+      "short": "Chooses the folder structure proposed for every unprotected mod. Nothing moves until you press Apply on the Review Changes tab."
+    },
+    {
+      "id": "sort.split-gear",
+      "title": "Split gear by equipment slot",
+      "short": "Puts gear mods in Gear/Feet, Gear/Head and so on instead of a single Gear folder. Mods whose slot could not be identified stay in Gear."
+    },
+    {
+      "id": "sort.split-npc",
+      "title": "Split NPC mods by kind",
+      "short": "Puts NPC mods in NPC/NPCs, NPC/Bosses or NPC/Enemies. Turn it off to keep every NPC mod in one NPC folder."
+    },
+    {
+      "id": "sort.button",
+      "title": "Sort",
+      "short": "Works out a new folder for every unprotected mod and shows it on the Review Changes tab. Your library is not touched until you apply it."
+    },
+    {
+      "id": "sort.scraped-npc-list",
+      "title": "Also use the NPC list scraped from the wiki",
+      "short": "Recognises far more character names, at the cost of matching some very common words. Turned off in this version while we confirm it is safe."
+    },
+    {
+      "id": "sort.import-workbook",
+      "title": "Import Workbook",
+      "short": "Reads folder choices back from an exported spreadsheet, so you can plan a large reorganisation outside the game."
+    }
+  ]
+}
