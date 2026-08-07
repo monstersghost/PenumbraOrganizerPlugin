@@ -123,14 +123,59 @@ So matching goes from "test against 20,115 alternatives" to "one dictionary look
 one comparison".
 
 ```csharp
-sealed record NpcNameEntry(string[] Tokens, NpcNameKind Kind);
+[Flags]
+enum NpcNameKinds { None = 0, Npc = 1, Enemy = 2, Boss = 4 }
 
-// first token (normalized) -> entries starting with it, longest first
+sealed record NpcNameEntry(string[] Tokens, NpcNameKinds Kinds);
+
+// first token (normalized) -> entries starting with it, in the ordering defined below
 Dictionary<string, NpcNameEntry[]>
 ```
 
 Matching a mod name: normalize, tokenize once, then for each token position look up the bucket and
-compare candidates in order, returning the first (therefore longest) whole-token match.
+compare candidates in order, returning the first whole-token match.
+
+#### Bucket ordering is defined, not implied
+
+"Longest first" is ambiguous, and the answer has to be deterministic across runtimes. Entries within
+a bucket are sorted by:
+
+1. **Descending token count** — a match consumes tokens, so the longest match is the one consuming
+   most of them. `Alka Zolka the Slayer` must be tried before `Alka Zolka`.
+2. **Descending normalized character length** — tie-break for equal token counts.
+3. **Ordinal comparison of the normalized name** — a total order, so the result never depends on the
+   input file's order or on sort stability.
+
+With this ordering, "the first match found is the longest match" is a property of the sort rather
+than an accident, and cases like `Foo-Bar` / `Foo Bar` / `Foo Bax` resolve identically every run.
+
+#### Category membership is merged, not duplicated
+
+848 of 857 bosses also appear in Enemies and 372 names appear in both NPCs and Enemies, so the same
+normalized name would otherwise occupy several slots in one bucket and precedence would fall out of
+sort order by accident.
+
+Instead, construction merges them:
+
+```
+Bahamut -> Boss | Enemy
+```
+
+One entry, one comparison. `Match` then resolves the flags through the existing precedence rule
+(NPC, then Boss, then Enemy) and returns a single `NpcNameKind`, so `SubCategoryFor` and every
+caller downstream are unchanged. Precedence becomes structural rather than incidental.
+
+#### Tokenization is Unicode, not ASCII
+
+Tokens are maximal runs where `Rune.IsLetterOrDigit` is true, iterating by `Rune` rather than by
+`char`. This matters: `char.IsLetterOrDigit` works on UTF-16 code units and mishandles anything
+outside the BMP, and mod titles in this community routinely contain emoji and decorative symbols.
+The name list itself already contains non-Latin entries such as `ベア`.
+
+This is a third deliberate behaviour change, alongside the separator loosening below: today's regex
+`\p{L}\p{N}` classes are also applied per UTF-16 unit, so a non-BMP character currently splits
+inconsistently. Rune-based tokenization fixes that, and it is listed here so the difference is
+recorded rather than found later.
 
 **A trie is not warranted.** It was considered and rejected on the data: at mean 2.19 tokens and a
 median bucket of one, there is no prefix depth for it to exploit. The dictionary gets the entire
@@ -151,7 +196,9 @@ These are current behaviour and each needs a test that fails if it is lost:
   mod name go through the same function.
 - **Category precedence stays NPC, then Boss, then Enemy**, as `Match` does today.
 
-One behaviour **does** change, and it is a deliberate loosening. Today `Y'shtola` is a single regex
+Two behaviours **do** change deliberately. The first is Rune-based tokenization, described above.
+
+The second is a loosening around separators. Today `Y'shtola` is a single regex
 alternative matching that exact text. Under token matching, `Y'shtola` tokenizes to `y` + `shtola`,
 so `Y-shtola` and `Y shtola` would also match. This is an improvement for real mod titles, which use
 inconsistent punctuation, and it must be stated rather than discovered. The list carries both
@@ -177,13 +224,21 @@ in one entry, and `Leveilleur` catches a mod titled "Leveilleur Twins" that no g
 Existing installs have `npc-name-list.json`, possibly 20,000 names, possibly already replaced by
 0.5.3.1's guard.
 
-On first run of the new version:
+On first run of the new version, by case, and **nothing is ever overwritten or deleted**:
 
-- If `npc-name-list.json` exists, rename it to `npc-name-list-scraped.json`. Its contents become the
-  opt-in scraped list, which is off by default, so an oversized file stops affecting anyone
-  immediately without deleting anything.
-- If it does not exist, nothing to do. The static list is embedded.
-- `npc-name-list.json` is never written again.
+| Legacy `npc-name-list.json` | `npc-name-list-scraped.json` | Action |
+|---|---|---|
+| exists | absent | rename legacy to scraped |
+| exists | exists | **leave both untouched**, prefer scraped, log a warning naming the un-migrated legacy file |
+| absent | exists | no-op |
+| absent | absent | no-op; the static list is embedded |
+
+Both files existing is reachable through a partial or interrupted migration, a downgrade-then-upgrade
+cycle, or a user copying files by hand. Overwriting either would destroy data in exactly the
+situation where the user is least likely to have a copy. Cleanup of a stranded legacy file is left as
+a later decision rather than done silently here.
+
+`npc-name-list.json` is never written again.
 
 The 0.5.3.1 oversize guard applies to the scraped list when opted in, unchanged.
 
@@ -205,10 +260,26 @@ touching classification. It gets its own spec.
 ## Testing
 
 **Matcher equivalence.** The strongest available guard against a semantic regression: build the old
-regex matcher and the new index matcher from the same list, run both over a corpus of mod names, and
-assert identical results. The corpus is the real static list's names embedded in realistic titles,
-plus non-matching decorative titles. This is a temporary test that is deleted with the old matcher,
-and it is worth writing precisely because it can catch what unit tests will not.
+regex matcher and the new index matcher from the same list and run both over a corpus of mod names.
+
+Global equality is **not** the assertion, because this change deliberately loosens two things. The
+test uses two corpora with different rules:
+
+| Corpus | Assertion |
+|---|---|
+| **Legacy-equivalence** — the static list's names in realistic mod titles, plus decorative non-matching titles, all with conventional punctuation | old and new must agree exactly |
+| **Intentional-difference** — separator variants (`Y-shtola`, `Y shtola`) and non-BMP characters adjacent to names | old and new must differ, in exactly the documented way |
+
+Splitting it this way stops a future test author from either weakening the equality assertion until
+it passes, or being unable to tell a real regression from the two known differences. Both corpora are
+temporary and are deleted along with the old matcher.
+
+**Allocation behaviour.** Removing the regex is not automatically a win if matching allocates
+heavily: a scan calls `Match` once per mod, so a normalize-plus-split-plus-token-array per call is
+2,242 allocations' worth of transient garbage on a large library, on the background thread. The
+target is "allocate while indexing, allocate little while matching". A zero-allocation implementation
+is not required for this change, but per-match allocation is measured and recorded rather than
+assumed, so a later regression has a baseline to fail against.
 
 **Semantics** (one test each, all listed above): case-insensitivity, `_Zenos_` matching, longest-match
 preference, apostrophe and NFC folding, NPC-over-Boss-over-Enemy precedence, and the newly-loosened
