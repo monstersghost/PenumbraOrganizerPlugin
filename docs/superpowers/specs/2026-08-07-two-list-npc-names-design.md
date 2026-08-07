@@ -298,10 +298,23 @@ no-op; the renamed file is not consulted while the toggle is off.
 
 ## Sequencing
 
-1. **Matcher rewrite**, static list only, toggle absent. Ships as the default experience.
-2. **Migration and the scraped-list plumbing**, toggle present but disabled.
+This is piece 1 of the UI overhaul (`2026-08-07-ui-overhaul-umbrella-design.md`) and ships in that
+release. Two internal steps ship; two do not.
+
+1. **Matcher rewrite**, static list only, toggle absent. Ships as the default experience. **Ungated.**
+2. **Migration and the scraped-list plumbing**, toggle present but disabled. **Ungated.**
 3. **Reproduce the crash** with the old matcher and a full list, then verify the new matcher against
-   the same list in-game. Only this justifies enabling the toggle.
-4. **Match-strength model**, separately specced.
+   the same list in-game. **This is the only gate**, and it gates only the toggle from step 2.
+4. **Match-strength model**, separately specced. Not part of this release.
 
 Steps 1 and 2 are safe to ship without step 3, because with the toggle off nobody loads a large list.
+
+**The gate is on the toggle, not on this piece.** Stating it that way matters: the static list and
+the new matcher are what actually fix users' crashes and the silently broken Detailed sort, and
+holding them behind a crash reproduction of unknown duration would withhold the fix to preserve a
+disabled checkbox.
+
+Against the rest of the overhaul, this piece is ordered loosely, for the same reason. But it must
+ship in the **same release** as piece 2: piece 2 adds "split NPC mods by kind", and this piece
+decides which mods are NPCs at all. With the 20,000-name list in play nearly everything classifies
+as NPC, so shipping piece 2 without this one would make its new checkbox look broken.
