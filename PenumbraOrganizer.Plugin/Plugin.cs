@@ -329,6 +329,29 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string NpcNameListPath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "npc-name-list.json");
 
+    /// <summary>
+    /// The curated NPC name list bundled with the plugin, and the default source for name matching.
+    /// </summary>
+    /// <remarks>
+    /// public, not internal: this repo has no InternalsVisibleTo, so an internal accessor is
+    /// unreachable from the test project. The neighbouring <see cref="ReadEmbeddedNpcNameSeed"/> is
+    /// internal and has no test, which is why nobody has hit this before.
+    /// <para>
+    /// The file must be saved WITHOUT a UTF-8 BOM. <c>NpcNameListCodec.Parse</c> never throws - it
+    /// reports <c>MalformedJson</c> - so a BOM here would not fail loudly. It would make the
+    /// bundled list silently unavailable and degrade every scan to no NPC names at all.
+    /// </para>
+    /// </remarks>
+    public static string ReadEmbeddedStaticNpcNameList()
+    {
+        var assembly = typeof(Plugin).Assembly;
+        const string resourceName = "PenumbraOrganizer.Plugin.Organizer.NpcNames.npc-name-list-static.json";
+        using var stream = assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     internal static string ReadEmbeddedNpcNameSeed()
     {
         var assembly = typeof(Plugin).Assembly;

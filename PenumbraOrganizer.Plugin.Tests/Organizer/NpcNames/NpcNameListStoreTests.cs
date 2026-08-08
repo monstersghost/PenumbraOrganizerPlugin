@@ -1,3 +1,4 @@
+using PenumbraOrganizer.Plugin;
 using PenumbraOrganizer.Plugin.Organizer.NpcNames;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer.NpcNames;
@@ -156,5 +157,51 @@ public class NpcNameListStoreTests
 
         Assert.NotNull(result.Warning);
         Assert.Equal(["Y'shtola"], result.Document.NPCs);
+    }
+
+    // ---- The bundled static list (piece 1 Task 4) ----
+
+    [Fact]
+    public void StaticList_LoadsFromTheEmbeddedResource_AndHasTheExpectedShape()
+    {
+        var json = Plugin.ReadEmbeddedStaticNpcNameList();
+        var parsed = NpcNameListCodec.Parse(json);
+
+        Assert.Equal(NpcNameListParseStatus.Ok, parsed.Status);
+        Assert.Equal(133, parsed.Data!.NPCs.Count);
+        Assert.Equal(15, parsed.Data.Enemies.Count);
+        Assert.Equal(679, parsed.Data.Bosses.Count);
+    }
+
+    [Fact]
+    public void StaticList_HasNoByteOrderMark()
+    {
+        // Parse never throws - it reports MalformedJson - so a BOM would not fail loudly. It would
+        // make the bundled list silently unavailable and leave every scan with no NPC names. This
+        // asserts the specific failure rather than trusting the shape test above to imply it.
+        Assert.False(Plugin.ReadEmbeddedStaticNpcNameList().StartsWith('﻿'));
+    }
+
+    [Fact]
+    public void StaticList_ContainsBothScionsAndPrimals()
+    {
+        var doc = NpcNameListCodec.Parse(Plugin.ReadEmbeddedStaticNpcNameList()).Data!;
+
+        Assert.Contains("Y'shtola", doc.NPCs);
+        Assert.Contains("Alphinaud", doc.NPCs);
+        Assert.Contains("Leveilleur", doc.NPCs);   // surname carries the whole family
+        Assert.Contains("Titan", doc.Bosses);
+        Assert.Contains("Shiva", doc.Bosses);
+    }
+
+    [Fact]
+    public void StaticList_IsWellUnderTheLegacyOversizeGuard()
+    {
+        // The curated list is the default, and the default must never trip the 2,000-name guard
+        // 0.5.3.1 added - if it did, every load would back it up and replace it with the seed.
+        var doc = NpcNameListCodec.Parse(Plugin.ReadEmbeddedStaticNpcNameList()).Data!;
+
+        Assert.True(doc.NPCs.Count + doc.Enemies.Count + doc.Bosses.Count
+                    < NpcNameListStore.MaxSafeNameCount);
     }
 }

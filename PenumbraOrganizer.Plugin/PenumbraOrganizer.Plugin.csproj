@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Organizer\NpcNames\npc-name-list-seed.json" />
+    <EmbeddedResource Include="Organizer\NpcNames\npc-name-list-static.json" />
     <EmbeddedResource Include="Resources\help-content.json" />
   </ItemGroup>
 
