@@ -1,12 +1,12 @@
 # Handoff: the 0.6.0 UI overhaul
 
-Written 2026-08-08. Read this before continuing the overhaul. Everything is on `main`, committed,
-nothing pushed.
+Written 2026-08-08, updated 2026-08-10. Read this before continuing the overhaul. Everything is on
+`main`, committed, nothing pushed.
 
 ## Where things stand
 
-`main` is at `5b81ba7`. **982 tests pass, build clean, zero warnings.** Verify that before
-believing anything below.
+`main` is at `c9f2f37`. **1011 tests pass, production build clean with zero warnings.** Verify that
+before believing anything below.
 
 The overhaul is six pieces. Build order is fixed by real dependencies:
 
@@ -17,47 +17,51 @@ The overhaul is six pieces. Build order is fixed by real dependencies:
 | Piece | What | State |
 |---|---|---|
 | 0 | MainWindow split | **Done**, `aa0ad69`, in-game verified |
-| 1 | NPC name lists + index matcher | Tasks 1-4 done. **Task 5 outstanding** |
-| 2 | Sort control consolidation | Tasks 1-2 done. **Tasks 3-4 outstanding, Task 3 blocked on piece 1 Task 5** |
-| 3 | Hover explanations | Not started |
+| 1 | NPC name lists + index matcher | **Done**, Task 5 at `7afb414`. Not in-game verified |
+| 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. Not in-game verified |
+| 3 | Hover explanations | Not started — **next** |
 | 4 | Help tab | Not started |
 | 5 | Guided first run | Not started |
+
+Pieces 1 and 2 are closed, so the ordering constraint below is spent. The next task is piece 3.
+
+## What is not verified in-game
+
+Penumbra's IPC only resolves inside the game, so nothing that touches it has been exercised. From
+pieces 1 and 2 specifically:
+
+- **The `MigrateLegacyList` call site** in the `Plugin` constructor. Every migration test passes
+  against a temp directory; that the constructor actually reaches it is unproven. This is the exact
+  trap the piece 1 plan called out.
+- **`ScanJob` / `IndexJob`** passing the new `(configDirectory, useScraped)` arguments — their
+  `Materialize()` bodies call `GetModListAdapter` and `GetChangedItemAdapterDictionary`.
+- **The whole `SortPanel`**, since ImGui only draws in a game frame. Worth checking specifically:
+  the two split checkboxes greying out under Creator, the staleness line appearing after a
+  selection change, and Import Workbook still opening its dialog now that it no longer shares the
+  old button row's disabled scope.
+
+## Three deliberate deviations from the plans, already reviewed and accepted
+
+- **`AddedCount` was renamed `NameCount`**, not merely redefined. The piece 1 plan said to change
+  its meaning and keep the name; a field called "Added" holding a snapshot total is a trap.
+- **`Configuration.ScrapedNpcListFeatureEnabled` is `public`**, not `internal` as the plan wrote.
+  No `InternalsVisibleTo` — the test asserting the feature ships disabled would not compile.
+- **`NpcNameRefreshService.RefreshAsync` kept its `embeddedSeedJson` parameter**, now used only for
+  default exclusions. The plan's "fall back to empty" would have broken a second existing test
+  beyond the one deletion it predicted. The bundled seed ships `"Excluded": []`, so production
+  behaviour is exactly what the plan specified.
+
+## One behaviour added that no plan specified
+
+Snapshot refresh replaces a category **only when its scrape completed cleanly**. `NpcWikiScraper`
+returns the names it gathered alongside a `FailureReason`, so replacing from a run that stopped
+early would delete every name past the failure point — a timeout on page 3 of 50 would silently
+discard 47 pages. A failed category now keeps what was on disk. Pinned by
+`Refresh_FailedCategory_KeepsWhatWasAlreadyOnDisk`.
 
 Plans live in `docs/superpowers/plans/2026-08-07-piece-*.md`, specs in
 `docs/superpowers/specs/2026-08-07-*.md`. All four plans have had both an internal and an external
 review pass, and the fixes from both are already folded in.
-
-## The one non-obvious ordering constraint
-
-**Piece 2 Task 3 cannot run before piece 1 Task 5.** `SortPanel` binds its scraped-list checkbox to
-`Configuration.UseScrapedNpcNameList` and `Configuration.ScrapedNpcListFeatureEnabled`, and piece 1
-Task 5 is what creates both. The piece 2 plan calls pieces 1 and 2 parallel; that is true only of
-its Tasks 1 and 2, which are already done.
-
-So the next task is **piece 1 Task 5**, then piece 2 Task 3, then Task 4, then pieces 3-5.
-
-## What piece 1 Task 5 involves
-
-The largest remaining unit. Read the plan section in full; the summary:
-
-- `MigrateLegacyList(configDir)` returning `string?`, implementing the four-case table
-  (legacy-only renames to `npc-name-list-scraped.json`; both-present leaves both; neither and
-  scraped-only are no-ops). Needs a **production call site** in the `Plugin` constructor, before any
-  library work is admitted. Without it every migration test passes while nothing ever migrates.
-- `LoadForMatching(configDir, useScraped)` with every cell of the matrix defined in the plan.
-- **Do not reuse `MaxSafeNameCount` (2,000) on the opted-in path.** It does not merely warn: it
-  backs the file up and overwrites it with the seed. The scraped list is ~20,115 names, so reusing
-  it would destroy the user's file on every opted-in load. Use a separate 25,000 ceiling that warns
-  and falls back in memory only.
-- Snapshot refresh semantics replacing `MergeAdditive` in `NpcNameRefreshService` — this is the
-  change that stops the unbounded growth.
-- `Configuration.UseScrapedNpcNameList` plus the compile-time `ScrapedNpcListFeatureEnabled = false`
-  gate. Consumers read the **conjunction**, never the config value alone.
-- Plumbing through `ScanProcessor`, `IndexProcessor`, `ScanJob`, `IndexJob`.
-
-**One existing test is expected to fail and must be deleted:**
-`RefreshAsync_NeverRemovesExistingNames` exists specifically to pin `MergeAdditive`. Anything else
-failing means something is wrong.
 
 ## Traps already hit, so you do not hit them again
 
@@ -74,9 +78,15 @@ there is a test asserting its absence. Do not re-copy from `docs/superpowers/spe
 stripping it again.
 
 **Deleting the seven `SortBy*` methods breaks more than `OrganizerState`.** It broke the sort
-buttons and 43 test call sites. Both are migrated; the buttons now route through
-`OrganizerState.Sort(...)` via a temporary private helper in `MainWindow.SortTab.cs` that piece 2
-Task 3 deletes along with the button row.
+buttons and 43 test call sites. Both were migrated, and the temporary helper that carried the
+buttons through the gap is gone along with the button row — `SortPanel` calls
+`OrganizerState.Sort(...)` directly now.
+
+**`Help.Tooltip` takes a `disabledReason` parameter; use it rather than a second `SetTooltip`.**
+ImGui binds `IsItemHovered` to the last submitted item, so two tooltip calls against one widget in
+one frame fight over the same window. Every control in `SortPanel` passes the reason through the
+parameter instead. The tooltip must still be called immediately after its widget and after any
+inner `EndDisabled`, which submits no item of its own.
 
 **Category order must stay the outer loop in `NpcNameMatcher.Match`.** A position-first scan flips
 `"Titan Slaying Y'shtola"` from NPC to Boss. With 679 bosses against 133 NPCs in the shipped list
@@ -107,6 +117,21 @@ expect it.
   Established: resetting the oversized list stops the observed crash. The mechanism is still unknown.
 - Release notes get written but **not published**. The maintainer reviews them first and says go.
   Short user-facing note plus a link to the full notes.
+
+## Known debt created by pieces 1 and 2
+
+- **`docs/HOW_SORTING_WORKS.md` is stale in three places** and was not in either plan's scope:
+  it still says you pick a strategy by clicking a button, still describes `NpcNameMatcher` as one
+  compiled alternation per category, and still points at `OrganizerState.SortBy*`. `USER_GUIDE.md`
+  was updated; this one was not.
+- **`NpcNameListStore.Load` and `NpcNameListCodec.MergeAdditive` have no production callers left**,
+  only tests. The piece 1 plan said explicitly to keep the 2,000-name guard on the `Load` path, so
+  both were left in place rather than deleted.
+- **`MainWindow.Widgets.cs`'s `DrawWrappingButtonRow` is now unused** — the sort button row was its
+  last caller. Left alone in case pieces 3-5 want it.
+- **Three xUnit analyzer warnings in the test project** (`ApplyPlannerTests.cs:306`,
+  `NpcNameMatcherEquivalenceTests.cs:63` and `:74`) predate this work and only surface on a
+  non-incremental build. The production project is at zero.
 
 ## Still open, unrelated to the critical path
 
