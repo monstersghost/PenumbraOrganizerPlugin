@@ -6,14 +6,13 @@ namespace PenumbraOrganizer.Plugin.Tests.LibraryWork;
 
 public class ScanProcessorTests
 {
-    private const string SeedJson =
-        """{"Version":1,"NPCs":["Zenos"],"Enemies":[],"Bosses":[],"Excluded":[]}""";
-
-    private static ScanProcessor NewProcessor(string? npcListPath = null)
+    // An empty config directory and the opt-in off, so the matcher is built from the bundled static
+    // list alone. "Zenos" below is in that list; the mod titles these tests use match nothing in it.
+    private static ScanProcessor NewProcessor(string? configDirectory = null)
     {
         var processor = new ScanProcessor(
-            npcListPath ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString(), "npc-name-list.json"),
-            SeedJson);
+            configDirectory ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()),
+            useScrapedNpcNameList: false);
         processor.Prepare(CancellationToken.None);
         return processor;
     }

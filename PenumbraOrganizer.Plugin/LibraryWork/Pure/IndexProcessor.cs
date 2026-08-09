@@ -11,23 +11,27 @@ namespace PenumbraOrganizer.Plugin.LibraryWork.Pure;
 /// </summary>
 public sealed class IndexProcessor : ILibraryWorkProcessor<IndexSeed, IndexedMod>
 {
-    private readonly string _npcNameListPath;
-    private readonly string _npcNameSeedJson;
+    private readonly string _configDirectory;
+    private readonly bool _useScrapedNpcNameList;
     private readonly List<string> _warnings = [];
 
     private NpcNameMatcher _npcNameMatcher = NpcNameMatcher.Empty;
 
-    public IndexProcessor(string npcNameListPath, string npcNameSeedJson)
+    /// <param name="useScrapedNpcNameList">
+    /// Already the conjunction of the config flag and the compile-time feature gate - IndexJob
+    /// resolves it on the framework thread. This class never reads Configuration itself.
+    /// </param>
+    public IndexProcessor(string configDirectory, bool useScrapedNpcNameList)
     {
-        _npcNameListPath = npcNameListPath;
-        _npcNameSeedJson = npcNameSeedJson;
+        _configDirectory = configDirectory;
+        _useScrapedNpcNameList = useScrapedNpcNameList;
     }
 
     public IReadOnlyList<string> Warnings => _warnings;
 
     public void Prepare(CancellationToken ct)
     {
-        var result = NpcNameListStore.Load(_npcNameListPath, _npcNameSeedJson);
+        var result = NpcNameListStore.LoadForMatching(_configDirectory, _useScrapedNpcNameList);
         if (result.Warning is not null)
             _warnings.Add(result.Warning);
         _npcNameMatcher = NpcNameListStore.BuildMatcher(result.Document);

@@ -66,6 +66,16 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(_mainWindow);
 
         Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+        // Runs here, before ScanWork or IndexWork exist and so before any library work can be
+        // admitted, because a scan or index build that read the lists first would see the
+        // pre-migration layout. Returns a warning rather than throwing: a failed rename must not
+        // take the whole plugin down.
+        var migrationWarning = Organizer.NpcNames.NpcNameListStore.MigrateLegacyList(
+            PluginInterface.ConfigDirectory.FullName);
+        if (migrationWarning is not null)
+            Log.Warning(migrationWarning);
+
         GetModListAdapterIpc = new Penumbra.Api.IpcSubscribers.GetModListAdapter(PluginInterface);
         SetModPathIpc = new Penumbra.Api.IpcSubscribers.SetModPath(PluginInterface);
         var operationsAdapter = new Organizer.Operations.PenumbraOperationsAdapter(PluginInterface);
@@ -274,7 +284,7 @@ public sealed class Plugin : IDalamudPlugin
         // AdmissionRejectionReason, which covers an active operation, a pending recovery, a
         // starting operation, AND (via the Task 8 gate) the other library coordinator.
         EnsureAdmitted();
-        ScanWork.Start(new ScanJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+        ScanWork.Start(new ScanJob(this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList));
     }
 
     /// <summary>
@@ -302,7 +312,7 @@ public sealed class Plugin : IDalamudPlugin
     public void BuildChangedItemIndex()
     {
         EnsureAdmitted(); // same shared admission point as RunScan - see Task 9
-        IndexWork.Start(new LibraryWork.IndexJob(this, NpcNameListPath, ReadEmbeddedNpcNameSeed()));
+        IndexWork.Start(new LibraryWork.IndexJob(this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList));
     }
 
     internal void SaveProtectionState()
@@ -327,7 +337,17 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string DefaultWorkbookFilePath => Path.Combine(PluginInterface.ConfigDirectory.FullName, DefaultWorkbookFileName);
 
-    internal string NpcNameListPath => Path.Combine(PluginInterface.ConfigDirectory.FullName, "npc-name-list.json");
+    internal string ScrapedNpcNameListPath =>
+        Organizer.NpcNames.NpcNameListStore.ScrapedListPath(PluginInterface.ConfigDirectory.FullName);
+
+    /// <summary>
+    /// The only place the scraped-list opt-in is resolved. Consumers get the conjunction of the
+    /// compile-time feature gate and the config flag, never the config flag alone - greying out a
+    /// checkbox enforces nothing, and a true left in config by testing or a hand edit would
+    /// otherwise load the full list while the UI says the feature is off.
+    /// </summary>
+    internal bool UseScrapedNpcNameList =>
+        Configuration.ScrapedNpcListFeatureEnabled && Config.UseScrapedNpcNameList;
 
     /// <summary>
     /// The curated NPC name list bundled with the plugin, and the default source for name matching.
@@ -393,7 +413,10 @@ public sealed class Plugin : IDalamudPlugin
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromMinutes(5)); // generous: NPCs alone can span 50+ pages
-        return await _npcNameRefreshService.RefreshAsync(NpcNameListPath, ReadEmbeddedNpcNameSeed(), timeoutCts.Token);
+        // Writes to npc-name-list-scraped.json, never to the legacy npc-name-list.json: the scrape
+        // is now the opt-in list beside the bundled one, not the name list itself.
+        return await _npcNameRefreshService.RefreshAsync(
+            ScrapedNpcNameListPath, ReadEmbeddedNpcNameSeed(), timeoutCts.Token);
     }
 
     internal string ExportReview()

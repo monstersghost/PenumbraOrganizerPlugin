@@ -94,7 +94,9 @@ public sealed partial class MainWindow
                 if (category.FailureReason is not null)
                     TextColoredWrapped(PluginTheme.CollisionBad, $"  {category.CategoryName} failed: {category.FailureReason}");
                 else
-                    ImGui.TextUnformatted($"  {category.CategoryName}: +{category.AddedCount}");
+                    // A plain total, not "+N": a refresh now writes a snapshot, so the number is
+                    // how many names the category holds afterwards, and it can go down.
+                    ImGui.TextUnformatted($"  {category.CategoryName}: {category.NameCount} names");
             }
         }
 
