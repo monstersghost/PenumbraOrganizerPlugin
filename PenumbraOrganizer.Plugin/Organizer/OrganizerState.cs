@@ -246,8 +246,8 @@ public sealed class OrganizerState
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
-    // over every touched row. Each public SortBy* method supplies only what varies: which
-    // folder segments go where.
+    // over every touched row. Each arm of the public Sort overload above supplies only what
+    // varies: which folder segments go where.
     private int Sort(Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector)
     {
         var count = 0;
