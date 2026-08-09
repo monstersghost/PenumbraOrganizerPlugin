@@ -120,10 +120,6 @@ expect it.
 
 ## Known debt created by pieces 1 and 2
 
-- **`docs/HOW_SORTING_WORKS.md` is stale in three places** and was not in either plan's scope:
-  it still says you pick a strategy by clicking a button, still describes `NpcNameMatcher` as one
-  compiled alternation per category, and still points at `OrganizerState.SortBy*`. `USER_GUIDE.md`
-  was updated; this one was not.
 - **`NpcNameListStore.Load` and `NpcNameListCodec.MergeAdditive` have no production callers left**,
   only tests. The piece 1 plan said explicitly to keep the 2,000-name guard on the `Load` path, so
   both were left in place rather than deleted.
