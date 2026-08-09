@@ -20,21 +20,20 @@ public sealed partial class MainWindow
 
         var gates = CurrentGates();
 
+        _sortPanel.Draw(
+            _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
+            _creatorCanonicalizer.Canonicalize);
+
+        ImGui.Spacing();
+
+        // Re-established explicitly rather than inherited. Import Workbook was the eighth element of
+        // the sort button row, sharing that row's BeginDisabled scope and its trailing tooltip; the
+        // row is gone, so both are restated here. Its behaviour, including the re-check inside the
+        // dialog callback, is unchanged.
         ImGui.BeginDisabled(!gates.CanStageProposals);
-        DrawWrappingButtonRow(
-        [
-            // Temporary: these seven buttons are what piece 2 Task 3 replaces with a dropdown and
-            // two checkboxes. They now route through the parameterised entry point, so the mapping
-            // below IS the legacy mapping table - splitNpc is true throughout because NPC
-            // subdivision used to be unconditional, and "Detailed" meant splitGear.
-            ("By Creator", () => Sort(Organizer.SortStrategy.CreatorOnly, splitGear: false)),
-            ("By Mod Type", () => Sort(Organizer.SortStrategy.TypeOnly, splitGear: false)),
-            ("By Mod Type Detailed", () => Sort(Organizer.SortStrategy.TypeOnly, splitGear: true)),
-            ("By Type Then Creator", () => Sort(Organizer.SortStrategy.TypeThenCreator, splitGear: false)),
-            ("By Type Then Creator (Detailed)", () => Sort(Organizer.SortStrategy.TypeThenCreator, splitGear: true)),
-            ("By Creator Then Type", () => Sort(Organizer.SortStrategy.CreatorThenType, splitGear: false)),
-            ("By Creator Then Type (Detailed)", () => Sort(Organizer.SortStrategy.CreatorThenType, splitGear: true)),
-            ("Import Workbook", () => _fileDialogManager.OpenFileDialog(
+        if (ImGui.Button("Import Workbook"))
+        {
+            _fileDialogManager.OpenFileDialog(
                 "Import Workbook",
                 ".xlsx",
                 (success, paths) =>
@@ -52,11 +51,11 @@ public sealed partial class MainWindow
                     }
                     ImportWorkbook(paths[0]);
                 },
-                selectionCountMax: 1)),
-        ]);
+                selectionCountMax: 1);
+        }
         ImGui.EndDisabled();
-        if (!gates.CanStageProposals && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+        Help.Tooltip(HelpTopics.SortImportWorkbook,
+            gates.CanStageProposals ? null : "Another operation is in progress or requires recovery.");
 
         if (_lastWorkbookImportResult is not null)
         {
@@ -157,8 +156,4 @@ public sealed partial class MainWindow
             }
         }
     }
-
-    // Goes away with the button row it serves, when piece 2 Task 3 introduces SortPanel.
-    private int Sort(Organizer.SortStrategy strategy, bool splitGear) =>
-        _plugin.OrganizerState.Sort(strategy, splitGear, splitNpc: true, _creatorCanonicalizer.Canonicalize);
 }

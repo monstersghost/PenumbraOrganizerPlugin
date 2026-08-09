@@ -19,6 +19,9 @@ public sealed partial class MainWindow : Window, IDisposable
     private readonly Plugin _plugin;
     private readonly CreatorCanonicalizer _creatorCanonicalizer = new();
     private readonly EventLogBuffer _eventLog = new();
+    // An instance, not a static call: the Group by dropdown and the two split checkboxes are
+    // ImGui ref-widgets and need backing storage that survives between frames.
+    private readonly SortPanel _sortPanel = new();
     private string? _lastError;
     private string _protectFilter = string.Empty;
     private float _protectedFolderListHeight = 220f;

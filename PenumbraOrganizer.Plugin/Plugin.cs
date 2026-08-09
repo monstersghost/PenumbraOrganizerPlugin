@@ -315,6 +315,13 @@ public sealed class Plugin : IDalamudPlugin
         IndexWork.Start(new LibraryWork.IndexJob(this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList));
     }
 
+    /// <summary>
+    /// Persists <see cref="Config"/> as it stands. For settings the UI edits in place, where there
+    /// is no state to gather first - unlike <see cref="SaveProtectionState"/>, which snapshots
+    /// OrganizerState into the config before writing.
+    /// </summary>
+    internal void SaveConfig() => PluginInterface.SavePluginConfig(Config);
+
     internal void SaveProtectionState()
     {
         Config.ProtectedModIdentifiers = OrganizerState.ProtectedModIdentifiers.ToHashSet();
