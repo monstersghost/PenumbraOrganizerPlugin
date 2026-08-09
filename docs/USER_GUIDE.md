@@ -32,7 +32,7 @@ replaces the button while it's running, with a Cancel button next to it. Cancell
 previously loaded library exactly as it was.
 
 Anything that would collide with a running scan is disabled while it runs, with a note explaining
-why: Apply, Restore, Create Backup, Folder Cleanup, the sort strategy buttons, and Import Workbook.
+why: Apply, Restore, Create Backup, Folder Cleanup, the Sort controls, and Import Workbook.
 
 If you add, remove, or move a mod in Penumbra while a scan is running, its results no longer match
 your library, so they're discarded rather than shown. You'll be told the mod list changed and asked
@@ -59,7 +59,7 @@ instead of their own checkbox state being meaningful. This list is resizable: dr
 just below it up or down.
 
 **Mods** lists every scanned mod with a checkbox, in its own scrollable area below the Folders
-list. A protected mod is excluded from every sort strategy and from Apply: its proposed path
+list. A protected mod is excluded from every grouping and from Apply: its proposed path
 always stays equal to its current path, and if anything does touch a protected mod, Review Changes
 flags it as a "protected mod changed" error. A mod protected by something other than its own
 checkbox (a folder, or Heliosphere) shows a note next to it explaining why.
@@ -78,31 +78,51 @@ recorded paths regardless of current protection. See History below.
 
 ### Sort
 
-Five buttons compute a proposed folder path for every unprotected mod, without moving anything
-yet. Only Apply, on the Review Changes tab, actually calls Penumbra:
+Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
+path for every unprotected mod without moving anything yet. Only Apply, on the Review Changes tab,
+actually calls Penumbra.
 
-- By Creator: `{Creator}/{ModName}`
-- By Mod Type: `{Category}[/{SubCategory}]/{ModName}`
-- By Mod Type Detailed: like By Mod Type, but Gear mods are further split by equipment slot
-  (`Gear/Feet`, `Gear/Head`, and so on) wherever the slot can be determined from a single,
-  unambiguous match; anything else falls back to the plain `Gear` folder.
-- By Type Then Creator: `{Category}[/{SubCategory}]/{Creator}/{ModName}`
-- By Creator Then Type: `{Creator}/{Category}[/{SubCategory}]/{ModName}`
+**Group by** picks the shape of the path:
+
+- Creator: `{Creator}/{ModName}`
+- Mod type: `{Category}[/{SubCategory}]/{ModName}`
+- Type then creator: `{Category}[/{SubCategory}]/{Creator}/{ModName}`
+- Creator then type: `{Creator}/{Category}[/{SubCategory}]/{ModName}`
+
+**Split gear by equipment slot** puts gear mods in `Gear/Feet`, `Gear/Head` and so on, wherever the
+slot can be determined from a single, unambiguous match. Anything ambiguous or unidentifiable falls
+back to the plain `Gear` folder.
+
+**Split NPC mods by kind** puts NPC mods in `NPC/NPCs`, `NPC/Bosses` or `NPC/Enemies`. Turning it
+**off puts every NPC mod straight into `NPC`** with no subfolder. That combination did not exist in
+earlier versions, where NPC mods were always subdivided — if you preferred the old behaviour, leave
+this ticked, as it is by default.
+
+Both checkboxes are greyed out when Group by is set to Creator, because grouping by creator alone
+never looks at a mod's type.
 
 A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it's
 easy to find and sort by hand instead of landing somewhere unexpected.
 
+If you change the grouping or either checkbox after sorting, a line appears reminding you that the
+selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
+
 Import Workbook opens a file picker for an `.xlsx` file, exported either from this plugin or the
 standalone app, and applies its per-mod destination folders as proposed paths. Use this instead of
-the five built-in strategies when you want to hand-edit an assignment list in Excel first. A
-summary line, plus any errors or warnings, appears below the button once the import finishes.
+the built-in groupings when you want to hand-edit an assignment list in Excel first. A summary
+line, plus any errors or warnings, appears below the button once the import finishes.
 
-Refresh NPC list from wiki updates the bundled NPC, enemy, and boss name list by scraping the
-FFXIV wiki. A full run can take a few minutes, and the button disables itself while one is in
-flight. This step is optional: a small seed list ships with the plugin, and NPC-name
-classification works from the very first scan without ever clicking this button. Refreshing only
-widens name coverage over time. Results are shown per category, with an added-name count for each,
-or a failure reason if a category's scrape didn't complete.
+**Also use the NPC list scraped from the wiki** is turned off and unavailable in this version. NPC
+name recognition works from a curated list that ships with the plugin, which needs no setup and no
+network access. The opt-in exists for a much larger list scraped from the FFXIV wiki; it recognises
+far more character names at the cost of matching some very common words, and it stays disabled
+until that has been verified in-game.
+
+Refresh NPC list from wiki is likewise turned off in this version. When enabled, it rewrites the
+opt-in scraped list — not the bundled one — with whatever the wiki returns on that run, so names
+the wiki no longer lists are dropped rather than accumulating forever. Results are shown per
+category as a plain name total, or a failure reason if a category's scrape didn't complete; a
+category whose scrape fails keeps whatever it already held rather than being emptied.
 
 The bottom of this tab is manual assignment. Its own search box filters the mod list below it, the
 same way the Protect tab's does. Check the mods you want (protected mods never appear in this
@@ -216,11 +236,11 @@ appears above its item list, so you can tell a name hit from an item hit.
 
 ## Typical workflows
 
-First-time sort: Scan, pick a Sort strategy, review the proposed paths on Review Changes, then
-Apply.
+First-time sort: Scan, choose a grouping on the Sort tab and press Sort, review the proposed paths
+on Review Changes, then Apply.
 
 New mods installed since the last sort: Scan again (this picks up the new mods; previously-set
-protection carries over), re-run a Sort strategy, review, then Apply.
+protection carries over), press Sort again, review, then Apply.
 
 Hand-tuning through Excel: on Review Changes, Export Workbook, edit destinations in Excel, then on
 the Sort tab Import Workbook, review again, then Apply.
