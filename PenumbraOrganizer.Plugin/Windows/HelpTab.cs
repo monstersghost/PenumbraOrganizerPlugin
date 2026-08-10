@@ -47,6 +47,16 @@ public static class HelpTab
         "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.0.0/docs/USER_GUIDE.md";
 
     /// <summary>
+    /// The support Discord. A permanent invite, deliberately - a `discord.gg` code that can expire
+    /// is baked into every shipped binary, and a dead one cannot be fixed without a new release.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="GuideUrl"/> this is NOT version-pinned and must not be: an older build
+    /// pointing at a still-valid invite is exactly what you want.
+    /// </remarks>
+    public const string DiscordUrl = "https://discord.gg/NHssF8ux6B";
+
+    /// <summary>
     /// Reading order, which is not tab order: what the plugin does and what is safe come first,
     /// because they are what a new user needs before touching anything.
     /// </summary>
@@ -128,8 +138,19 @@ public static class HelpTab
         if (!tab)
             return;
 
-        // No tooltips on these two: both labels already say exactly what they do, which is the same
-        // reason the coverage list skips Cancel and the Yes/No confirmations.
+        // No tooltips on any of these: each label already says exactly what it does, which is the
+        // same reason the coverage list skips Cancel and the Yes/No confirmations.
+        //
+        // Support first and visually distinct, following Penumbra's own Help layout - someone who
+        // opens this tab because something went wrong should not have to read past the reference
+        // material to find a human.
+        using (PluginTheme.PrimaryButton())
+        {
+            if (ImGui.Button("Join the Discord for support"))
+                OpenUrl(DiscordUrl);
+        }
+
+        ImGui.SameLine();
         if (ImGui.Button("Open the full guide in your browser"))
             OpenUrl(GuideUrl);
 

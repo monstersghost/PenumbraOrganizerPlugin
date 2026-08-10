@@ -1,12 +1,14 @@
 # Handoff: the 0.6.0 UI overhaul
 
-Written 2026-08-08, updated 2026-08-10. Read this before continuing the overhaul. Everything is on
-`main`, committed and pushed.
+Written 2026-08-08, updated 2026-08-11. Everything is on `main`, committed and pushed.
+
+**The overhaul is finished and verified in-game. What is left is publishing** - see the release
+checklist below. Nothing has been tagged.
 
 ## Where things stand
 
-`main` is at `de7e9f2` plus the post-review fixes. **1049 tests pass, production build clean with
-zero warnings.** Verify that before believing anything below.
+**1052 tests pass, production build clean with zero warnings.** Verify that before believing
+anything below.
 
 The overhaul is six pieces. Build order is fixed by real dependencies:
 
@@ -17,11 +19,11 @@ The overhaul is six pieces. Build order is fixed by real dependencies:
 | Piece | What | State |
 |---|---|---|
 | 0 | MainWindow split | **Done**, `aa0ad69`, in-game verified |
-| 1 | NPC name lists + index matcher | **Done**, Task 5 at `7afb414`. Partly in-game verified |
-| 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. Partly in-game verified |
+| 1 | NPC name lists + index matcher | **Done**, Task 5 at `7afb414`. In-game verified |
+| 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. In-game verified |
 | 3 | Hover explanations | **Done**, `3886e80` / `3e5333e` / `cad6ddb`. In-game verified |
-| 4 | Help tab | **Done**, `790ae35`. Not in-game verified |
-| 5 | Guided first run | **Done**, `43ccc6b`. Not in-game verified |
+| 4 | Help tab | **Done**, `790ae35`. In-game verified |
+| 5 | Guided first run | **Done**, `43ccc6b`. In-game verified |
 | — | Release prep (Task 6) | **Done**, `d17c633`. Notes written, not published |
 
 **A full code review ran against `eb501e5..de7e9f2`** (tag 0.5.3.1 to the end of release prep) and
@@ -41,38 +43,31 @@ that upgrading users would NOT see the walkthrough. Showing it on upgrade is the
 is a plain `bool`. Pinned by `PreExistingConfig_WithoutTheFirstRunField_ShowsTheWalkthrough` and
 documented on `Configuration.FirstRunTutorialSeen`, because the plan still says otherwise.
 
-All six pieces are closed and release prep is done, so every ordering constraint in the plans is
-spent. What remains is in-game verification and publishing - see the release checklist below.
-
 ## In-game verification status
 
-A first in-game pass ran on 2026-08-10 against `ef62b67`.
+**Complete as of 2026-08-11, against `b344da3`. Every piece has been exercised in-game and passed.**
 
-**Confirmed working:** Scan completes (so `ScanJob.Materialize` with the new arguments, and
-`LoadForMatching` reading the embedded static list off the framework thread, both work). Workbook
-export. Import Workbook, including its dialog — which matters, because piece 2 moved it out of the
-old button row's disabled scope. **Split NPC off**, the combination no button ever offered.
+Covered across two passes: scan and NPC classification, workbook export, Import Workbook and its
+dialog, the Search index build, the whole `SortPanel` including the split checkboxes greying out and
+the staleness line, Split NPC off, the Help tab, the first-run walkthrough, and the tooltip sweep
+over disabled controls.
 
-**Still unverified, and worth doing on the next pass:**
+Two that were worth the trouble specifically:
 
-- **The `MigrateLegacyList` call site** in the `Plugin` constructor. This is the one that operates on
-  a real user file, so it is the highest-value remaining check: a pre-0.6.0 `npc-name-list.json`
-  should become `npc-name-list-scraped.json` with contents intact. Back up the config directory
-  first. Every migration test passes against a temp directory; that the constructor reaches it at
-  all is still unproven, which is the exact trap the piece 1 plan called out.
-- **`IndexJob`** — the Search index build was not exercised.
-- **`SortPanel` details** — the two split checkboxes greying out under Creator, and the staleness
-  line appearing after a selection change.
+- **`MigrateLegacyList`** ran on a real install. `npc-name-list.json` became
+  `npc-name-list-scraped.json` with the bundled seed's 19/15/11 names intact, and 0.5.3.1's
+  21,340-name `.oversized-` backup was left untouched beside it. That backup is the only real-world
+  corpus available for testing the scraped list when it is enabled - do not delete it.
+- **The Penumbra-disabled walkthrough path**, which had never worked in any build until the code
+  review caught it. Confirmed: one explanatory step with the right message, and it offers itself
+  again once Penumbra is enabled.
 
-**One bug found and fixed:** ticking or unticking any folder on the Protect tab reversed an explicit
-"Toggle Heliosphere protection" unprotect, for every Heliosphere mod at once. Fixed at `261db03`.
-Pre-existing since `91446a3`, not a regression from this overhaul — see "Known debt" below for what
-the fix changed.
+**Not a bug, confirmed during testing:** collisions on Review Changes after an Import. Import and
+manual assignment deliberately skip `CollisionDisambiguator`; a collision made by hand surfaces as a
+`Validate()` error rather than being silently renumbered. A plain **Sort** producing collisions would
+be a real bug.
 
-**Not a bug:** collisions shown on Review Changes after an Import. Import and manual assignment
-deliberately skip `CollisionDisambiguator`; a collision created by hand surfaces as a `Validate()`
-error rather than being silently renumbered. If a plain **Sort** ever produces collisions, that is a
-real bug — disambiguation should have renumbered them.
+The step-by-step guide used for this is `docs/TESTING_GUIDE_0.6.0.md`.
 
 ## Three deliberate deviations from the plans, already reviewed and accepted
 
@@ -145,21 +140,21 @@ expect it.
 
 ## Release checklist for 0.6.0.0
 
-Notes are written at `docs/RELEASE_NOTES_0.6.0.0.md` and the version is bumped. Nothing is tagged or
-published. In order:
+Notes are written at `docs/RELEASE_NOTES_0.6.0.0.md` and the version is bumped. Code is complete and
+verified in-game. Nothing is tagged or published.
 
-1. **Verify `MigrateLegacyList` in-game.** Still the only unverified thing that touches a real user
-   file. Back up the plugin config directory, then confirm a pre-0.6.0 `npc-name-list.json` becomes
-   `npc-name-list-scraped.json` with its contents intact.
-2. **Verify pieces 4 and 5 in-game.** For the walkthrough specifically: a fresh config shows it,
-   dismissing stops it returning, closing with the X counts as dismissing, and with Penumbra
-   disabled it shows one step and offers itself again next time.
-3. **Review the notes.** They are deliberately explicit that the scraped-list opt-in is still off,
-   which 0.5.3.1's notes had promised would return in 0.6.0.
-4. **Tag `0.6.0.0` - exactly that string.** `HelpTab.GuideUrl` embeds it, so `0.6.0` or `v0.6.0.0`
+Remaining, in order - all four are the maintainer's to do:
+
+1. **Review the notes.** They are deliberately explicit that the scraped-list opt-in is still off,
+   which 0.5.3.1's notes had promised would return in 0.6.0. That is the one promise this release
+   does not keep, and it is stated rather than omitted.
+2. **Tag `0.6.0.0` - exactly that string.** `HelpTab.GuideUrl` embeds it, so `0.6.0` or `v0.6.0.0`
    ships a Help tab whose guide link 404s. No test catches this: the URL test asserts the tag is not
-   `main` and that the path is right, both of which pass against a tag that does not exist.
-5. Release, then update `repo.json`.
+   `main` and that the path is right, both of which pass against a tag that does not exist. **Until
+   the tag is pushed, that link is dead in every build**, including the one just tested.
+3. **Publish the release.** Short user-facing note plus a link to the full notes, per the usual
+   pattern.
+4. **Update `repo.json`** so installed plugins see the new version.
 
 **The version is four-part on purpose.** Every tag here is, the csproj was, and `MainWindow` renders
 `Assembly.Version.ToString(4)`. The plan said `0.6.0`; following it literally would have made the
@@ -195,26 +190,6 @@ leaving every Heliosphere mod outside that folder alone.
 
 `SetAllProtection(false)` now also unticks Heliosphere rows. Before, it left them visibly ticked and
 the button looked broken.
-
-## Requested, not yet built
-
-**A "Join the Discord" button on the Help tab.** Requested 2026-08-10, deliberately deferred rather
-than guessed at.
-
-**It needs the invite URL from the maintainer — there is none anywhere in the repo.** The only
-mentions of a support Discord are in the unshipped `worktree-community-templates-t1` docs, and none
-of them carries a link. Do not invent one, and do not scrape one from a release page.
-
-When the URL arrives, it goes beside `HelpTab.GuideUrl` and reuses `HelpTab.OpenUrl`, which already
-handles the browser launch and swallows a failure rather than tearing down the draw call. Two things
-to decide at that point, neither obvious:
-
-- **Whether it needs a tooltip.** The two existing Help-tab buttons deliberately have none, because
-  their labels say exactly what they do. "Join the Discord" probably qualifies too, but a note that
-  it opens an external browser and leaves the game may be worth it.
-- **Whether an invite that can expire belongs in a shipped binary.** A dead invite in a released
-  build cannot be fixed without a new release. A vanity URL or a redirect the maintainer controls
-  avoids that; a raw `discord.gg/<code>` does not.
 
 ## Known debt created by pieces 1 and 2
 

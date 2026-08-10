@@ -65,6 +65,18 @@ public class HelpTabTests
     }
 
     [Fact]
+    public void TheDiscordLink_IsAPermanentInvite_AndNotVersionPinned()
+    {
+        // Baked into every shipped binary, so an expiring invite would rot in releases that can no
+        // longer be changed. The version check is the inverse of GuideUrl's: pinning this to a
+        // release would be the bug, since an older build should still reach a live server.
+        Assert.StartsWith("https://discord.gg/", HelpTab.DiscordUrl);
+
+        var version = typeof(PenumbraOrganizer.Plugin.Plugin).Assembly.GetName().Version!.ToString(4);
+        Assert.DoesNotContain(version, HelpTab.DiscordUrl);
+    }
+
+    [Fact]
     public void TheGitHubLink_CarriesThisBuildsOwnVersion()
     {
         // Catches the realistic regression: the version gets bumped for a release and the URL is

@@ -244,6 +244,9 @@ Each tab's section lists that tab's controls with the same one-line explanation 
 them, so the Help tab doubles as a reference for anything you saw a tooltip on and want to find
 again.
 
+"Join the Discord for support" opens the project's Discord in your browser. That is the fastest
+place to get help, and where testing builds are announced.
+
 "Open the full guide in your browser" opens this document, pinned to the release you're running
 rather than to the latest one, so it always describes the version you actually have.
 

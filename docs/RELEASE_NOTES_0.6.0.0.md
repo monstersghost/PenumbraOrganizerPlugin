@@ -76,6 +76,11 @@ the full guide for the version you are actually running.
 
 Nothing on that tab changes anything.
 
+### Added: a way to reach us from inside the game
+
+The Help tab opens with a **Join the Discord for support** button. It is the fastest way to get help,
+and where testing builds get announced. The same link is in the README.
+
 ### Added: a guided first run
 
 Seven short steps covering the scan, protect, sort, review, apply loop. It appears the first time
@@ -131,4 +136,4 @@ only thing this release deliberately left unfinished.
 - Protection now has a single rule. It previously had two that disagreed depending on which control
   you last touched, which is what caused the Heliosphere bug above.
 
-1045 tests pass on this release.
+1052 tests pass on this release.
