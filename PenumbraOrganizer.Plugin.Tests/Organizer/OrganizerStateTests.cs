@@ -844,6 +844,106 @@ public class OrganizerStateTests
     }
 
     [Fact]
+    public void SetFolderProtected_DoesNotUndoAnExplicitHeliosphereUnprotect()
+    {
+        // Reported in-game: untick "Toggle Heliosphere protection", then tick ANY folder, and every
+        // Heliosphere mod snaps back to protected. SetFolderProtected recomputes every row through
+        // IsEffectivelyProtected, whose first clause is `row.HeliosphereManaged ||`, so the user's
+        // explicit choice is silently overwritten by an unrelated action.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("helio", "Boots", heliosphere: true), MakeRow("plain", "Hat", currentPath: "Gear/Top/Hat")],
+            new HashSet<string>());
+
+        state.SetHeliosphereProtection(false);
+        Assert.False(state.Mods.Single(m => m.Identifier == "helio").Protected);
+
+        state.SetFolderProtected("Gear/Top", true);
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "helio").Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtected_Unprotecting_AlsoDoesNotUndoAnExplicitHeliosphereUnprotect()
+    {
+        // The other direction the report named. Both branches of SetFolderProtected run the same
+        // full recompute, so unprotecting re-asserts Heliosphere protection just as protecting does.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("helio", "Boots", heliosphere: true)], new HashSet<string>());
+
+        state.SetFolderProtected("Gear/Top", true);
+        state.SetHeliosphereProtection(false);
+        state.SetFolderProtected("Gear/Top", false);
+
+        Assert.False(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void HeliosphereUnprotectOverride_IsClearedByTheNextScan()
+    {
+        // The documented contract: Heliosphere mods are re-protected on every scan no matter how
+        // the toggle was last left, because Heliosphere owns their location. The override makes the
+        // choice survive unrelated UI actions, NOT survive a scan.
+        var state = new OrganizerState();
+        var row = MakeRow("helio", "Boots", heliosphere: true);
+        state.LoadScan([row], new HashSet<string>());
+        state.SetHeliosphereProtection(false);
+
+        state.LoadScan([MakeRow("helio", "Boots", heliosphere: true)], new HashSet<string>());
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void ProtectingAFolder_StillProtectsAnUnprotectedHeliosphereModInsideIt()
+    {
+        // Protecting a folder is a newer and more specific instruction than "unprotect Heliosphere",
+        // so it wins for mods actually in that folder. The bug was that it also won for every
+        // Heliosphere mod everywhere else.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("inside", "Boots", heliosphere: true, currentPath: "Gear/Feet/Boots"),
+             MakeRow("outside", "Hat", heliosphere: true, currentPath: "Gear/Top/Hat")],
+            new HashSet<string>());
+        state.SetHeliosphereProtection(false);
+
+        state.SetFolderProtected("Gear/Feet", true);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "inside").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "outside").Protected);
+    }
+
+    [Fact]
+    public void RetickingAHeliosphereMod_WithdrawsTheOverride()
+    {
+        // Without withdrawal the row would stay stuck unprotected: the override would outlive the
+        // user's decision to re-protect it.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("helio", "Boots", heliosphere: true)], new HashSet<string>());
+
+        state.SetProtected("helio", false);
+        state.SetProtected("helio", true);
+        state.SetFolderProtected("Unsorted", false);   // any unrelated full recompute
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void ToggleProtectAllOff_AlsoUnticksHeliosphereMods()
+    {
+        // "Toggle protect all" is an explicit instruction about every mod. Before the override
+        // existed, the Heliosphere rows stayed visibly ticked and the button looked broken.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("helio", "Boots", heliosphere: true), MakeRow("plain", "Hat")],
+            new HashSet<string>());
+
+        state.SetAllProtection(false);
+
+        Assert.All(state.Mods, m => Assert.False(m.Protected));
+    }
+
+    [Fact]
     public void FolderOnlyProtectedMod_NeverEntersProtectedModIdentifiers()
     {
         var state = new OrganizerState();
