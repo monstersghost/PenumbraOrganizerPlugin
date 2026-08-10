@@ -80,6 +80,38 @@ public class HelpContentTests
     }
 
     [Fact]
+    public void AllContentIsAscii_SoEveryGlyphRendersInGame()
+    {
+        // Tooltips render through ImGui's font atlas, which does not carry every codepoint a text
+        // editor will happily paste. An em dash or a curly quote copied out of USER_GUIDE.md renders
+        // as a box or as nothing, and nothing in the build or the log would say so.
+        //
+        // This is also the repo's recurring transcription hazard: three separate times a pasted
+        // glyph has reached code as the wrong codepoint with every test still green. Assert the
+        // specific failure rather than trusting a reviewer to spot U+2019 against U+0027.
+        foreach (var topic in HelpTopics.All)
+        {
+            foreach (var (field, text) in new[]
+                     {
+                         ("title", Help.Title(topic)), ("short", Help.Short(topic)),
+                         ("body", Help.Body(topic)), ("step", Help.Step(topic)),
+                     })
+            {
+                if (text is null)
+                    continue;
+
+                // '' as an escape, never a pasted literal - a raw control character here is
+                // invisible in review and is exactly the failure mode this test exists to catch.
+                var offender = text.FirstOrDefault(c => c > '');
+                Assert.True(
+                    offender == default,
+                    $"{topic.Id} {field} contains non-ASCII U+{(int)offender:X4} ('{offender}'). "
+                    + "Use a plain hyphen and a straight apostrophe.");
+            }
+        }
+    }
+
+    [Fact]
     public void EveryTopicIdIsUsedByAConstant_NotOrphanedInTheResource()
     {
         // The other direction: content written for an id no constant references can never be shown.

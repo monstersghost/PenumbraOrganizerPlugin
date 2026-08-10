@@ -1,6 +1,41 @@
 {
   "topics": [
     {
+      "id": "scan.refresh-mod-list",
+      "title": "Refresh mod list",
+      "short": "Re-reads every mod from Penumbra and re-classifies it. Nothing moves. Run it after installing, removing or moving mods elsewhere - nothing here updates on its own."
+    },
+    {
+      "id": "scan.event-log",
+      "title": "Live events",
+      "short": "Penumbra events as they happen. Informational only: seeing a mod appear here does not re-scan, so run Refresh mod list yourself afterwards."
+    },
+    {
+      "id": "protect.toggle-all",
+      "title": "Toggle protect all",
+      "short": "Protects every mod if any are unprotected, and unprotects them all otherwise. A protected mod keeps its current folder through every Sort and Apply."
+    },
+    {
+      "id": "protect.toggle-heliosphere",
+      "title": "Toggle Heliosphere protection",
+      "short": "Protects or unprotects every Heliosphere-managed mod at once. Unprotecting lasts this session only - the next Scan re-protects them, since Heliosphere owns where they live."
+    },
+    {
+      "id": "protect.folders",
+      "title": "Protected folders",
+      "short": "Protecting a folder protects everything under it at any depth, including mods that land there later. Checking Gear also covers Gear/Feet and everything below it."
+    },
+    {
+      "id": "protect.mods",
+      "title": "Protected mods",
+      "short": "Protects one mod wherever it sits. A mod can also be protected by its folder or by Heliosphere - the note beside it says which, and those have no checkbox here."
+    },
+    {
+      "id": "protect.heliosphere-note",
+      "title": "Protected by Heliosphere",
+      "short": "Protected because Heliosphere manages it, not by its own checkbox. Heliosphere owns where it lives, so the plugin never proposes moving it during Sort or Apply."
+    },
+    {
       "id": "sort.grouping",
       "title": "Group by",
       "short": "Chooses the folder structure proposed for every unprotected mod. Nothing moves until you press Apply on the Review Changes tab."
@@ -29,6 +64,126 @@
       "id": "sort.import-workbook",
       "title": "Import Workbook",
       "short": "Reads folder choices back from an exported spreadsheet, so you can plan a large reorganisation outside the game."
+    },
+    {
+      "id": "sort.manual-assign",
+      "title": "Assign selected mods",
+      "short": "Sets the proposed folder for every checked mod. Unlike Sort, this does not renumber name clashes - it reports them as errors on Review Changes instead."
+    },
+    {
+      "id": "review.apply",
+      "title": "Apply",
+      "short": "Writes every proposed path to Penumbra. This is the only control here that changes your library, and a backup snapshot is taken first, automatically."
+    },
+    {
+      "id": "review.export",
+      "title": "Export",
+      "short": "Writes the proposed changes to a text file you can read outside the game. Your library is not touched."
+    },
+    {
+      "id": "review.show-config-file",
+      "title": "Show Config File",
+      "short": "Opens the folder holding this plugin's own settings and data files. Changes nothing."
+    },
+    {
+      "id": "review.diagnostic-dump",
+      "title": "Create Diagnostic Dump",
+      "short": "Writes a text file describing the plugin's current state, for troubleshooting or a bug report. Your library is not touched."
+    },
+    {
+      "id": "review.workbook-destinations",
+      "title": "Workbook destinations",
+      "short": "Which folder layout the exported spreadsheet should suggest. This affects only the exported file, not the proposed paths shown above."
+    },
+    {
+      "id": "review.export-workbook",
+      "title": "Export Workbook",
+      "short": "Writes every mod and its destination to a spreadsheet you can edit outside the game, then bring back with Import Workbook on the Sort tab."
+    },
+    {
+      "id": "review.protect-and-skip",
+      "title": "Protect & Skip All Blocking Mods",
+      "short": "Protects every mod named in the errors above so it stops blocking Apply. Those mods keep their current folder instead of moving."
+    },
+    {
+      "id": "review.reread-organization-json",
+      "title": "Re-read organization.json",
+      "short": "Re-reads Penumbra's folder file from disk to refresh the list below. If Penumbra has not written a change out yet, re-reading will not reveal it."
+    },
+    {
+      "id": "review.clean-up-folders",
+      "title": "Clean Up Selected Folders",
+      "short": "Removes the checked empty folder entries from Penumbra's folder file. No mod is touched. Run Rediscover Mods in Penumbra afterwards."
+    },
+    {
+      "id": "review.rollback-folder-cleanup",
+      "title": "Rollback Folder Cleanup",
+      "short": "Restores Penumbra's folder file from the backup taken before the last cleanup, undoing that cleanup only. No mod is moved."
+    },
+    {
+      "id": "history.create-backup",
+      "title": "Create Backup",
+      "short": "Saves every mod's current folder as a snapshot you can return to later. Backups are also taken automatically before every Apply and Restore."
+    },
+    {
+      "id": "history.restore",
+      "title": "Restore",
+      "short": "Moves every mod back to the folder it had in this snapshot. Exact: it moves protected and Heliosphere mods too, which Sort and Apply never do."
+    },
+    {
+      "id": "history.delete-snapshot",
+      "title": "Delete snapshot",
+      "short": "Deletes this backup permanently. Your mods are not touched - only the saved snapshot goes, and it cannot be recovered afterwards."
+    },
+    {
+      "id": "search.build-index",
+      "title": "Build/Refresh Index",
+      "short": "Reads every mod's changed items from Penumbra and builds the searchable index below. Read-only: it never moves, protects or alters a mod."
+    },
+    {
+      "id": "search.name-filter",
+      "title": "Mod name contains",
+      "short": "Shows only mods whose name contains this text. It combines with the item filter and the category boxes - a mod has to satisfy all of them."
+    },
+    {
+      "id": "search.item-filter",
+      "title": "Item contains",
+      "short": "Shows only mods that change an item whose name contains this text, such as one specific piece of gear."
+    },
+    {
+      "id": "search.categories",
+      "title": "Categories",
+      "short": "Limits results to these mod categories. Unknown covers mods whose changed items the plugin could not classify."
+    },
+    {
+      "id": "search.slots",
+      "title": "Slots",
+      "short": "Limits Gear results to these equipment slots. Unresolved covers gear whose slot could not be pinned to a single unambiguous match."
+    },
+    {
+      "id": "recovery.keep-current",
+      "title": "Keep Current State",
+      "short": "Accepts whatever Penumbra has now as correct and unblocks the plugin. Nothing is moved or undone - the interrupted operation is simply closed."
+    },
+    {
+      "id": "recovery.continue",
+      "title": "Continue",
+      "short": "Finishes the interrupted operation from where it stopped, moving the mods it had not reached yet."
+    },
+    {
+      "id": "recovery.restore-previous",
+      "title": "Restore Previous State",
+      "short": "Moves every mod back to where it was before the interrupted operation started, undoing the part of it that did complete."
+    },
+    {
+      "id": "recovery.keep-current-one",
+      "title": "Keep Current State (one operation)",
+      "short": "Permanently abandons this one operation - it can never be continued or rolled back. The rest stay blocked, and one of them may then become resolvable on its own."
+    },
+    {
+      "id": "recovery.close-all",
+      "title": "Accept Current State and Close All Interrupted Operations",
+      "short": "Permanently abandons every interrupted operation at once. None can be continued or rolled back. No mod moves - it only stops the plugin blocking further actions."
     }
   ]
 }
