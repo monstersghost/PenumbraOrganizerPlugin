@@ -21,7 +21,16 @@ The overhaul is six pieces. Build order is fixed by real dependencies:
 | 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. Partly in-game verified |
 | 3 | Hover explanations | **Done**, `3886e80` / `3e5333e` / `cad6ddb`. In-game verified |
 | 4 | Help tab | **Done**, `790ae35`. Not in-game verified |
-| 5 | Guided first run | Not started — **next**. Plan refreshed at `654a101`; read that first |
+| 5 | Guided first run | **Done**, `43ccc6b`. Not in-game verified |
+| — | Release prep (Task 6) | **Done**, `d17c633`. Notes written, not published |
+
+**All five build pieces are complete.** What remains is in-game verification and the release
+checklist below.
+
+**One plan decision was reversed by the maintainer:** Task 4 specified `bool?` plus a resolver so
+that upgrading users would NOT see the walkthrough. Showing it on upgrade is the intent, so the flag
+is a plain `bool`. Pinned by `PreExistingConfig_WithoutTheFirstRunField_ShowsTheWalkthrough` and
+documented on `Configuration.FirstRunTutorialSeen`, because the plan still says otherwise.
 
 Pieces 1 and 2 are closed, so the ordering constraint below is spent. The next task is piece 3.
 
@@ -123,6 +132,28 @@ Case folding also moved from culture-sensitive to ordinal, which changes Turkish
 Sorting gained six combinations that no button ever offered - the whole `splitNpc: false` column.
 NPC mods can now land in `NPC` rather than `NPC/Bosses`. The release notes must say so; nobody will
 expect it.
+
+## Release checklist for 0.6.0.0
+
+Notes are written at `docs/RELEASE_NOTES_0.6.0.0.md` and the version is bumped. Nothing is tagged or
+published. In order:
+
+1. **Verify `MigrateLegacyList` in-game.** Still the only unverified thing that touches a real user
+   file. Back up the plugin config directory, then confirm a pre-0.6.0 `npc-name-list.json` becomes
+   `npc-name-list-scraped.json` with its contents intact.
+2. **Verify pieces 4 and 5 in-game.** For the walkthrough specifically: a fresh config shows it,
+   dismissing stops it returning, closing with the X counts as dismissing, and with Penumbra
+   disabled it shows one step and offers itself again next time.
+3. **Review the notes.** They are deliberately explicit that the scraped-list opt-in is still off,
+   which 0.5.3.1's notes had promised would return in 0.6.0.
+4. **Tag `0.6.0.0` - exactly that string.** `HelpTab.GuideUrl` embeds it, so `0.6.0` or `v0.6.0.0`
+   ships a Help tab whose guide link 404s. No test catches this: the URL test asserts the tag is not
+   `main` and that the path is right, both of which pass against a tag that does not exist.
+5. Release, then update `repo.json`.
+
+**The version is four-part on purpose.** Every tag here is, the csproj was, and `MainWindow` renders
+`Assembly.Version.ToString(4)`. The plan said `0.6.0`; following it literally would have made the
+displayed version, the tag and the guide URL disagree.
 
 ## Release gates
 
