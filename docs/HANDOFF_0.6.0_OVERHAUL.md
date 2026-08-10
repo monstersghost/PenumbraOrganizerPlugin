@@ -19,9 +19,9 @@ The overhaul is six pieces. Build order is fixed by real dependencies:
 | 0 | MainWindow split | **Done**, `aa0ad69`, in-game verified |
 | 1 | NPC name lists + index matcher | **Done**, Task 5 at `7afb414`. Partly in-game verified |
 | 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. Partly in-game verified |
-| 3 | Hover explanations | Not started — **next**. Plan refreshed at `654a101`; read that first |
-| 4 | Help tab | Not started |
-| 5 | Guided first run | Not started |
+| 3 | Hover explanations | **Done**, `3886e80` / `3e5333e` / `cad6ddb`. In-game verified |
+| 4 | Help tab | **Done**, `790ae35`. Not in-game verified |
+| 5 | Guided first run | Not started — **next**. Plan refreshed at `654a101`; read that first |
 
 Pieces 1 and 2 are closed, so the ordering constraint below is spent. The next task is piece 3.
 
@@ -154,6 +154,26 @@ leaving every Heliosphere mod outside that folder alone.
 
 `SetAllProtection(false)` now also unticks Heliosphere rows. Before, it left them visibly ticked and
 the button looked broken.
+
+## Requested, not yet built
+
+**A "Join the Discord" button on the Help tab.** Requested 2026-08-10, deliberately deferred rather
+than guessed at.
+
+**It needs the invite URL from the maintainer — there is none anywhere in the repo.** The only
+mentions of a support Discord are in the unshipped `worktree-community-templates-t1` docs, and none
+of them carries a link. Do not invent one, and do not scrape one from a release page.
+
+When the URL arrives, it goes beside `HelpTab.GuideUrl` and reuses `HelpTab.OpenUrl`, which already
+handles the browser launch and swallows a failure rather than tearing down the draw call. Two things
+to decide at that point, neither obvious:
+
+- **Whether it needs a tooltip.** The two existing Help-tab buttons deliberately have none, because
+  their labels say exactly what they do. "Join the Discord" probably qualifies too, but a note that
+  it opens an external browser and leaves the game may be worth it.
+- **Whether an invite that can expire belongs in a shipped binary.** A dead invite in a released
+  build cannot be fixed without a new release. A vanity URL or a redirect the maintainer controls
+  avoids that; a raw `discord.gg/<code>` does not.
 
 ## Known debt created by pieces 1 and 2
 
