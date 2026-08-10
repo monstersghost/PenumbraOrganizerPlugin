@@ -247,6 +247,14 @@ again.
 "Open the full guide in your browser" opens this document, pinned to the release you're running
 rather than to the latest one, so it always describes the version you actually have.
 
+"Show the walkthrough" reopens the guided first run, the five-step tour shown the first time you
+open the plugin. It can be reopened as often as you like.
+
+If you upgraded to 0.6.0 from an earlier version, that walkthrough runs once for you too. That is
+deliberate rather than a mistake: 0.6.0 replaced the whole Sort control, changed how NPC names are
+matched, and added this tab, so there is as much new for an existing user as for a new one. Dismiss
+it and it will not return.
+
 Nothing on this tab changes anything - it reads no mods and writes no files.
 
 ## Typical workflows

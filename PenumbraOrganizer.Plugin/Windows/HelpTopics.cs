@@ -8,6 +8,17 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </summary>
 public static class HelpTopics
 {
+    // First-run walkthrough. These carry a step and nothing else. Order lives in FirstRunSteps,
+    // not here - a step added to the resource and not listed there renders nowhere.
+    public static readonly HelpTopic FirstRunWelcome = new("firstrun.welcome");
+    public static readonly HelpTopic FirstRunScan = new("firstrun.scan");
+    public static readonly HelpTopic FirstRunProtect = new("firstrun.protect");
+    public static readonly HelpTopic FirstRunSort = new("firstrun.sort");
+    public static readonly HelpTopic FirstRunReview = new("firstrun.review");
+    public static readonly HelpTopic FirstRunApply = new("firstrun.apply");
+    public static readonly HelpTopic FirstRunHelp = new("firstrun.help");
+    public static readonly HelpTopic FirstRunPenumbraUnavailable = new("firstrun.penumbra-unavailable");
+
     // Help tab sections. These carry a body and no short: they are read, not hovered.
     public static readonly HelpTopic HelpWhatThisDoes = new("help.what-this-does");
     public static readonly HelpTopic HelpSafetyRules = new("help.safety-rules");

@@ -29,6 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     public readonly WindowSystem WindowSystem = new("Penumbra Organizer");
 
     private readonly MainWindow _mainWindow;
+    private readonly Windows.FirstRunWindow _firstRunWindow;
 
     internal readonly Penumbra.Api.IpcSubscribers.GetModListAdapter GetModListAdapterIpc;
     internal readonly Penumbra.Api.IpcSubscribers.SetModPath SetModPathIpc;
@@ -66,6 +67,21 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(_mainWindow);
 
         Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+        // A config written before 0.6.0 has no FirstRunTutorialSeen, so it reads false and an
+        // upgrading user gets the walkthrough once. That is intended - see Configuration's remarks.
+        _firstRunWindow = new Windows.FirstRunWindow(IsPenumbraAvailable, MarkFirstRunSeen);
+        WindowSystem.AddWindow(_firstRunWindow);
+
+        // Offered when the main window opens, not when the plugin loads. Re-checked every open
+        // rather than latched, so the Penumbra-unavailable path can offer it again next time.
+        _mainWindow.Opened = () =>
+        {
+            if (!Config.FirstRunTutorialSeen)
+                _firstRunWindow.Start();
+        };
+        // The Help tab's reopen button. Deliberately ignores the flag and never clears it.
+        _mainWindow.ShowWalkthrough = _firstRunWindow.Start;
 
         // Runs here, before ScanWork or IndexWork exist and so before any library work can be
         // admitted, because a scan or index build that read the lists first would see the
@@ -316,11 +332,45 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     /// <summary>
+    /// Whether Penumbra's IPC answers right now.
+    /// </summary>
+    /// <remarks>
+    /// Used only by the first-run walkthrough, to decide whether to run steps describing results the
+    /// user would not see. ApiVersion is the cheapest subscriber to call and the one that says
+    /// nothing about the mod list, so probing with it cannot disturb anything.
+    /// </remarks>
+    internal static bool IsPenumbraAvailable()
+    {
+        try
+        {
+            _ = new Penumbra.Api.IpcSubscribers.ApiVersion(PluginInterface).Invoke();
+            return true;
+        }
+        catch (Exception)
+        {
+            // Any failure means "not usable right now", which is the only distinction that matters
+            // here. Not logged: this is a normal state on a first run, not a fault.
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Persists <see cref="Config"/> as it stands. For settings the UI edits in place, where there
     /// is no state to gather first - unlike <see cref="SaveProtectionState"/>, which snapshots
     /// OrganizerState into the config before writing.
     /// </summary>
     internal void SaveConfig() => PluginInterface.SavePluginConfig(Config);
+
+    // Written the moment the walkthrough is dismissed rather than at shutdown: a crash before the
+    // next clean exit would otherwise show it again, which is the failure users actually report.
+    private void MarkFirstRunSeen()
+    {
+        if (Config.FirstRunTutorialSeen)
+            return;
+
+        Config.FirstRunTutorialSeen = true;
+        SaveConfig();
+    }
 
     internal void SaveProtectionState()
     {

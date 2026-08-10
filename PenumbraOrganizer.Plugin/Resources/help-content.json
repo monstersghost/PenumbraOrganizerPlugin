@@ -1,6 +1,46 @@
 {
   "topics": [
     {
+      "id": "firstrun.welcome",
+      "title": "Welcome",
+      "step": "This plugin tidies the folder tree Penumbra shows you. It never edits, renames or deletes your mod files, and it never changes what a mod does in game.\n\nThis walkthrough is five short steps. You can leave at any time - it will not come back."
+    },
+    {
+      "id": "firstrun.scan",
+      "title": "Step 1: Scan",
+      "step": "Open the Scan tab and press Refresh mod list.\n\nThat reads your library from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so this comes first, and again whenever you install or remove mods."
+    },
+    {
+      "id": "firstrun.protect",
+      "title": "Step 2: Protect anything that must not move",
+      "step": "On the Protect tab, tick any mod or folder that should keep exactly where it is. Protected items are skipped by every sort and by Apply.\n\nHeliosphere-managed mods are protected for you automatically, because Heliosphere owns where they live."
+    },
+    {
+      "id": "firstrun.sort",
+      "title": "Step 3: Choose a layout",
+      "step": "On the Sort tab, pick a grouping from Group by, decide whether gear and NPC mods get subfolders, and press Sort.\n\nNothing moves yet. Sort only works out where each mod would go."
+    },
+    {
+      "id": "firstrun.review",
+      "title": "Step 4: Check the plan",
+      "step": "The Review Changes tab shows every mod's current folder beside the proposed one.\n\nAnything that would block the move is listed at the top in red. Two mods landing on the same path is the usual one, and Protect & Skip All Blocking Mods clears them in one go."
+    },
+    {
+      "id": "firstrun.apply",
+      "title": "Step 5: Apply",
+      "step": "When the plan looks right, press Apply on the Review Changes tab. That is the only control that changes your library.\n\nA backup is taken automatically first, and the History tab can put everything back. Nothing you have done before this point touched anything."
+    },
+    {
+      "id": "firstrun.help",
+      "title": "That is the whole loop",
+      "step": "Scan, protect, sort, review, apply.\n\nEvery control has an explanation if you hover it, and the Help tab holds all of them at greater length along with a link to the full guide. You can reopen this walkthrough from there."
+    },
+    {
+      "id": "firstrun.penumbra-unavailable",
+      "title": "Penumbra is not responding",
+      "step": "This plugin reads everything through Penumbra, and Penumbra does not appear to be loaded right now.\n\nEnable Penumbra, then reopen this window and the walkthrough will start properly. Nothing here will work until then, so there is no point walking you through it now."
+    },
+    {
       "id": "help.what-this-does",
       "title": "What this plugin does",
       "body": "It proposes a tidy folder layout for your Penumbra mod list, shows you the whole plan, and only changes anything when you press Apply.\n\nIt organises the folder tree Penumbra shows you. It never edits, renames, moves or deletes the mod files themselves on disk, and it never changes what a mod does in game.\n\nThe usual order is: Scan to read your library, Protect anything that must not move, Sort to propose a layout, Review Changes to check it, then Apply."

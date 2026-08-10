@@ -110,6 +110,21 @@ public sealed partial class MainWindow : Window, IDisposable
     {
     }
 
+    /// <summary>
+    /// Raised each time this window opens. Plugin uses it to offer the first-run walkthrough.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately on open rather than on plugin load: a window appearing over someone's gameplay
+    /// because a plugin loaded is hostile, and the walkthrough describes controls that are only
+    /// worth seeing once this window is actually in front of them.
+    /// </remarks>
+    internal Action? Opened { get; set; }
+
+    public override void OnOpen() => Opened?.Invoke();
+
+    /// <summary> Piece 5's Help tab button, wired by Plugin. Null until the walkthrough exists. </summary>
+    internal Action? ShowWalkthrough { get; set; }
+
     // Called from Penumbra's IPC subscribers, which may be on any thread. The timestamp is captured
     // here rather than at drain time so it records when the callback fired; display order is queue
     // arrival order, which is not the same thing and does not claim to be.
@@ -142,7 +157,7 @@ public sealed partial class MainWindow : Window, IDisposable
                 DrawSearchTab();
                 // A standalone type rather than a MainWindow partial, so its content is reachable
                 // from tests - see HelpTab's own remarks. Tab dispatch stays here regardless.
-                HelpTab.Draw();
+                HelpTab.Draw(ShowWalkthrough);
             }
         }
 
