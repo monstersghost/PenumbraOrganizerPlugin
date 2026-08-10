@@ -160,6 +160,13 @@ anything that didn't match "Expected" even if it's minor.
 
 ### 2.3 Sort
 
+> **Stale as of 0.6.0.0.** The seven sort buttons described below no longer
+> exist — they were replaced by a Group by dropdown, two split checkboxes and
+> one Sort button. The mapping is: By Creator = Creator; By Mod Type = Mod type
+> with Split gear off; By Mod Type Detailed = Mod type with Split gear on; and
+> the two "Then" pairs likewise. See `docs/TESTING_GUIDE_0.6.0.md` section 4 for
+> the current controls, including the Split NPC option that no button ever had.
+
 Run each of these, checking the **Review Changes** tab after each one to
 see the proposed new paths before applying anything (do not click Apply
 yet in this section).
