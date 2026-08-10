@@ -44,7 +44,7 @@ public static class HelpTab
     /// exist yet - so "push the tag before announcing" is on the release checklist instead.
     /// </remarks>
     public const string GuideUrl =
-        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.0/docs/USER_GUIDE.md";
+        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.0.0/docs/USER_GUIDE.md";
 
     /// <summary>
     /// Reading order, which is not tab order: what the plugin does and what is safe come first,
