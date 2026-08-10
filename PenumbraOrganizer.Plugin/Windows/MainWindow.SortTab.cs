@@ -69,8 +69,15 @@ public sealed partial class MainWindow
         ImGui.Spacing();
         // Disabled in 0.5.3.1 rather than removed: a full scrape produces roughly 21,000 names, and
         // building the matcher from a list that size is implicated in reports of the game closing
-        // instantly during Scan and the Search index build. Re-enabled once the matcher no longer
-        // builds one giant compiled alternation per category.
+        // instantly during Scan and the Search index build.
+        //
+        // 0.6.0 replaced the compiled alternation with an index, so the cost this button used to
+        // create is gone - but that is NOT on its own the condition for re-enabling it. The gate is
+        // reproducing the crash and verifying the new matcher in-game against a full ~20,115-name
+        // list, because the mechanism is still unknown and correlation is all that was ever
+        // established. Re-enabling is a release decision made after that verification, alongside
+        // flipping Configuration.ScrapedNpcListFeatureEnabled - until that flips, a refreshed list
+        // would not be loaded anyway.
         ImGui.BeginDisabled(true);
         ImGui.Button("Refresh NPC list from wiki");
         ImGui.EndDisabled();
@@ -85,8 +92,9 @@ public sealed partial class MainWindow
         {
             if (_npcRefreshResult.RecoveredFromCorruption)
                 TextColoredWrapped(ImGuiColors.DalamudYellow,
-                    "The existing NPC name list was unreadable and has been reset from the bundled "
-                    + "seed list; the old file was preserved alongside it as a timestamped backup.");
+                    "The existing NPC name list was unreadable, so it has been rebuilt from this "
+                    + "refresh alone; the old file was preserved alongside it as a timestamped "
+                    + "backup.");
 
             foreach (var category in _npcRefreshResult.Categories)
             {

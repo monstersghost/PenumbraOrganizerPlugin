@@ -111,8 +111,12 @@ public class NpcNameRefreshServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_CorruptedExistingFile_PreservesBackupAndRecoversFromSeed()
+    public async Task RefreshAsync_CorruptedExistingFile_PreservesBackupAndRebuildsFromThisRefreshAlone()
     {
+        // NOT "recovers from the seed", which is what this did before snapshot semantics. The
+        // corrupt path now falls back to an empty document, so the file ends up holding what the
+        // wiki returned and nothing else - seeding here would inject bundled names that no later
+        // refresh could ever remove.
         var path = MakeTempPath();
         File.WriteAllText(path, "{ not json");
         var service = MakeService(_ => CategoryPageHtml("Alphinaud"));
@@ -124,8 +128,12 @@ public class NpcNameRefreshServiceTests
         Assert.Single(backups);
         Assert.Equal("{ not json", File.ReadAllText(backups[0]));
 
+        // Exact contents, not Contains: "rebuilt from this refresh alone" is a claim about what is
+        // ABSENT, and Contains would pass just as happily if the corrupt path had seeded the file.
+        // Refresh_NeverInjectsTheBundledSeedIntoTheScrapedFile covers the same rule with a seed
+        // that actually carries names; this one covers the corrupt branch specifically.
         var written = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
-        Assert.Contains("Alphinaud", written.NPCs);
+        Assert.Equal(["Alphinaud"], written.NPCs);
     }
 
     [Fact]

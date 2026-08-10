@@ -1,7 +1,7 @@
 # Handoff: the 0.6.0 UI overhaul
 
 Written 2026-08-08, updated 2026-08-10. Read this before continuing the overhaul. Everything is on
-`main`, committed, nothing pushed.
+`main`, committed and pushed.
 
 ## Where things stand
 
@@ -126,8 +126,12 @@ expect it.
 - **`MainWindow.Widgets.cs`'s `DrawWrappingButtonRow` is now unused** — the sort button row was its
   last caller. Left alone in case pieces 3-5 want it.
 - **Three xUnit analyzer warnings in the test project** (`ApplyPlannerTests.cs:306`,
-  `NpcNameMatcherEquivalenceTests.cs:63` and `:74`) predate this work and only surface on a
-  non-incremental build. The production project is at zero.
+  `NpcNameMatcherEquivalenceTests.cs:63` and `:74`) only surface on a non-incremental build. The
+  production project is at zero. Only the `ApplyPlannerTests` one predates the overhaul; the two in
+  `NpcNameMatcherEquivalenceTests` were introduced by piece 1 Task 2 at `56ac255` and are
+  `Assert.True`/`False` over `Regex.IsMatch` where the analyzer wants `Assert.Matches`/
+  `DoesNotMatch`. Worth fixing when that file is next touched — it is a temporary guard due for
+  deletion once this change has settled, so it may simply go.
 
 ## Still open, unrelated to the critical path
 
