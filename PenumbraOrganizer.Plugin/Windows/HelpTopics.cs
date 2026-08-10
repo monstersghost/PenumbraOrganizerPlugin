@@ -27,6 +27,7 @@ public static class HelpTopics
     public static readonly HelpTopic SortScrapedNpcList = new("sort.scraped-npc-list");
     public static readonly HelpTopic SortImportWorkbook = new("sort.import-workbook");
     public static readonly HelpTopic SortManualAssign = new("sort.manual-assign");
+    public static readonly HelpTopic SortRefreshNpcList = new("sort.refresh-npc-list");
 
     // Review Changes
     public static readonly HelpTopic ReviewApply = new("review.apply");

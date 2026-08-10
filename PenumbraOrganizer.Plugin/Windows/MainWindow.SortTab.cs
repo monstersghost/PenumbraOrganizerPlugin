@@ -81,12 +81,15 @@ public sealed partial class MainWindow
         ImGui.BeginDisabled(true);
         ImGui.Button("Refresh NPC list from wiki");
         ImGui.EndDisabled();
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Temporarily unavailable in this version. See the 0.5.3.1 release notes.");
+        Help.Tooltip(HelpTopics.SortRefreshNpcList, "Not available in this version.");
+        // Deliberately makes no causal claim. The previous wording said a refresh "produced a list
+        // large enough to crash the game", which asserts a mechanism that was never established -
+        // what is established is only that resetting the oversized list stops the observed crash.
         TextColoredWrapped(ImGuiColors.DalamudYellow,
-            "Refreshing the NPC list is turned off in this version. A full refresh produced a list "
-            + "large enough to crash the game on the next scan. NPC classification still works from "
-            + "the list that ships with the plugin.");
+            "Refreshing is turned off in this version. NPC classification works from the curated "
+            + "list bundled with the plugin, which needs no refresh. This button rebuilds the "
+            + "separate opt-in scraped list, and that stays turned off until it has been verified "
+            + "in-game.");
 
         if (_npcRefreshResult is not null)
         {

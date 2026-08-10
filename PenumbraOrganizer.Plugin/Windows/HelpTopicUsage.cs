@@ -32,6 +32,7 @@ public static class HelpTopicUsage
         HelpTopics.SortScrapedNpcList,
         HelpTopics.SortImportWorkbook,
         HelpTopics.SortManualAssign,
+        HelpTopics.SortRefreshNpcList,
 
         // Review Changes - MainWindow.ReviewTab.cs
         HelpTopics.ReviewApply,

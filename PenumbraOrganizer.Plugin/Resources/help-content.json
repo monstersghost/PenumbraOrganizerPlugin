@@ -71,6 +71,11 @@
       "short": "Sets the proposed folder for every checked mod. Unlike Sort, this does not renumber name clashes - it reports them as errors on Review Changes instead."
     },
     {
+      "id": "sort.refresh-npc-list",
+      "title": "Refresh NPC list from wiki",
+      "short": "Rebuilds the opt-in scraped NPC list from the wiki. The curated list bundled with the plugin is separate and never needs refreshing."
+    },
+    {
       "id": "review.apply",
       "title": "Apply",
       "short": "Writes every proposed path to Penumbra. This is the only control here that changes your library, and a backup snapshot is taken first, automatically."
