@@ -96,12 +96,36 @@ public sealed class NpcNameRefreshService
         if (!File.Exists(path))
             return (Empty(), false);
 
-        var parse = NpcNameListCodec.Parse(File.ReadAllText(path));
+        // An unreadable file is treated exactly like a corrupt one: this is a refresh, and the
+        // wiki's contents are about to replace everything anyway. Throwing instead would surface as
+        // an unhandled exception on the UI's async path, since RefreshAsync has no other guard.
+        string contents;
+        try
+        {
+            contents = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return (Empty(), true);
+        }
+
+        var parse = NpcNameListCodec.Parse(contents);
         if (parse.Status == NpcNameListParseStatus.Ok)
             return (parse.Data!, false);
 
-        var backupPath = $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
-        File.Copy(path, backupPath, overwrite: true);
+        // Best effort. Failing to preserve a copy of a file we are about to overwrite is worth
+        // reporting through RecoveredFromCorruption, but it must not abort the refresh itself.
+        try
+        {
+            var backupPath = $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+            File.Copy(path, backupPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Swallowed deliberately: the caller already learns something was wrong from the
+            // recovered flag, and there is no channel here to report the backup failure separately.
+        }
+
         return (Empty(), true);
     }
 

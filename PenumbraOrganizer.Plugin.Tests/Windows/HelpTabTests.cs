@@ -65,6 +65,19 @@ public class HelpTabTests
     }
 
     [Fact]
+    public void TheGitHubLink_CarriesThisBuildsOwnVersion()
+    {
+        // Catches the realistic regression: the version gets bumped for a release and the URL is
+        // forgotten, so the Help tab quietly serves the PREVIOUS release's guide.
+        //
+        // It cannot prove the tag was actually pushed - that stays a release-checklist item - but a
+        // URL that does not even name this build is wrong before anyone reaches GitHub.
+        var version = typeof(PenumbraOrganizer.Plugin.Plugin).Assembly.GetName().Version!.ToString(4);
+
+        Assert.Contains($"/blob/{version}/", HelpTab.GuideUrl);
+    }
+
+    [Fact]
     public void TheGitHubLink_PointsAtTheGuideInThisRepo()
     {
         // A version tag alone is not enough - the URL also has to reach the right file. This is the

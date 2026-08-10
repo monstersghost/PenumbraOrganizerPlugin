@@ -77,7 +77,9 @@ public sealed class Plugin : IDalamudPlugin
         // rather than latched, so the Penumbra-unavailable path can offer it again next time.
         _mainWindow.Opened = () =>
         {
-            if (!Config.FirstRunTutorialSeen)
+            // The IsOpen guard matters: Start() rebuilds the step machine, so without it a user who
+            // closes and reopens the MAIN window mid-walkthrough silently drops back to step one.
+            if (!Config.FirstRunTutorialSeen && !_firstRunWindow.IsOpen)
                 _firstRunWindow.Start();
         };
         // The Help tab's reopen button. Deliberately ignores the flag and never clears it.
@@ -410,24 +412,16 @@ public sealed class Plugin : IDalamudPlugin
     /// The curated NPC name list bundled with the plugin, and the default source for name matching.
     /// </summary>
     /// <remarks>
-    /// public, not internal: this repo has no InternalsVisibleTo, so an internal accessor is
-    /// unreachable from the test project. The neighbouring <see cref="ReadEmbeddedNpcNameSeed"/> is
-    /// internal and has no test, which is why nobody has hit this before.
+    /// Delegates to <see cref="Organizer.NpcNames.NpcNameListStore.ReadEmbeddedStaticList"/>, which
+    /// is where the read now lives so the background library phase never names this type. Kept here
+    /// because existing tests call it, and because this is where a reader looks for it.
     /// <para>
-    /// The file must be saved WITHOUT a UTF-8 BOM. <c>NpcNameListCodec.Parse</c> never throws - it
-    /// reports <c>MalformedJson</c> - so a BOM here would not fail loudly. It would make the
-    /// bundled list silently unavailable and degrade every scan to no NPC names at all.
+    /// public, not internal: this repo has no InternalsVisibleTo, so an internal accessor is
+    /// unreachable from the test project.
     /// </para>
     /// </remarks>
-    public static string ReadEmbeddedStaticNpcNameList()
-    {
-        var assembly = typeof(Plugin).Assembly;
-        const string resourceName = "PenumbraOrganizer.Plugin.Organizer.NpcNames.npc-name-list-static.json";
-        using var stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
+    public static string ReadEmbeddedStaticNpcNameList() =>
+        Organizer.NpcNames.NpcNameListStore.ReadEmbeddedStaticList();
 
     internal static string ReadEmbeddedNpcNameSeed()
     {

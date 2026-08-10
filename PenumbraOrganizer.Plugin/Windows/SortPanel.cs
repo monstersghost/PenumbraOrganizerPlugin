@@ -71,27 +71,29 @@ public sealed class SortPanel
         Action saveConfig,
         Func<string, string> canonicalizeCreator)
     {
-        var selection = new SortSelection(Groupings[_groupingIndex].Strategy, _splitGear, _splitNpc);
-
         ImGui.BeginDisabled(!gates.CanStageProposals);
 
         ImGui.SetNextItemWidth(220);
         ImGui.Combo("Group by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
         Help.Tooltip(HelpTopics.SortGrouping);
 
+        // The strategy is settled the moment the combo has been submitted. SplitsApply reads only
+        // Strategy, so gating the checkboxes on it here is correct even though the split values
+        // themselves may still change further down this same frame.
+        var strategy = Groupings[_groupingIndex].Strategy;
+        var splitsApply = new SortSelection(strategy, _splitGear, _splitNpc).SplitsApply;
+
         // Each checkbox closes its own disabled scope before its tooltip: ImGui is positional, so
         // Help.Tooltip binds to whichever widget was submitted last, and EndDisabled submits none.
-        ImGui.BeginDisabled(!selection.SplitsApply);
+        ImGui.BeginDisabled(!splitsApply);
         ImGui.Checkbox("Split gear by equipment slot", ref _splitGear);
         ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitGear,
-            selection.SplitsApply ? null : SplitsInapplicableReason);
+        Help.Tooltip(HelpTopics.SortSplitGear, splitsApply ? null : SplitsInapplicableReason);
 
-        ImGui.BeginDisabled(!selection.SplitsApply);
+        ImGui.BeginDisabled(!splitsApply);
         ImGui.Checkbox("Split NPC mods by kind", ref _splitNpc);
         ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitNpc,
-            selection.SplitsApply ? null : SplitsInapplicableReason);
+        Help.Tooltip(HelpTopics.SortSplitNpc, splitsApply ? null : SplitsInapplicableReason);
 
         // Piece 1's opt-in. Bound directly to config, saved on change, and force-disabled for 0.6.0
         // through the SAME gate the backend consults - so a config value left true cannot quietly
@@ -106,6 +108,11 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortScrapedNpcList,
             Configuration.ScrapedNpcListFeatureEnabled ? null : "Not available in this version.");
+
+        // Every control above has now been submitted, so this is the selection as the user has it
+        // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
+        // the checkboxes held before the user's click was processed.
+        var selection = new SortSelection(strategy, _splitGear, _splitNpc);
 
         // Stable id: a label varying with mod count makes the widget id vary with it, so a background
         // scan publishing mid-click would change the active id and the click would be dropped.

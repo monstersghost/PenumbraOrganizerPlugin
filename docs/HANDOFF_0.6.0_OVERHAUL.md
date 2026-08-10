@@ -5,8 +5,8 @@ Written 2026-08-08, updated 2026-08-10. Read this before continuing the overhaul
 
 ## Where things stand
 
-`main` is at `c9f2f37`. **1011 tests pass, production build clean with zero warnings.** Verify that
-before believing anything below.
+`main` is at `de7e9f2` plus the post-review fixes. **1049 tests pass, production build clean with
+zero warnings.** Verify that before believing anything below.
 
 The overhaul is six pieces. Build order is fixed by real dependencies:
 
@@ -24,15 +24,25 @@ The overhaul is six pieces. Build order is fixed by real dependencies:
 | 5 | Guided first run | **Done**, `43ccc6b`. Not in-game verified |
 | — | Release prep (Task 6) | **Done**, `d17c633`. Notes written, not published |
 
-**All five build pieces are complete.** What remains is in-game verification and the release
-checklist below.
+**A full code review ran against `eb501e5..de7e9f2`** (tag 0.5.3.1 to the end of release prep) and
+its findings are fixed. It found no Critical issues. The one real bug is worth knowing about because
+the test that should have caught it did not:
+
+> Every exit from `FirstRunWindow` routes through `IsOpen = false`, so Dalamud fires `OnClose`, which
+> calls `FirstRunSteps.Closed()` asking for `markSeen: true`. Because `ShouldMarkSeen` or-s, that
+> overwrote the `false` the Penumbra-unavailable path had just set, and the notice consumed the one
+> first run - contradicting four separate pieces of user-facing text. The existing test passed
+> because it drove `FirstRunSteps` in isolation and never simulated the window close that production
+> always performs. `Finish` now gates on `_penumbraAvailable`, and
+> `WithPenumbraUnavailable_TheRealCloseSequence_StillDoesNotMarkSeen` drives the real sequence.
 
 **One plan decision was reversed by the maintainer:** Task 4 specified `bool?` plus a resolver so
 that upgrading users would NOT see the walkthrough. Showing it on upgrade is the intent, so the flag
 is a plain `bool`. Pinned by `PreExistingConfig_WithoutTheFirstRunField_ShowsTheWalkthrough` and
 documented on `Configuration.FirstRunTutorialSeen`, because the plan still says otherwise.
 
-Pieces 1 and 2 are closed, so the ordering constraint below is spent. The next task is piece 3.
+All six pieces are closed and release prep is done, so every ordering constraint in the plans is
+spent. What remains is in-game verification and publishing - see the release checklist below.
 
 ## In-game verification status
 
@@ -213,7 +223,7 @@ to decide at that point, neither obvious:
   both were left in place rather than deleted.
 - **`MainWindow.Widgets.cs`'s `DrawWrappingButtonRow` is now unused** — the sort button row was its
   last caller. Left alone in case pieces 3-5 want it.
-- **Three xUnit analyzer warnings in the test project** (`ApplyPlannerTests.cs:306`,
+- **Six xUnit analyzer warnings in the test project** (`ApplyPlannerTests.cs:306`,
   `NpcNameMatcherEquivalenceTests.cs:63` and `:74`) only surface on a non-incremental build. The
   production project is at zero. Only the `ApplyPlannerTests` one predates the overhaul; the two in
   `NpcNameMatcherEquivalenceTests` were introduced by piece 1 Task 2 at `56ac255` and are

@@ -39,6 +39,7 @@ public class HelpContentTests
             var s = Help.Short(t);
             if (s is null) continue;
             Assert.DoesNotContain('\n', s);
+            Assert.DoesNotContain('\r', s);   // a lone CR breaks the line just as a LF does
             Assert.True(s.Length <= 200, $"{t.Id} short is {s.Length} chars");
         }
     }
@@ -100,9 +101,14 @@ public class HelpContentTests
                 if (text is null)
                     continue;
 
-                // '' as an escape, never a pasted literal - a raw control character here is
-                // invisible in review and is exactly the failure mode this test exists to catch.
-                var offender = text.FirstOrDefault(c => c > '');
+                // Escapes only, never pasted literals. The previous version of this very line carried a
+                // raw U+007F where it claimed to show an escape - invisible in review, and exactly the
+                // failure this test exists to catch.
+                // Printable ASCII, plus newline. A stray tab, CR or NUL is as unrenderable in ImGui
+                // as an em dash, and a c > U+007F check alone would wave all three through - but
+                // body and step are deliberately multi-paragraph, so LF has to stay legal. Shorts
+                // are held to single-line separately, by NoShortContainsANewline... above.
+                var offender = text.FirstOrDefault(c => c != '\n' && (c < ' ' || c > '~'));
                 Assert.True(
                     offender == default,
                     $"{topic.Id} {field} contains non-ASCII U+{(int)offender:X4} ('{offender}'). "

@@ -51,10 +51,10 @@ What did change:
   currently cannot.
 
 **Why the toggle is still off, plainly:** we know that resetting an oversized list stops the game
-closing, and we still do not know *why* a large list did that. The new matching is cheaper and we
-are confident in it, but "cheaper" is not the same as "we found the cause". Enabling a 20,000-name
-list before we can explain the original failure would be guessing with your game. It stays off until
-it has been tested in-game against a full list.
+closing, and we still do not know *why* an oversized list correlated with it. The new matching is
+cheaper and we are confident in it, but "cheaper" is not the same as "we found the cause".
+Enabling a 20,000-name list before we can explain the original failure would be guessing with your
+game. It stays off until it has been tested in-game against a full list.
 
 The curated list is unaffected by any of this and works from the first scan.
 
@@ -78,8 +78,9 @@ Nothing on that tab changes anything.
 
 ### Added: a guided first run
 
-Five short steps covering the scan, protect, sort, review, apply loop. It appears the first time you
-open the plugin window - not when the game starts - and you can reopen it any time from the Help tab.
+Seven short steps covering the scan, protect, sort, review, apply loop. It appears the first time
+you open the plugin window - not when the game starts - and you can reopen it any time from the
+Help tab.
 
 If Penumbra is not loaded when it would appear, it says so and offers itself again next time,
 instead of walking you through steps whose results you would not be able to see.

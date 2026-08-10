@@ -392,6 +392,42 @@ public class NpcNameListStoreTests
     }
 
     [Fact]
+    public void LoadForMatching_UnreadableScrapedFile_DegradesToStaticWithAWarning()
+    {
+        // The catch branch, which was previously untested. An exclusive lock is the cheapest real
+        // IOException available - no mocking, and it exercises File.ReadAllText for real.
+        var dir = MakeTempDir();
+        File.WriteAllText(ScrapedPath(dir), ListJson(5));
+
+        using (File.Open(ScrapedPath(dir), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var result = NpcNameListStore.LoadForMatching(dir, useScraped: true);
+
+            Assert.NotNull(result.Warning);
+            Assert.Contains("Y'shtola", result.Document.NPCs);       // still usable
+            Assert.DoesNotContain("Npc Name 0", result.Document.NPCs);
+        }
+    }
+
+    [Fact]
+    public void Migration_LegacyFileLocked_WarnsAndLeavesBothFilesAlone()
+    {
+        // The rename's catch branch. A failed migration must not throw during plugin construction,
+        // and must not half-move anything.
+        var dir = MakeTempDir();
+        File.WriteAllText(LegacyPath(dir), ListJson(5));
+
+        using (File.Open(LegacyPath(dir), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var warning = NpcNameListStore.MigrateLegacyList(dir);
+
+            Assert.NotNull(warning);
+            Assert.True(File.Exists(LegacyPath(dir)));    // still there, unmoved
+            Assert.False(File.Exists(ScrapedPath(dir)));  // and no half-written destination
+        }
+    }
+
+    [Fact]
     public void LoadForMatching_ScrapedListAtTheCeiling_IsAccepted()
     {
         var dir = MakeTempDir();

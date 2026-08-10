@@ -3,7 +3,7 @@
     {
       "id": "firstrun.welcome",
       "title": "Welcome",
-      "step": "This plugin tidies the folder tree Penumbra shows you. It never edits, renames or deletes your mod files, and it never changes what a mod does in game.\n\nThis walkthrough is five short steps. You can leave at any time - it will not come back."
+      "step": "This plugin tidies the folder tree Penumbra shows you. It never edits, renames or deletes your mod files, and it never changes what a mod does in game.\n\nThis walkthrough is seven short steps. You can leave at any time - it will not come back."
     },
     {
       "id": "firstrun.scan",
@@ -28,7 +28,7 @@
     {
       "id": "firstrun.apply",
       "title": "Step 5: Apply",
-      "step": "When the plan looks right, press Apply on the Review Changes tab. That is the only control that changes your library.\n\nA backup is taken automatically first, and the History tab can put everything back. Nothing you have done before this point touched anything."
+      "step": "When the plan looks right, press Apply on the Review Changes tab. That is the only step in this loop that changes your library.\n\nA backup is taken automatically first, and the History tab can put everything back. Nothing you have done before this point touched anything."
     },
     {
       "id": "firstrun.help",
@@ -48,7 +48,7 @@
     {
       "id": "help.safety-rules",
       "title": "What is safe, and what is not",
-      "body": "Only three things ever change your library: Apply, Restore, and Clean Up Selected Folders. Everything else - scanning, sorting, searching, exporting - is read-only, no matter how it looks.\n\nSorting never moves anything. It fills in a proposed path for each mod, which you can look over on Review Changes and discard by simply sorting differently.\n\nA backup snapshot is taken automatically before every Apply and every Restore, so there is always a way back. The History tab lists them.\n\nProtected mods are excluded from every sort and from Apply. Restore is the one exception, and it says so: it reproduces a snapshot exactly, including for mods that are currently protected."
+      "body": "Everything that can change your library is on this list: Apply, Restore, Clean Up Selected Folders, Rollback Folder Cleanup, and the recovery panel's Continue and Restore Previous State. Everything else - scanning, sorting, searching, exporting - is read-only, no matter how it looks.\n\nSorting never moves anything. It fills in a proposed path for each mod, which you can look over on Review Changes and discard by simply sorting differently.\n\nA backup snapshot is taken automatically before every Apply and every Restore, so there is always a way back. The History tab lists them.\n\nProtected mods are excluded from every sort and from Apply. Restore is the one exception, and it says so: it reproduces a snapshot exactly, including for mods that are currently protected."
     },
     {
       "id": "help.tab-scan",
@@ -168,7 +168,7 @@
     {
       "id": "review.apply",
       "title": "Apply",
-      "short": "Writes every proposed path to Penumbra. This is the only control here that changes your library, and a backup snapshot is taken first, automatically."
+      "short": "Moves every unprotected mod whose proposed folder differs from its current one. This is the only control on this tab that changes your library, and a backup snapshot is taken first, automatically."
     },
     {
       "id": "review.export",

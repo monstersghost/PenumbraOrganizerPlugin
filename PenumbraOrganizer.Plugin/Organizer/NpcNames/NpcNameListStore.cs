@@ -75,9 +75,33 @@ public static class NpcNameListStore
     /// The matcher's name source: the bundled static list, plus the opt-in scraped list when
     /// <paramref name="useScraped"/> is true. Never throws for on-disk problems and never writes.
     /// </summary>
+    /// <summary>
+    /// The bundled curated list, read from this assembly's embedded resources.
+    /// </summary>
+    /// <remarks>
+    /// Lives here rather than on <c>Plugin</c> so that the background library phase never names
+    /// <c>Plugin</c> at all. <c>ScanProcessor.Prepare</c> and <c>IndexProcessor.Prepare</c> call
+    /// <see cref="LoadForMatching"/> off the framework thread, and <c>LibraryWorkPurityTests</c>
+    /// checks signatures only - so a call graph reaching the type that holds every Dalamud static is
+    /// one careless edit away from a real violation the test could not see. Resolving the assembly
+    /// from <c>typeof(NpcNameListStore)</c> keeps that impossible.
+    /// <para>
+    /// The file must be saved WITHOUT a UTF-8 BOM: <c>NpcNameListCodec.Parse</c> never throws, so a
+    /// BOM would silently make the bundled list unavailable and leave every scan with no NPC names.
+    /// </para>
+    /// </remarks>
+    public static string ReadEmbeddedStaticList()
+    {
+        const string resourceName = "PenumbraOrganizer.Plugin.Organizer.NpcNames.npc-name-list-static.json";
+        using var stream = typeof(NpcNameListStore).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     public static NpcNameListLoadResult LoadForMatching(string configDirectory, bool useScraped)
     {
-        var staticParse = NpcNameListCodec.Parse(Plugin.ReadEmbeddedStaticNpcNameList());
+        var staticParse = NpcNameListCodec.Parse(ReadEmbeddedStaticList());
         if (staticParse.Status != NpcNameListParseStatus.Ok)
             throw new InvalidOperationException(
                 "Bundled static NPC name list is not valid JSON - this is a packaging bug, not a runtime condition.");
@@ -96,10 +120,11 @@ public static class NpcNameListStore
         if (!File.Exists(scrapedPath))
             return new NpcNameListLoadResult(staticList, null);
 
-        // More than one thing can be wrong at once, so warnings accumulate and are joined rather
-        // than overwriting each other - a dropped warning is a diagnostic the user never sees.
-        var warnings = new List<string>();
-
+        // Exactly one thing can be wrong with this file per load, so the warning is a single string
+        // rather than an accumulated list. The plan called for joining two warnings - a failed
+        // migration plus a corrupt file - but migration runs at a different call site with its own
+        // return value, so no path here can produce two. An accumulate-and-join that no input can
+        // exercise reads as though it does something.
         string contents;
         try
         {
@@ -107,23 +132,21 @@ public static class NpcNameListStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            warnings.Add($"{ScrapedFileName} could not be read ({ex.GetType().Name}); "
+            return new NpcNameListLoadResult(staticList,
+                $"{ScrapedFileName} could not be read ({ex.GetType().Name}); "
                 + "using the bundled NPC name list for this session.");
-            return new NpcNameListLoadResult(staticList, Join(warnings));
         }
 
         var parse = NpcNameListCodec.Parse(contents);
         switch (parse.Status)
         {
             case NpcNameListParseStatus.MalformedJson:
-                warnings.Add($"{scrapedPath} is not valid JSON; "
-                    + "using the bundled NPC name list for this session.");
-                return new NpcNameListLoadResult(staticList, Join(warnings));
+                return new NpcNameListLoadResult(staticList,
+                    $"{scrapedPath} is not valid JSON; using the bundled NPC name list for this session.");
 
             case NpcNameListParseStatus.UnsupportedVersion:
-                warnings.Add($"{scrapedPath} has an unsupported Version; "
-                    + "using the bundled NPC name list for this session.");
-                return new NpcNameListLoadResult(staticList, Join(warnings));
+                return new NpcNameListLoadResult(staticList,
+                    $"{scrapedPath} has an unsupported Version; using the bundled NPC name list for this session.");
         }
 
         var scraped = parse.Data!;
@@ -133,17 +156,14 @@ public static class NpcNameListStore
             // Warn and fall back in memory only. The file is left exactly as it is - see the
             // comment on MaxScrapedNameCount for why this must not reuse Load's replace-and-back-up
             // behaviour.
-            warnings.Add($"{ScrapedFileName} holds {count:N0} names, more than the "
+            return new NpcNameListLoadResult(staticList,
+                $"{ScrapedFileName} holds {count:N0} names, more than the "
                 + $"{MaxScrapedNameCount:N0} this version will build a matcher from. Using the "
                 + "bundled list for this session; the file has not been changed.");
-            return new NpcNameListLoadResult(staticList, Join(warnings));
         }
 
-        return new NpcNameListLoadResult(Union(staticList, scraped), Join(warnings));
+        return new NpcNameListLoadResult(Union(staticList, scraped), null);
     }
-
-    private static string? Join(List<string> warnings) =>
-        warnings.Count == 0 ? null : string.Join(" ", warnings);
 
     private static NpcNameListDocument Union(NpcNameListDocument staticList, NpcNameListDocument scraped)
     {

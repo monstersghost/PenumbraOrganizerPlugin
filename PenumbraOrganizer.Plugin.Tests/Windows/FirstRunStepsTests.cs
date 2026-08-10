@@ -86,10 +86,53 @@ public class FirstRunStepsTests
     [Fact]
     public void ClosingAfterSkipping_DoesNotClearTheFlag()
     {
-        // Dismissing the window IS a close, so Closed() can follow Skip() in the same frame. If
-        // Finish assigned rather than or-ed, the Penumbra-unavailable rule would clear a true here.
-        var steps = new FirstRunSteps(penumbraAvailable: false);
+        // Dismissing the window IS a close, so Closed() follows Skip() in the same frame. If Finish
+        // assigned rather than or-ed, the second call would clear what the first earned.
+        var steps = Available();
         steps.Skip();
+
+        steps.Closed();
+
+        Assert.True(steps.ShouldMarkSeen);
+    }
+
+    [Fact]
+    public void WithPenumbraUnavailable_TheRealCloseSequence_StillDoesNotMarkSeen()
+    {
+        // THE regression test, and the one whose absence let this ship broken.
+        //
+        // WithPenumbraUnavailable_...DoesNotMarkSeen below drives Next() alone, which is not what
+        // production does: FirstRunWindow calls Next(), sees IsFinished, and sets IsOpen = false,
+        // which makes Dalamud fire OnClose and call Closed(). That second call asked for
+        // markSeen: true and, because ShouldMarkSeen or-s, overwrote the false. The notice consumed
+        // the first run and never appeared again, contradicting its own text.
+        //
+        // Exercise the full sequence, not the state machine in isolation.
+        var steps = new FirstRunSteps(penumbraAvailable: false);
+
+        steps.Next();     // the Done button
+        steps.Closed();   // Dalamud's OnClose, which every exit routes through
+
+        Assert.False(steps.ShouldMarkSeen);
+    }
+
+    [Fact]
+    public void WithPenumbraUnavailable_ClosingWithTheXDoesNotMarkSeen()
+    {
+        // The other exit: no button at all, just the window's X.
+        var steps = new FirstRunSteps(penumbraAvailable: false);
+
+        steps.Closed();
+
+        Assert.False(steps.ShouldMarkSeen);
+    }
+
+    [Fact]
+    public void WithPenumbraAvailable_TheRealCloseSequence_MarksSeen()
+    {
+        // The mirror of the regression test: the ordinary path must still settle as seen once the
+        // window closes, or nobody would ever stop being shown the walkthrough.
+        var steps = RunToEnd(Available());
 
         steps.Closed();
 

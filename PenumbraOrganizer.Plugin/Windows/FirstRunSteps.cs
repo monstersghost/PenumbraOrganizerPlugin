@@ -41,8 +41,9 @@ public sealed class FirstRunSteps
     public bool IsFinished { get; private set; }
 
     /// <summary>
-    /// True when the run reached a real ending. False after the Penumbra-unavailable path, which
-    /// makes no decision and so must not consume the one first run the user gets.
+    /// True when the run reached a real ending. Always false on the Penumbra-unavailable path,
+    /// whichever way that notice is dismissed - it makes no decision, so it must not consume the
+    /// one first run the user gets.
     /// </summary>
     public bool ShouldMarkSeen { get; private set; }
 
@@ -89,8 +90,9 @@ public sealed class FirstRunSteps
     }
 
     /// <summary>
-    /// An explicit decision not to read it, which counts. Unlike <see cref="Next"/> past the end,
-    /// this marks the run seen even when Penumbra is unavailable: the user chose to dismiss it.
+    /// An explicit decision not to read it, which counts as having seen it. Not reachable from the
+    /// Penumbra-unavailable notice, which is a single step and so renders no Skip button - and
+    /// would not mark the run seen even if it did.
     /// </summary>
     public void Skip() => Finish(markSeen: true);
 
@@ -104,8 +106,18 @@ public sealed class FirstRunSteps
     private void Finish(bool markSeen)
     {
         IsFinished = true;
-        // Never clears an already-earned true: Closed() can arrive after Skip() in the same frame,
-        // since dismissing the window is itself a close.
-        ShouldMarkSeen |= markSeen;
+
+        // Two rules, and the second one is load-bearing in a way that is easy to miss.
+        //
+        // Or-ing never clears an already-earned true: Closed() arrives after Skip() in the same
+        // frame, because dismissing the window IS a close.
+        //
+        // But that alone made the Penumbra-unavailable path unreachable in production. Every exit
+        // in FirstRunWindow routes through IsOpen = false, so Dalamud calls OnClose, which calls
+        // Closed(), which asks for markSeen: true - overwriting the false that Next() set on the
+        // unavailable path. The run got consumed and the notice never appeared again, while four
+        // separate pieces of user-facing text promised the opposite. Gating on _penumbraAvailable
+        // here rather than at each call site makes that promise hold whichever button was pressed.
+        ShouldMarkSeen |= markSeen && _penumbraAvailable;
     }
 }

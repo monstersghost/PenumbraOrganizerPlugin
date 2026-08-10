@@ -89,12 +89,18 @@ public static class Help
     /// why that widget is currently disabled.
     /// </summary>
     /// <remarks>
-    /// MUST be called immediately after the widget it describes and OUTSIDE any
-    /// <c>BeginDisabled</c>/<c>EndDisabled</c> scope. ImGui is positional: <c>IsItemHovered</c>
-    /// binds to whichever item was submitted last, so a call anywhere else attaches the tooltip to
-    /// the wrong widget - or to nothing. <c>AllowWhenDisabled</c> is passed here rather than left to
-    /// call sites because a disabled control is exactly when its explanation matters most, and
-    /// omitting the flag fails silently.
+    /// MUST be called immediately after the widget it describes, and after any <c>EndDisabled</c>
+    /// that wraps <em>that widget specifically</em>. ImGui is positional: <c>IsItemHovered</c> binds
+    /// to whichever item was submitted last, so a call anywhere else attaches the tooltip to the
+    /// wrong widget - or to nothing. <c>EndDisabled</c> submits no item of its own, so closing an
+    /// inner scope first does not break the binding.
+    /// <para>
+    /// An enclosing <c>BeginDisabled</c> covering a whole panel is fine and is what <c>SortPanel</c>
+    /// does. The tooltip still appears, because <c>AllowWhenDisabled</c> is passed here rather than
+    /// left to call sites - a disabled control is exactly when its explanation matters most, and
+    /// omitting the flag fails silently. It does render at the disabled alpha, which is a cosmetic
+    /// cost accepted in exchange for one gate around the panel instead of one per control.
+    /// </para>
     /// </remarks>
     public static void Tooltip(HelpTopic topic, string? disabledReason = null)
     {
