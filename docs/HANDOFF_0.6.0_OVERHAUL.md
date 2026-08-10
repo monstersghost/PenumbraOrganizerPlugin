@@ -17,28 +17,43 @@ The overhaul is six pieces. Build order is fixed by real dependencies:
 | Piece | What | State |
 |---|---|---|
 | 0 | MainWindow split | **Done**, `aa0ad69`, in-game verified |
-| 1 | NPC name lists + index matcher | **Done**, Task 5 at `7afb414`. Not in-game verified |
-| 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. Not in-game verified |
-| 3 | Hover explanations | Not started — **next** |
+| 1 | NPC name lists + index matcher | **Done**, Task 5 at `7afb414`. Partly in-game verified |
+| 2 | Sort control consolidation | **Done**, Tasks 3-4 at `66ff37f` and `c9f2f37`. Partly in-game verified |
+| 3 | Hover explanations | Not started — **next**. Plan refreshed at `654a101`; read that first |
 | 4 | Help tab | Not started |
 | 5 | Guided first run | Not started |
 
 Pieces 1 and 2 are closed, so the ordering constraint below is spent. The next task is piece 3.
 
-## What is not verified in-game
+## In-game verification status
 
-Penumbra's IPC only resolves inside the game, so nothing that touches it has been exercised. From
-pieces 1 and 2 specifically:
+A first in-game pass ran on 2026-08-10 against `ef62b67`.
 
-- **The `MigrateLegacyList` call site** in the `Plugin` constructor. Every migration test passes
-  against a temp directory; that the constructor actually reaches it is unproven. This is the exact
-  trap the piece 1 plan called out.
-- **`ScanJob` / `IndexJob`** passing the new `(configDirectory, useScraped)` arguments — their
-  `Materialize()` bodies call `GetModListAdapter` and `GetChangedItemAdapterDictionary`.
-- **The whole `SortPanel`**, since ImGui only draws in a game frame. Worth checking specifically:
-  the two split checkboxes greying out under Creator, the staleness line appearing after a
-  selection change, and Import Workbook still opening its dialog now that it no longer shares the
-  old button row's disabled scope.
+**Confirmed working:** Scan completes (so `ScanJob.Materialize` with the new arguments, and
+`LoadForMatching` reading the embedded static list off the framework thread, both work). Workbook
+export. Import Workbook, including its dialog — which matters, because piece 2 moved it out of the
+old button row's disabled scope. **Split NPC off**, the combination no button ever offered.
+
+**Still unverified, and worth doing on the next pass:**
+
+- **The `MigrateLegacyList` call site** in the `Plugin` constructor. This is the one that operates on
+  a real user file, so it is the highest-value remaining check: a pre-0.6.0 `npc-name-list.json`
+  should become `npc-name-list-scraped.json` with contents intact. Back up the config directory
+  first. Every migration test passes against a temp directory; that the constructor reaches it at
+  all is still unproven, which is the exact trap the piece 1 plan called out.
+- **`IndexJob`** — the Search index build was not exercised.
+- **`SortPanel` details** — the two split checkboxes greying out under Creator, and the staleness
+  line appearing after a selection change.
+
+**One bug found and fixed:** ticking or unticking any folder on the Protect tab reversed an explicit
+"Toggle Heliosphere protection" unprotect, for every Heliosphere mod at once. Fixed at `261db03`.
+Pre-existing since `91446a3`, not a regression from this overhaul — see "Known debt" below for what
+the fix changed.
+
+**Not a bug:** collisions shown on Review Changes after an Import. Import and manual assignment
+deliberately skip `CollisionDisambiguator`; a collision created by hand surfaces as a `Validate()`
+error rather than being silently renumbered. If a plain **Sort** ever produces collisions, that is a
+real bug — disambiguation should have renumbered them.
 
 ## Three deliberate deviations from the plans, already reviewed and accepted
 
@@ -117,6 +132,28 @@ expect it.
   Established: resetting the oversized list stops the observed crash. The mechanism is still unknown.
 - Release notes get written but **not published**. The maintainer reviews them first and says go.
   Short user-facing note plus a link to the full notes.
+
+## The protection model, after `261db03`
+
+Worth knowing before touching the Protect tab, because it had two rules and now has one.
+
+`OrganizerState.IsEffectivelyProtected` is the **single** protection rule; every path recomputes
+through it. There used to be a second, `IsEffectivelyProtectedAfterIndividualToggle`, that simply
+omitted the Heliosphere clause — so the answer depended on which control the user last touched, and
+that is how ticking a folder came to reverse an explicit Heliosphere unprotect.
+
+`_heliosphereUnprotectOverrides` holds the Heliosphere mods the user explicitly unprotected this
+session. It is **deliberately not persisted** and is cleared by `ReplaceScanAtomically`: the
+documented contract is that a scan re-protects Heliosphere mods no matter how the toggle was left,
+because Heliosphere owns their location. The override survives unrelated UI actions, not a scan.
+
+**Rule order is a decision, not an accident** (confirmed with the maintainer): an explicit mod
+protection or a protected folder beats the override. Unprotecting Heliosphere mods and then
+protecting a folder containing one protects that one — the newer, more specific instruction — while
+leaving every Heliosphere mod outside that folder alone.
+
+`SetAllProtection(false)` now also unticks Heliosphere rows. Before, it left them visibly ticked and
+the button looked broken.
 
 ## Known debt created by pieces 1 and 2
 
