@@ -35,14 +35,17 @@ public sealed partial class MainWindow
         ImGui.Spacing();
         if (ImGui.Button("Export"))
             _lastExportPath = _plugin.ExportReview();
+        Help.Tooltip(HelpTopics.ReviewExport);
 
         ImGui.SameLine();
         if (ImGui.Button("Show Config File"))
             OpenConfigFile();
+        Help.Tooltip(HelpTopics.ReviewShowConfigFile);
 
         ImGui.SameLine();
         if (ImGui.Button("Create Diagnostic Dump"))
             _lastDiagnosticDumpPath = CreateDiagnosticDump();
+        Help.Tooltip(HelpTopics.ReviewDiagnosticDump);
 
         // File paths are unbounded in length (depend on the user's own Windows profile/folder
         // depth) - wrapped, and with any action button on its own line below rather than chained
@@ -61,10 +64,12 @@ public sealed partial class MainWindow
         var strategyLabels = WorkbookStrategyOptions.Select(o => o.Label).ToArray();
         ImGui.SetNextItemWidth(220);
         ImGui.Combo("Workbook destinations", ref _workbookStrategyIndex, strategyLabels, strategyLabels.Length);
+        Help.Tooltip(HelpTopics.ReviewWorkbookDestinations);
 
         ImGui.SameLine();
         if (ImGui.Button("Export Workbook"))
             ExportWorkbook(WorkbookStrategyOptions[_workbookStrategyIndex].Strategy);
+        Help.Tooltip(HelpTopics.ReviewExportWorkbook);
 
         if (_lastWorkbookExportPath is not null)
         {
@@ -76,10 +81,18 @@ public sealed partial class MainWindow
         }
 
         ImGui.Spacing();
-        if (result.HasIssues && ImGui.Button("Protect & Skip All Blocking Mods"))
+        // Restructured from `result.HasIssues && ImGui.Button(...)`: short-circuiting means the
+        // button is not submitted at all when there are no issues, so a tooltip after that
+        // expression would bind to whatever was drawn last instead. The nested form keeps the
+        // tooltip inside the branch where its widget actually exists.
+        if (result.HasIssues)
         {
-            _plugin.ProtectAndSkipBlockingMods();
-            result = _plugin.OrganizerState.Validate();
+            if (ImGui.Button("Protect & Skip All Blocking Mods"))
+            {
+                _plugin.ProtectAndSkipBlockingMods();
+                result = _plugin.OrganizerState.Validate();
+            }
+            Help.Tooltip(HelpTopics.ReviewProtectAndSkip);
         }
 
         ImGui.Spacing();
@@ -99,6 +112,15 @@ public sealed partial class MainWindow
         ImGui.BeginDisabled(result.HasIssues || !gates.CanStartApply);
         var applyClicked = ImGui.Button("Apply");
         ImGui.EndDisabled();
+        // One of two disable reasons, resolved at the call site rather than swept: an unfixable
+        // "another operation is running" message when the real problem is errors the user can
+        // actually go and fix would send them looking in the wrong place. Errors are checked first
+        // because they are the reason the user can act on.
+        Help.Tooltip(
+            HelpTopics.ReviewApply,
+            result.HasIssues ? "Fix the errors listed above first."
+            : !gates.CanStartApply ? ActivityGateReason
+            : null);
         if (applyClicked)
             ImGui.OpenPopup("Apply changes?");
 
@@ -193,6 +215,7 @@ public sealed partial class MainWindow
 
         if (ImGui.Button("Re-read organization.json##orphan-reread"))
             RefreshOrphanedFolders();
+        Help.Tooltip(HelpTopics.ReviewRereadOrganizationJson);
 
         ImGui.SameLine();
         ImGui.TextDisabled(_organizationJsonLastReadAt is { } readAt
@@ -222,12 +245,14 @@ public sealed partial class MainWindow
             ImGui.BeginDisabled(_selectedOrphans.Count == 0 || !gates.CanRunFolderCleanup);
             var cleanClicked = ImGui.Button("Clean Up Selected Folders");
             ImGui.EndDisabled();
-            // Gated on _selectedOrphans.Count > 0 so this tooltip only claims the reason is "another
-            // operation" when that's actually why the button is disabled - with no selection at all,
-            // the button is disabled for an unrelated, pre-existing reason (nothing chosen yet), and
-            // this tooltip must not claim an operation is blocking it when none is.
-            if (_selectedOrphans.Count > 0 && !gates.CanRunFolderCleanup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+            // Two disable reasons, resolved here rather than swept. Nothing-selected is checked
+            // first and gets its own message: previously that case showed no tooltip at all, and
+            // claiming "another operation is in progress" when none is would be actively wrong.
+            Help.Tooltip(
+                HelpTopics.ReviewCleanUpFolders,
+                _selectedOrphans.Count == 0 ? "Choose at least one folder above first."
+                : !gates.CanRunFolderCleanup ? ActivityGateReason
+                : null);
             if (cleanClicked)
                 ImGui.OpenPopup("Clean up folders?");
 
@@ -266,8 +291,9 @@ public sealed partial class MainWindow
             if (ImGui.Button("Rollback Folder Cleanup"))
                 RollbackFolderCleanup();
             ImGui.EndDisabled();
-            if (!gates.CanRunFolderCleanupRollback && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+            Help.Tooltip(
+                HelpTopics.ReviewRollbackFolderCleanup,
+                gates.CanRunFolderCleanupRollback ? null : ActivityGateReason);
         }
 
         DrawFolderActionResults();

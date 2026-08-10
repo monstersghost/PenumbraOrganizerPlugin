@@ -31,8 +31,7 @@ public sealed partial class MainWindow
             _createBackupLabelInput = string.Empty;
         }
         ImGui.EndDisabled();
-        if (!gates.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+        Help.Tooltip(HelpTopics.HistoryCreateBackup, gates.CanCreateBackup ? null : ActivityGateReason);
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -64,8 +63,7 @@ public sealed partial class MainWindow
             ImGui.BeginDisabled(!gates.CanStartRestore);
             var restoreButtonClicked = ImGui.Button($"Restore##restore-{snapshot.Id}");
             ImGui.EndDisabled();
-            if (!gates.CanStartRestore && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+            Help.Tooltip(HelpTopics.HistoryRestore, gates.CanStartRestore ? null : ActivityGateReason);
             if (restoreButtonClicked)
             {
                 _pendingRestoreSnapshotId = snapshot.Id;
@@ -80,8 +78,7 @@ public sealed partial class MainWindow
             ImGui.BeginDisabled(!gates.CanCreateBackup);
             var deleteButtonClicked = ImGui.Button($"Delete##delete-{snapshot.Id}");
             ImGui.EndDisabled();
-            if (!gates.CanCreateBackup && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+            Help.Tooltip(HelpTopics.HistoryDeleteSnapshot, gates.CanCreateBackup ? null : ActivityGateReason);
             if (deleteButtonClicked)
             {
                 DeleteHistorySnapshot(snapshot.Id);

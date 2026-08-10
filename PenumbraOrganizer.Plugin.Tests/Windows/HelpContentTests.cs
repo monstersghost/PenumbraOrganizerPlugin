@@ -112,6 +112,42 @@ public class HelpContentTests
     }
 
     [Fact]
+    public void EveryTopicWithAShort_IsDeclaredAsUsedByAControl()
+    {
+        // NAMED FOR WHAT IT PROVES. HelpTopicUsage.ReferencedByControls is a hand-maintained list,
+        // so this is a DECLARED-USAGE CONSISTENCY check: it catches a topic whose tooltip text nobody
+        // ever intends to show. It does NOT prove any control calls Help.Tooltip - a topic can appear
+        // in help-content.json, in HelpTopics, and in this list while the widget has no call at all.
+        //
+        // Actual wiring is protected by three things, none of them this test: code review of the
+        // call-site convention, the immediately-after-widget rule, and the manual in-game pass over
+        // every control including disabled ones.
+        var declared = HelpTopicUsage.ReferencedByControls;
+        var withShort = HelpTopics.All.Where(t => Help.Short(t) is not null);
+
+        Assert.Empty(withShort.Except(declared));
+    }
+
+    [Fact]
+    public void EveryDeclaredUsage_IsAKnownTopic()
+    {
+        // The other direction, and cheap. Without it, renaming or deleting a topic leaves a stale
+        // entry in the hand-maintained list that nothing ever flags.
+        Assert.Empty(HelpTopicUsage.ReferencedByControls.Except(HelpTopics.All));
+    }
+
+    [Fact]
+    public void DeclaredUsage_ListsEachTopicOnce()
+    {
+        // A duplicate would survive both Except checks above while quietly meaning two controls
+        // claim the same explanation - usually a copy-paste during wiring.
+        Assert.Empty(HelpTopicUsage.ReferencedByControls
+            .GroupBy(t => t.Id, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key));
+    }
+
+    [Fact]
     public void EveryTopicIdIsUsedByAConstant_NotOrphanedInTheResource()
     {
         // The other direction: content written for an id no constant references can never be shown.

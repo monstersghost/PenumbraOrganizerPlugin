@@ -117,8 +117,7 @@ public sealed partial class MainWindow
         ImGui.BeginDisabled(!gates.CanStageProposals);
         var assignClicked = ImGui.Button($"Assign {_selectedManualModIdentifiers.Count} selected mods");
         ImGui.EndDisabled();
-        if (!gates.CanStageProposals && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+        Help.Tooltip(HelpTopics.SortManualAssign, gates.CanStageProposals ? null : ActivityGateReason);
         if (assignClicked && _manualFolderInput.Length > 0 && _selectedManualModIdentifiers.Count > 0)
         {
             var batchResults = _plugin.OrganizerState.AssignManualBatch(_selectedManualModIdentifiers, _manualFolderInput);

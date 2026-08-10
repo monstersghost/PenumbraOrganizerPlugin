@@ -27,8 +27,7 @@ public sealed partial class MainWindow
                 RunScan();
             ImGui.EndDisabled();
         }
-        if (!gates.CanScan && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+        Help.Tooltip(HelpTopics.ScanRefreshModList, gates.CanScan ? null : ActivityGateReason);
 
         // The mods-loaded text must stay SameLine'd with the button here, before the progress bar
         // and outcome message are drawn - DrawLibraryWorkOutcome renders text on Failed/StaleModList/
@@ -44,7 +43,10 @@ public sealed partial class MainWindow
         PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: false);
 
         ImGui.Spacing();
+        // On the label, not the child: a scrolling child is not a hoverable item, so the heading is
+        // the only thing IsItemHovered can bind to here.
         ImGui.Text("Live events (ModAdded / ModDeleted / ModMoved):");
+        Help.Tooltip(HelpTopics.ScanEventLog);
         using (var child = ImRaii.Child("EventLog", new Vector2(0, 150), border: true))
         {
             if (child)

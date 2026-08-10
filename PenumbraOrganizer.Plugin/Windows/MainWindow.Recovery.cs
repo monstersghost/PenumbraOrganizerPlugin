@@ -52,6 +52,9 @@ public sealed partial class MainWindow
                     ImGui.SameLine();
                 if (ImGui.Button(buttonLabel))
                     ImGui.OpenPopup($"Keep current state for {operationId}?");
+                // Inside the loop, so it binds to this row's button. One topic serves every row.
+                // Not wrapped in BeginDisabled, unlike its single-recovery namesake above.
+                Help.Tooltip(HelpTopics.RecoveryKeepCurrentOne);
 
                 ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
                 if (ImGui.BeginPopupModal($"Keep current state for {operationId}?"))
@@ -70,6 +73,7 @@ public sealed partial class MainWindow
             ImGui.Spacing();
             if (ImGui.Button("Accept Current State and Close All Interrupted Operations"))
                 ImGui.OpenPopup("Close all interrupted operations?");
+            Help.Tooltip(HelpTopics.RecoveryCloseAll);
 
             ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
             if (ImGui.BeginPopupModal("Close all interrupted operations?"))
@@ -103,6 +107,9 @@ public sealed partial class MainWindow
         if (ImGui.Button("Keep Current State"))
             ImGui.OpenPopup("Keep current state?");
         ImGui.EndDisabled();
+        Help.Tooltip(
+            HelpTopics.RecoveryKeepCurrent,
+            operationState.CanResolveRecovery ? null : "Still checking the interrupted operation's state.");
 
         ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Keep current state?"))
@@ -124,6 +131,11 @@ public sealed partial class MainWindow
         if (ImGui.Button("Continue"))
             ImGui.OpenPopup("Continue interrupted operation?");
         ImGui.EndDisabled();
+        // The Details section below reports WHICH artifact is missing or corrupt; this only has to
+        // say that one is, so the two do not contradict each other as the check settles.
+        Help.Tooltip(
+            HelpTopics.RecoveryContinue,
+            operationState.CanContinueRecovery ? null : "Unavailable - see Details below for which artifact is missing.");
 
         ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Continue interrupted operation?"))
@@ -142,6 +154,9 @@ public sealed partial class MainWindow
         if (ImGui.Button("Restore Previous State"))
             ImGui.OpenPopup("Restore to state before the interrupted operation?");
         ImGui.EndDisabled();
+        Help.Tooltip(
+            HelpTopics.RecoveryRestorePrevious,
+            operationState.CanRestorePreviousState ? null : "Unavailable - see Details below for which artifact is missing.");
 
         ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
         if (ImGui.BeginPopupModal("Restore to state before the interrupted operation?"))

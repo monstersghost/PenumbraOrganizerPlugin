@@ -24,6 +24,7 @@ public sealed partial class MainWindow
             _plugin.OrganizerState.SetAllProtection(!allProtected);
             SaveProtectionStateSafely();
         }
+        Help.Tooltip(HelpTopics.ProtectToggleAll);
 
         ImGui.SameLine();
         if (ImGui.Button("Toggle Heliosphere protection"))
@@ -34,6 +35,7 @@ public sealed partial class MainWindow
             _plugin.OrganizerState.SetHeliosphereProtection(!allProtected);
             SaveProtectionStateSafely();
         }
+        Help.Tooltip(HelpTopics.ProtectToggleHeliosphere);
 
         var heliosphereMods = _plugin.OrganizerState.Mods.Where(m => m.HeliosphereManaged).ToList();
         if (heliosphereMods.Count > 0)
@@ -56,6 +58,7 @@ public sealed partial class MainWindow
             .ToList();
 
         ImGui.TextUnformatted("Folders");
+        Help.Tooltip(HelpTopics.ProtectFolders);
         using (var folderChild = ImRaii.Child("ProtectedFolderList", new Vector2(0, _protectedFolderListHeight), border: true))
         {
             if (folderChild)
@@ -97,6 +100,7 @@ public sealed partial class MainWindow
 
         ImGui.Spacing();
         ImGui.TextUnformatted("Mods");
+        Help.Tooltip(HelpTopics.ProtectMods);
         var explicitIdentifiers = _plugin.OrganizerState.ProtectedModIdentifiers.ToHashSet(StringComparer.Ordinal);
         // Fills whatever vertical space remains in the tab (height -1, ImGui's "leave 1px at the
         // bottom" convention) rather than a fixed height like the Folders list above - this is
@@ -130,7 +134,10 @@ public sealed partial class MainWindow
                         ImGui.SameLine();
                         if (mod.HeliosphereManaged)
                         {
+                            // Inside the loop: ImGui binds IsItemHovered to the last submitted item,
+                            // so one topic serves every row and the call has to sit with its row.
                             ImGui.TextDisabled("(Heliosphere)");
+                            Help.Tooltip(HelpTopics.ProtectHeliosphereNote);
                         }
                         else
                         {

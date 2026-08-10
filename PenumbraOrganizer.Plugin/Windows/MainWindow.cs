@@ -16,6 +16,11 @@ public sealed partial class MainWindow : Window, IDisposable
     private const float StandardPopupWidth = 420f;
     private const float DetailedPopupWidth = 560f;
 
+    // The one activity-gate explanation, shared by every control the gate can disable. It is passed
+    // as Help.Tooltip's disabledReason rather than issued as a second SetTooltip against the same
+    // widget - two tooltips submitted for one item in one frame fight over the same window.
+    private const string ActivityGateReason = "Another operation is in progress or requires recovery.";
+
     private readonly Plugin _plugin;
     private readonly CreatorCanonicalizer _creatorCanonicalizer = new();
     private readonly EventLogBuffer _eventLog = new();

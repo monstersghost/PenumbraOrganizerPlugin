@@ -33,8 +33,7 @@ public sealed partial class MainWindow
                 BuildChangedItemIndex();
             ImGui.EndDisabled();
         }
-        if (!gates.CanIndex && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Another operation is in progress or requires recovery.");
+        Help.Tooltip(HelpTopics.SearchBuildIndex, gates.CanIndex ? null : ActivityGateReason);
 
         DrawLibraryWorkProgress(indexState, _plugin.IndexWork.RequestCancellation);
         DrawLibraryWorkOutcome(indexState);
@@ -53,10 +52,13 @@ public sealed partial class MainWindow
         ImGui.Spacing();
 
         ImGui.InputText("Mod name contains", ref _librarySearchNameQuery, 256);
+        Help.Tooltip(HelpTopics.SearchNameFilter);
         ImGui.InputText("Item contains", ref _librarySearchItemQuery, 256);
+        Help.Tooltip(HelpTopics.SearchItemFilter);
         ImGui.Spacing();
 
         ImGui.TextUnformatted("Categories:");
+        Help.Tooltip(HelpTopics.SearchCategories);
         var categoryToggles = SearchableCategories
             .Select(category => ($"{category}##search-category-{category}", _librarySearchCategories.Contains(category), (Action<bool>)(isChecked =>
             {
@@ -73,6 +75,7 @@ public sealed partial class MainWindow
         {
             ImGui.Spacing();
             ImGui.TextUnformatted("Slots:");
+            Help.Tooltip(HelpTopics.SearchSlots);
             var slotToggles = Enum.GetValues<EquipmentSlot>()
                 .Select(slot => ($"{SlotLabel(slot)}##search-slot-{slot}", _librarySearchSlots.Contains(slot), (Action<bool>)(isChecked =>
                 {
