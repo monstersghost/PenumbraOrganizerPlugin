@@ -140,6 +140,9 @@ public sealed partial class MainWindow : Window, IDisposable
                 DrawReviewTab();
                 DrawHistoryTab();
                 DrawSearchTab();
+                // A standalone type rather than a MainWindow partial, so its content is reachable
+                // from tests - see HelpTab's own remarks. Tab dispatch stays here regardless.
+                HelpTab.Draw();
             }
         }
 

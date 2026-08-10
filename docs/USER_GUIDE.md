@@ -17,7 +17,7 @@ Dalamud, via XIVLauncher. Penumbra installed and enabled: every tab depends on P
 being available, and if Penumbra isn't running, Refresh mod list shows a connection error instead
 of a mod list.
 
-## The six tabs
+## The seven tabs
 
 ### Scan
 
@@ -233,6 +233,21 @@ Results show in two panes. The left pane lists the matching mods as `Name (Autho
 select it. The right pane lists that mod's changed items. If a mod matched only because of the "Mod
 name contains" box and not because of any item, a red "Matched by mod name, not by item" note
 appears above its item list, so you can tell a name hit from an item hit.
+
+### Help
+
+Every explanation the plugin holds, at reading length rather than tooltip length. It is grouped into
+collapsible sections: what the plugin does, what is and isn't safe, one section per tab, what to do
+if an operation was interrupted, and where your files live.
+
+Each tab's section lists that tab's controls with the same one-line explanation you get by hovering
+them, so the Help tab doubles as a reference for anything you saw a tooltip on and want to find
+again.
+
+"Open the full guide in your browser" opens this document, pinned to the release you're running
+rather than to the latest one, so it always describes the version you actually have.
+
+Nothing on this tab changes anything - it reads no mods and writes no files.
 
 ## Typical workflows
 

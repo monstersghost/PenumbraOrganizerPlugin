@@ -1,6 +1,56 @@
 {
   "topics": [
     {
+      "id": "help.what-this-does",
+      "title": "What this plugin does",
+      "body": "It proposes a tidy folder layout for your Penumbra mod list, shows you the whole plan, and only changes anything when you press Apply.\n\nIt organises the folder tree Penumbra shows you. It never edits, renames, moves or deletes the mod files themselves on disk, and it never changes what a mod does in game.\n\nThe usual order is: Scan to read your library, Protect anything that must not move, Sort to propose a layout, Review Changes to check it, then Apply."
+    },
+    {
+      "id": "help.safety-rules",
+      "title": "What is safe, and what is not",
+      "body": "Only three things ever change your library: Apply, Restore, and Clean Up Selected Folders. Everything else - scanning, sorting, searching, exporting - is read-only, no matter how it looks.\n\nSorting never moves anything. It fills in a proposed path for each mod, which you can look over on Review Changes and discard by simply sorting differently.\n\nA backup snapshot is taken automatically before every Apply and every Restore, so there is always a way back. The History tab lists them.\n\nProtected mods are excluded from every sort and from Apply. Restore is the one exception, and it says so: it reproduces a snapshot exactly, including for mods that are currently protected."
+    },
+    {
+      "id": "help.tab-scan",
+      "title": "Scan",
+      "body": "Reads every mod from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so run this first, and again whenever you install, remove or move mods outside the plugin.\n\nThe scan runs in the background and the game stays responsive. If your mod list changes while it is running, the results are discarded rather than shown, because they no longer describe your library."
+    },
+    {
+      "id": "help.tab-protect",
+      "title": "Protect",
+      "body": "Marks mods that must keep their current folder. A protected mod is skipped by every sort and by Apply.\n\nProtection comes from three places: the mod's own checkbox, any protected folder above it, and Heliosphere. The note beside a mod says which one applies. Only the first is a per-mod choice you make here."
+    },
+    {
+      "id": "help.tab-sort",
+      "title": "Sort",
+      "body": "Chooses the folder layout to propose. Pick a grouping, decide whether gear and NPC mods get subfolders, and press Sort.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand instead of by rule."
+    },
+    {
+      "id": "help.tab-review",
+      "title": "Review Changes",
+      "body": "Shows every mod's current folder beside its proposed one, along with anything that would block Apply.\n\nErrors are listed at the top and must be cleared before Apply is available. A collision means two mods would end up at the same path; a protected-mod error means something tried to move a mod you protected.\n\nThis tab also holds folder cleanup, which removes empty folder entries left behind in Penumbra's own folder file. That is separate from moving mods and has its own backup."
+    },
+    {
+      "id": "help.tab-history",
+      "title": "History",
+      "body": "Every backup snapshot, newest first. A snapshot records where each mod was at that moment.\n\nBackups are taken automatically before each Apply and Restore, and you can take one yourself at any time with an optional label.\n\nRestore is exact: it reproduces the snapshot's paths even for mods that are currently protected or Heliosphere-managed. That is deliberate, and it is the one place protection does not apply."
+    },
+    {
+      "id": "help.tab-search",
+      "title": "Search",
+      "body": "Looks up which mod changes a given item. Entirely read-only.\n\nBuild the index first, then filter by mod name, by item name, by category, and by equipment slot for gear.\n\nSince Penumbra 1.7 its own Mods tab has a native search syntax that covers much of this, so this tab may be retired later."
+    },
+    {
+      "id": "help.when-things-go-wrong",
+      "title": "If something went wrong",
+      "body": "If an Apply or Restore is interrupted - a crash, a force-quit, the game closing mid-operation - the plugin notices on the next start and shows a recovery panel above the tabs. Nothing else can run until you resolve it.\n\nYou get three choices: accept the current state and move on, finish what was interrupted, or roll back to how things were before it started. The panel says which are available; a greyed-out option means the plugin no longer has the file it would need.\n\nIf several operations were interrupted, they are resolved one at a time, and the per-operation buttons permanently abandon that one operation rather than repairing it.\n\nFor anything else, Create Diagnostic Dump on Review Changes writes a file describing the plugin's state, which is the most useful thing to attach to a bug report."
+    },
+    {
+      "id": "help.where-your-files-are",
+      "title": "Where your files are",
+      "body": "This plugin keeps its own settings, backups and exports in its Dalamud config folder. Show Config File on Review Changes opens it.\n\nThe folder tree you see in Penumbra lives in Penumbra's own organization.json, not here. Folder cleanup is the only feature that writes to it, and it takes a backup first.\n\nYour actual mod files are never touched by this plugin, wherever Penumbra keeps them."
+    },
+    {
       "id": "scan.refresh-mod-list",
       "title": "Refresh mod list",
       "short": "Re-reads every mod from Penumbra and re-classifies it. Nothing moves. Run it after installing, removing or moving mods elsewhere - nothing here updates on its own."

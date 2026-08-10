@@ -8,6 +8,18 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </summary>
 public static class HelpTopics
 {
+    // Help tab sections. These carry a body and no short: they are read, not hovered.
+    public static readonly HelpTopic HelpWhatThisDoes = new("help.what-this-does");
+    public static readonly HelpTopic HelpSafetyRules = new("help.safety-rules");
+    public static readonly HelpTopic HelpTabScan = new("help.tab-scan");
+    public static readonly HelpTopic HelpTabProtect = new("help.tab-protect");
+    public static readonly HelpTopic HelpTabSort = new("help.tab-sort");
+    public static readonly HelpTopic HelpTabReview = new("help.tab-review");
+    public static readonly HelpTopic HelpTabHistory = new("help.tab-history");
+    public static readonly HelpTopic HelpTabSearch = new("help.tab-search");
+    public static readonly HelpTopic HelpWhenThingsGoWrong = new("help.when-things-go-wrong");
+    public static readonly HelpTopic HelpWhereYourFilesAre = new("help.where-your-files-are");
+
     // Scan
     public static readonly HelpTopic ScanRefreshModList = new("scan.refresh-mod-list");
     public static readonly HelpTopic ScanEventLog = new("scan.event-log");
