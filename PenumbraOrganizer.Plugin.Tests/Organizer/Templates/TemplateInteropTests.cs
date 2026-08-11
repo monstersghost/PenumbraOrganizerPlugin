@@ -32,7 +32,8 @@ public class TemplateInteropTests
         FormatVersion = 1,
         Name = "Akako's layout",
         Author = "Akako",
-        FallbackStrategy = "ModTypeDetailed",
+        FallbackStrategy = "TypeOnly",
+        FallbackSplitGear = true,   // the old "ModTypeDetailed": unmatched gear keeps its slot subfolder
         FolderLabels = new Dictionary<string, string> { ["Others"] = "_Unsorted" },
         Folders = ["Characters/Nyx", "Gear/Head", "_Unsorted"],
         Entries =

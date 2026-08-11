@@ -24,19 +24,22 @@ public static class TemplateJson
 }
 
 /// <summary>
-/// Names one of OrganizerState's seven existing sort strategies, used for mods a template has no
-/// entry for. These names are a wire contract — renaming a member breaks published templates.
+/// How a template places mods it has no entry for: the same selection the Sort tab offers, so a
+/// fallback can express anything a user could have sorted by, and no more.
 /// </summary>
-public enum TemplateFallbackStrategy
-{
-    Creator,
-    ModType,
-    ModTypeDetailed,
-    TypeThenCreator,
-    TypeThenCreatorFlat,
-    CreatorThenType,
-    CreatorThenTypeFlat,
-}
+/// <remarks>
+/// This deliberately carries <see cref="SortStrategy"/> plus the two split flags rather than a
+/// single flattened enum naming each combination. An earlier draft did the latter, with seven
+/// members that baked "flat vs detailed" into their names; it could express only seven of the
+/// thirteen reachable selections, and had no way at all to say "do not split NPC mods" — so every
+/// template applied through it would have re-split NPC mods regardless of the importer's choice.
+/// <para>
+/// <see cref="SortStrategy"/>'s member names are a wire contract: renaming one breaks published
+/// templates. The two flags are inert for <see cref="SortStrategy.CreatorOnly"/>, which never
+/// consults the category.
+/// </para>
+/// </remarks>
+public sealed record TemplateFallback(SortStrategy Strategy, bool SplitGear, bool SplitNpc);
 
 public enum TemplateWarningCode
 {
@@ -80,7 +83,16 @@ public sealed class OrganizationTemplate
     [JsonPropertyName("createdWithVersion")] public string? CreatedWithVersion { get; set; }
     [JsonPropertyName("createdAtUtc")] public string? CreatedAtUtc { get; set; }
 
+    // Three flat fields rather than a nested "fallback" object: a nested object is one more thing
+    // an explicit JSON null can blank out (see Validate's null coercion), and flattening keeps the
+    // untrusted surface to one string plus two bools.
     [JsonPropertyName("fallbackStrategy")] public string FallbackStrategy { get; set; } = string.Empty;
+
+    // Absent means the Sort tab's own defaults, which SortPanel sets to gear off / NPC on — the
+    // latter matching the unconditional NPC subdivision that predates the split checkboxes. A
+    // hand-written template that omits these gets what the UI would have given it.
+    [JsonPropertyName("fallbackSplitGear")] public bool FallbackSplitGear { get; set; }
+    [JsonPropertyName("fallbackSplitNpc")] public bool FallbackSplitNpc { get; set; } = true;
     [JsonPropertyName("folderLabels")] public Dictionary<string, string> FolderLabels { get; set; } = new();
     [JsonPropertyName("folders")] public List<string> Folders { get; set; } = [];
     [JsonPropertyName("entries")] public List<TemplateEntry> Entries { get; set; } = [];
@@ -94,7 +106,7 @@ public sealed record ValidatedOrganizationTemplate(
     string Name,
     string? Author,
     string? Description,
-    TemplateFallbackStrategy FallbackStrategy,
+    TemplateFallback Fallback,
     IReadOnlyDictionary<string, string> FolderLabels,
     IReadOnlyList<string> Folders,
     IReadOnlyDictionary<string, string> EntriesByNormalizedName);

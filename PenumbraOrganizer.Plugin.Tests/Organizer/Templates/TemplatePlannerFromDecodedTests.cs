@@ -25,7 +25,7 @@ public class TemplatePlannerFromDecodedTests
     {
         var decoded = TemplateCodec.DecodeJson(
             """
-            {"formatVersion":1,"name":"x","fallbackStrategy":"ModType",
+            {"formatVersion":1,"name":"x","fallbackStrategy":"TypeOnly",
              "folders":["Gear//Bad"],"entries":[{"n":"some mod","f":"Gear"}]}
             """);
         Assert.True(decoded.Succeeded);
@@ -40,7 +40,7 @@ public class TemplatePlannerFromDecodedTests
     {
         var decoded = TemplateCodec.DecodeJson(
             """
-            {"formatVersion":1,"name":"x","fallbackStrategy":"ModType",
+            {"formatVersion":1,"name":"x","fallbackStrategy":"TypeOnly",
              "entries":[{"n":"some mod","f":"Characters/Nyx"}]}
             """);
         OrganizerModRow[] Rows() => [Row("id1", "Some Mod"), Row("id2", "Other Mod")];

@@ -20,11 +20,14 @@ public class TemplatePlannerTests
         Protected = isProtected,
     };
 
+    // Defaults reproduce the old ModType strategy: type only, gear flattened, NPC split.
     private static ValidatedOrganizationTemplate Template(
-        TemplateFallbackStrategy strategy = TemplateFallbackStrategy.ModType,
+        SortStrategy strategy = SortStrategy.TypeOnly,
+        bool splitGear = false,
+        bool splitNpc = true,
         Dictionary<string, string>? entries = null,
         Dictionary<string, string>? labels = null) => new(
-            "T", "A", null, strategy,
+            "T", "A", null, new TemplateFallback(strategy, splitGear, splitNpc),
             labels ?? new Dictionary<string, string>(),
             [],
             entries ?? new Dictionary<string, string>());
@@ -49,7 +52,7 @@ public class TemplatePlannerTests
     public void Plan_UnmatchedRow_UsesFallbackStrategy()
     {
         var plan = TemplatePlanner.Plan(
-            Template(TemplateFallbackStrategy.ModTypeDetailed),
+            Template(SortStrategy.TypeOnly, splitGear: true),
             [Row("id1", "Unknown Mod", ModCategory.Gear, "Head")],
             Same);
 
@@ -62,7 +65,7 @@ public class TemplatePlannerTests
     public void Plan_FolderLabels_ApplyToFallbackPlacement()
     {
         var plan = TemplatePlanner.Plan(
-            Template(TemplateFallbackStrategy.ModTypeDetailed, labels: new() { ["Gear"] = "Equipment" }),
+            Template(SortStrategy.TypeOnly, splitGear: true, labels: new() { ["Gear"] = "Equipment" }),
             [Row("id1", "Unknown Mod", ModCategory.Gear, "Head")],
             Same);
 
@@ -121,7 +124,7 @@ public class TemplatePlannerTests
     public void Plan_FolderCounts_CountRowsPerDestination()
     {
         var plan = TemplatePlanner.Plan(
-            Template(TemplateFallbackStrategy.ModType),
+            Template(),
             [
                 Row("id1", "A", ModCategory.Gear),
                 Row("id2", "B", ModCategory.Gear),
@@ -137,7 +140,7 @@ public class TemplatePlannerTests
     public void Plan_UnclassifiedUnmatchedRow_FallsBackToReview()
     {
         var plan = TemplatePlanner.Plan(
-            Template(TemplateFallbackStrategy.ModType),
+            Template(),
             [Row("id1", "Mystery", category: null)],
             Same);
 

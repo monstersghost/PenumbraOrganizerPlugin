@@ -1,28 +1,42 @@
 namespace PenumbraOrganizer.Plugin.Tests.Organizer.Templates;
 
 using System.Text.Json;
+using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 public class TemplateModelsTests
 {
-    // The seven names are a wire contract: a template naming one of these must keep working.
+    // These four names are a wire contract: a template naming one of them must keep working, so
+    // renaming a SortStrategy member is a breaking format change and has to be treated as one.
     [Theory]
-    [InlineData("Creator")]
-    [InlineData("ModType")]
-    [InlineData("ModTypeDetailed")]
+    [InlineData("CreatorOnly")]
+    [InlineData("TypeOnly")]
     [InlineData("TypeThenCreator")]
-    [InlineData("TypeThenCreatorFlat")]
     [InlineData("CreatorThenType")]
-    [InlineData("CreatorThenTypeFlat")]
     public void FallbackStrategy_SpecNames_Parse(string name)
     {
-        Assert.True(Enum.TryParse<TemplateFallbackStrategy>(name, ignoreCase: false, out _));
+        Assert.True(Enum.TryParse<SortStrategy>(name, ignoreCase: false, out _));
     }
 
+    // Guards the wire contract in the other direction: a new member is a new value a template can
+    // name, so adding one must be a deliberate act rather than a silent side effect of UI work.
     [Fact]
-    public void FallbackStrategy_HasExactlySevenValues()
+    public void FallbackStrategy_HasExactlyFourValues()
     {
-        Assert.Equal(7, Enum.GetValues<TemplateFallbackStrategy>().Length);
+        Assert.Equal(4, Enum.GetValues<SortStrategy>().Length);
+    }
+
+    // A hand-written template that omits the split flags gets the Sort tab's own defaults, which
+    // SortPanel sets to gear off / NPC on. Pinned because the NPC default is the non-obvious one:
+    // it is true to match the unconditional subdivision that predates the split checkboxes.
+    [Fact]
+    public void OrganizationTemplate_AbsentSplitFlags_UseSortTabDefaults()
+    {
+        var document = JsonSerializer.Deserialize<OrganizationTemplate>(
+            """{"formatVersion":1,"name":"x","fallbackStrategy":"TypeOnly"}""")!;
+
+        Assert.False(document.FallbackSplitGear);
+        Assert.True(document.FallbackSplitNpc);
     }
 
     // Entries dominate payload size, so they serialize as "n"/"f", not as property names.
@@ -58,6 +72,8 @@ public class TemplateModelsTests
             Author = "Akako",
             Description = "Character mods up front.",
             FallbackStrategy = "TypeThenCreator",
+            FallbackSplitGear = true,
+            FallbackSplitNpc = false,
             FolderLabels = new Dictionary<string, string> { ["Others"] = "_Unsorted" },
             Folders = ["Characters", "Gear/Top"],
             Entries = [new TemplateEntry("bibo+ medieval", "Gear/Top")],
@@ -68,6 +84,9 @@ public class TemplateModelsTests
         Assert.Equal(1, round.FormatVersion);
         Assert.Equal("Detailed type sort", round.Name);
         Assert.Equal("TypeThenCreator", round.FallbackStrategy);
+        // Explicitly non-default on both flags, so a dropped field cannot pass by luck.
+        Assert.True(round.FallbackSplitGear);
+        Assert.False(round.FallbackSplitNpc);
         Assert.Equal("_Unsorted", round.FolderLabels["Others"]);
         Assert.Equal(["Characters", "Gear/Top"], round.Folders);
         Assert.Equal("bibo+ medieval", round.Entries[0].N);
@@ -77,7 +96,7 @@ public class TemplateModelsTests
     [Fact]
     public void OrganizationTemplate_MissingProvenance_DeserializesWithNulls()
     {
-        var json = """{"formatVersion":1,"name":"x","fallbackStrategy":"ModType"}""";
+        var json = """{"formatVersion":1,"name":"x","fallbackStrategy":"TypeOnly"}""";
 
         var template = JsonSerializer.Deserialize<OrganizationTemplate>(json)!;
 

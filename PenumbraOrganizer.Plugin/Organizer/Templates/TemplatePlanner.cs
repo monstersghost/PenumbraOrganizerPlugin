@@ -89,8 +89,9 @@ public static class TemplatePlanner
                 continue;
             }
 
-            var (primary, secondary) =
-                SortFolderSelectors.Select(template.FallbackStrategy, row, canonicalizeCreator, renameFolder);
+            var fallback = template.Fallback;
+            var (primary, secondary) = SortFolderSelectors.Select(
+                fallback.Strategy, fallback.SplitGear, fallback.SplitNpc, row, canonicalizeCreator, renameFolder);
             destinations[row.Identifier] = SortFolderSelectors.FlattenToFolder(primary, secondary);
             fallbackRows++;
         }

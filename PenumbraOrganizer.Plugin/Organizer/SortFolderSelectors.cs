@@ -5,21 +5,30 @@ using PenumbraOrganizer.Plugin.Organizer.Templates;
 namespace PenumbraOrganizer.Plugin.Organizer;
 
 /// <summary>
-/// The folder-selection expressions behind OrganizerState's seven sort strategies, extracted so
-/// the template planner computes fallback destinations with the same code the sorts use rather
-/// than a second implementation that can drift.
-///
-/// Extraction only — the expressions are unchanged from the inline SortBy* bodies.
+/// The folder-selection expressions behind every sort strategy, in one public place so that
+/// OrganizerState's sorts and the template planner's fallback compute destinations with the same
+/// code rather than two implementations that can drift.
 /// </summary>
+/// <remarks>
+/// The two split flags are applied in sequence rather than switched over, because they are
+/// independent decisions about the same subcategory: composing them is what makes all four
+/// combinations reachable without writing four variants of each strategy.
+/// </remarks>
 public static class SortFolderSelectors
 {
     /// <param name="canonicalizeCreator">
-    /// Null for the strategies that do not use a creator segment (ModType, ModTypeDetailed), so
-    /// those callers neither supply nor compute one. The local functions below keep every segment
-    /// lazy, so an unused segment is never built.
+    /// Null for callers that cannot produce a creator segment, which then resolves to null and
+    /// falls through to the "Review" bucket. The local functions below keep every segment lazy, so
+    /// an unused segment is never built.
+    /// </param>
+    /// <param name="renameFolder">
+    /// Applied by the template planner to map a type folder onto the template author's own label
+    /// for it. Null for ordinary sorts, which rename nothing.
     /// </param>
     public static (string? Primary, string? Secondary) Select(
-        TemplateFallbackStrategy strategy,
+        SortStrategy strategy,
+        bool splitGear,
+        bool splitNpc,
         OrganizerModRow row,
         Func<string, string>? canonicalizeCreator = null,
         Func<string, string>? renameFolder = null)
@@ -27,21 +36,21 @@ public static class SortFolderSelectors
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
 
-        string? Detailed() => TypeFolder(row.Category, row.SubCategory, renameFolder);
-
-        string? Flat() =>
-            TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory), renameFolder);
+        string? Type()
+        {
+            var sub = row.SubCategory;
+            if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
+            if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
+            return TypeFolder(row.Category, sub, renameFolder);
+        }
 
         return strategy switch
         {
-            TemplateFallbackStrategy.Creator => (Creator(), null),
-            TemplateFallbackStrategy.ModType => (Flat(), null),
-            TemplateFallbackStrategy.ModTypeDetailed => (Detailed(), null),
-            TemplateFallbackStrategy.TypeThenCreator => (Detailed(), Creator()),
-            TemplateFallbackStrategy.TypeThenCreatorFlat => (Flat(), Creator()),
-            TemplateFallbackStrategy.CreatorThenType => (Creator(), Detailed()),
-            TemplateFallbackStrategy.CreatorThenTypeFlat => (Creator(), Flat()),
-            _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown fallback strategy."),
+            SortStrategy.CreatorOnly => (Creator(), null),
+            SortStrategy.TypeOnly => (Type(), null),
+            SortStrategy.TypeThenCreator => (Type(), Creator()),
+            SortStrategy.CreatorThenType => (Creator(), Type()),
+            _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown sort strategy."),
         };
     }
 
@@ -65,6 +74,12 @@ public static class SortFolderSelectors
     // category keeps its normal subfolder behavior.
     public static string? FlattenGearSubCategory(ModCategory? category, string? subCategory) =>
         category == ModCategory.Gear ? null : subCategory;
+
+    // The NPC mirror of the above. Unlike gear, this had no button before the split checkboxes:
+    // NPC mods were always split into NPC/NPCs, NPC/Bosses and NPC/Enemies. Turning it off yields
+    // plain "NPC".
+    public static string? FlattenNpcSubCategory(ModCategory? category, string? subCategory) =>
+        category == ModCategory.NPC ? null : subCategory;
 
     public static string? TypeFolder(ModCategory? category, string? subCategory, Func<string, string>? renameFolder)
     {

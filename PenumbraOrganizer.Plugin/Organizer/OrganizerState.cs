@@ -202,30 +202,35 @@ public sealed class OrganizerState
         return results;
     }
 
+    // The seven historical sort entry points, each pinned to the (strategy, splits) triple that
+    // reproduces its old behaviour exactly: "Detailed" means splitGear on, the "Flat" variants mean
+    // it off, and every one of them splits NPC mods, which is what these methods did before the
+    // split became a choice.
     public int SortByCreator(Func<string, string> canonicalizeCreator) =>
-        SortBy(TemplateFallbackStrategy.Creator, canonicalizeCreator);
+        SortBy(SortStrategy.CreatorOnly, false, true, canonicalizeCreator);
 
     // No canonicalizer: these two strategies have no creator segment, so none is computed.
     public int SortByModType() =>
-        SortBy(TemplateFallbackStrategy.ModType, null);
+        SortBy(SortStrategy.TypeOnly, false, true, null);
 
     public int SortByModTypeDetailed() =>
-        SortBy(TemplateFallbackStrategy.ModTypeDetailed, null);
+        SortBy(SortStrategy.TypeOnly, true, true, null);
 
     public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
-        SortBy(TemplateFallbackStrategy.TypeThenCreator, canonicalizeCreator);
+        SortBy(SortStrategy.TypeThenCreator, true, true, canonicalizeCreator);
 
     public int SortByTypeThenCreatorFlat(Func<string, string> canonicalizeCreator) =>
-        SortBy(TemplateFallbackStrategy.TypeThenCreatorFlat, canonicalizeCreator);
+        SortBy(SortStrategy.TypeThenCreator, false, true, canonicalizeCreator);
 
     public int SortByCreatorThenType(Func<string, string> canonicalizeCreator) =>
-        SortBy(TemplateFallbackStrategy.CreatorThenType, canonicalizeCreator);
+        SortBy(SortStrategy.CreatorThenType, true, true, canonicalizeCreator);
 
     public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
-        SortBy(TemplateFallbackStrategy.CreatorThenTypeFlat, canonicalizeCreator);
+        SortBy(SortStrategy.CreatorThenType, false, true, canonicalizeCreator);
 
-    private int SortBy(TemplateFallbackStrategy strategy, Func<string, string>? canonicalizeCreator) =>
-        Sort(row => SortFolderSelectors.Select(strategy, row, canonicalizeCreator));
+    private int SortBy(
+        SortStrategy strategy, bool splitGear, bool splitNpc, Func<string, string>? canonicalizeCreator) =>
+        Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator));
 
     /// <summary>
     /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes

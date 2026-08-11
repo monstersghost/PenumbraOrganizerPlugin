@@ -19,11 +19,14 @@ public class OrganizerStateApplyTemplateTests
         SubCategory = subCategory,
     };
 
+    // Defaults reproduce the old ModType strategy: type only, gear flattened, NPC split.
     private static ValidatedOrganizationTemplate Template(
-        TemplateFallbackStrategy strategy = TemplateFallbackStrategy.ModType,
+        SortStrategy strategy = SortStrategy.TypeOnly,
+        bool splitGear = false,
+        bool splitNpc = true,
         Dictionary<string, string>? entries = null,
         Dictionary<string, string>? labels = null) => new(
-            "T", "A", null, strategy,
+            "T", "A", null, new TemplateFallback(strategy, splitGear, splitNpc),
             labels ?? new Dictionary<string, string>(),
             [],
             entries ?? new Dictionary<string, string>());
@@ -59,7 +62,7 @@ public class OrganizerStateApplyTemplateTests
     {
         var state = StateWith(Row("id1", "Unknown", ModCategory.Gear, "Head"));
 
-        Apply(state, Template(TemplateFallbackStrategy.ModTypeDetailed));
+        Apply(state, Template(SortStrategy.TypeOnly, splitGear: true));
 
         Assert.Equal("Gear/Head/Unknown", state.Mods.Single().ProposedPath);
     }
@@ -69,7 +72,7 @@ public class OrganizerStateApplyTemplateTests
     {
         var state = StateWith(Row("id1", "Unknown", ModCategory.Gear, "Head"));
 
-        Apply(state, Template(TemplateFallbackStrategy.ModTypeDetailed, labels: new() { ["Gear"] = "Equipment" }));
+        Apply(state, Template(SortStrategy.TypeOnly, splitGear: true, labels: new() { ["Gear"] = "Equipment" }));
 
         Assert.Equal("Equipment/Head/Unknown", state.Mods.Single().ProposedPath);
     }

@@ -8,7 +8,7 @@ public sealed class TemplateStoreTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
-    private static string Json(string name, string strategy = "ModType", string entryName = "some mod") =>
+    private static string Json(string name, string strategy = "TypeOnly", string entryName = "some mod") =>
         $$"""
         {"formatVersion":1,"name":"{{name}}","fallbackStrategy":"{{strategy}}",
          "folders":["Gear"],"entries":[{"n":"{{entryName}}","f":"Gear"}]}
@@ -138,7 +138,7 @@ public sealed class TemplateStoreTests : IDisposable
         var store = new TemplateStore(_dir);
         File.WriteAllText(
             Path.Combine(_dir, "warned.json"),
-            """{"formatVersion":1,"name":"Warned","fallbackStrategy":"ModType","folders":["Gear//Bad"]}""");
+            """{"formatVersion":1,"name":"Warned","fallbackStrategy":"TypeOnly","folders":["Gear//Bad"]}""");
 
         var stored = Assert.Single(store.List().Templates);
 

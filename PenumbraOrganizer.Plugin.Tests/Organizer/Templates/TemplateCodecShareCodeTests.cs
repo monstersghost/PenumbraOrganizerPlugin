@@ -106,7 +106,7 @@ public class TemplateCodecShareCodeTests
         {
             FormatVersion = 99,
             Name = "x",
-            FallbackStrategy = "ModType",
+            FallbackStrategy = "TypeOnly",
         };
 
         var result = TemplateCodec.DecodeShareCode(TemplateCodec.EncodeShareCode(badDocument));

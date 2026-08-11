@@ -189,7 +189,7 @@ public static class TemplateCodec
         // ("Creator,ModType") for any enum, not only [Flags] ones, and both can resolve to a
         // defined member despite not being a name a template author ever wrote. Requiring the
         // parsed value's own name to match the input verbatim closes that off.
-        if (!Enum.TryParse<TemplateFallbackStrategy>(document.FallbackStrategy, ignoreCase: false, out var strategy)
+        if (!Enum.TryParse<SortStrategy>(document.FallbackStrategy, ignoreCase: false, out var strategy)
             || !Enum.IsDefined(strategy)
             || !string.Equals(strategy.ToString(), document.FallbackStrategy, StringComparison.Ordinal))
         {
@@ -197,6 +197,11 @@ public static class TemplateCodec
                 TemplateDecodeError.UnknownFallbackStrategy,
                 $"Unknown fallback strategy '{TemplateText.Preview(document.FallbackStrategy)}'.");
         }
+
+        // No validation needed on the two flags: bool has no invalid value, and an explicit JSON
+        // null against a non-nullable bool is a deserialization failure already reported as
+        // MalformedJson. Absent means the model's default.
+        var fallback = new TemplateFallback(strategy, document.FallbackSplitGear, document.FallbackSplitNpc);
 
         if (rawEntries.Count > TemplateLimits.MaxEntries)
             return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Entries: {rawEntries.Count}.");
@@ -279,7 +284,7 @@ public static class TemplateCodec
             document.Name,
             document.Author,
             document.Description,
-            strategy,
+            fallback,
             labels,
             folders,
             resolution.EntriesByNormalizedName);
