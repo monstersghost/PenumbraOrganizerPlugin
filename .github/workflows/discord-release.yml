@@ -18,14 +18,19 @@ jobs:
           RELEASE_BODY: ${{ github.event.release.body }}
           IS_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
+          # A pre-release is a testing build and goes to the tester role only. Pinging the whole
+          # release role for something that is explicitly not the stable version is how a release
+          # ping stops meaning anything. Note that pre-release status does NOT stop this workflow
+          # from running - the only thing it changes is who gets mentioned and the title.
           if [ "$IS_PRERELEASE" = "true" ]; then
             TITLE="🧪 New Plugin Pre-release: ${RELEASE_NAME:-$RELEASE_TAG}"
+            ROLE_ID="1529045500546912276"
           else
             TITLE="🚀 New Plugin Release: ${RELEASE_NAME:-$RELEASE_TAG}"
+            ROLE_ID="1524370428196552765"
           fi
 
           BODY=$(printf "%s" "$RELEASE_BODY" | head -c 3900)
-          ROLE_ID="1524370428196552765"
 
           jq -n \
             --arg role_id "$ROLE_ID" \
