@@ -12,15 +12,15 @@ namespace PenumbraOrganizer.Plugin.LibraryWork;
 public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
 {
     private readonly Plugin _plugin;
-    private readonly string _npcNameListPath;
-    private readonly string _npcNameSeedJson;
+    private readonly string _configDirectory;
+    private readonly bool _useScrapedNpcNameList;
     private ScanProcessor? _processor;
 
-    public ScanJob(Plugin plugin, string npcNameListPath, string npcNameSeedJson)
+    public ScanJob(Plugin plugin, string configDirectory, bool useScrapedNpcNameList)
     {
         _plugin = plugin;
-        _npcNameListPath = npcNameListPath;
-        _npcNameSeedJson = npcNameSeedJson;
+        _configDirectory = configDirectory;
+        _useScrapedNpcNameList = useScrapedNpcNameList;
     }
 
     public string DisplayName => "Scan";
@@ -43,7 +43,7 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
                 ? changedItems.Keys.ToList()
                 : [])).ToList();
 
-        _processor = new ScanProcessor(_npcNameListPath, _npcNameSeedJson);
+        _processor = new ScanProcessor(_configDirectory, _useScrapedNpcNameList);
         return new LibraryWorkBatch<ScanSeed, OrganizerModRow>(seeds, _processor);
     }
 

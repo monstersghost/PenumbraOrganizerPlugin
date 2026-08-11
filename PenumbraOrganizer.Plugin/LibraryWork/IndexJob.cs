@@ -8,17 +8,17 @@ namespace PenumbraOrganizer.Plugin.LibraryWork;
 public sealed class IndexJob : ILibraryWorkJob<IndexSeed, IndexedMod>
 {
     private readonly Plugin _plugin;
-    private readonly string _npcNameListPath;
-    private readonly string _npcNameSeedJson;
+    private readonly string _configDirectory;
+    private readonly bool _useScrapedNpcNameList;
     private IndexProcessor? _processor;
     private HashSet<string> _changedItemIdentifiers = new(StringComparer.Ordinal);
     private List<string> _allModIdentifiers = [];
 
-    public IndexJob(Plugin plugin, string npcNameListPath, string npcNameSeedJson)
+    public IndexJob(Plugin plugin, string configDirectory, bool useScrapedNpcNameList)
     {
         _plugin = plugin;
-        _npcNameListPath = npcNameListPath;
-        _npcNameSeedJson = npcNameSeedJson;
+        _configDirectory = configDirectory;
+        _useScrapedNpcNameList = useScrapedNpcNameList;
     }
 
     public string DisplayName => "Search index";
@@ -44,7 +44,7 @@ public sealed class IndexJob : ILibraryWorkJob<IndexSeed, IndexedMod>
         _changedItemIdentifiers = allChangedItems.Keys.ToHashSet(StringComparer.Ordinal);
         _allModIdentifiers = seeds.Select(seed => seed.Identifier).ToList();
 
-        _processor = new IndexProcessor(_npcNameListPath, _npcNameSeedJson);
+        _processor = new IndexProcessor(_configDirectory, _useScrapedNpcNameList);
         return new LibraryWorkBatch<IndexSeed, IndexedMod>(seeds, _processor);
     }
 

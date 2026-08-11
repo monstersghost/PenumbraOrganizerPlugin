@@ -42,7 +42,7 @@ public class OrganizerStateScanGenerationTests
         state.LoadScan([Row("a")], new HashSet<string>());
         var generation = state.ScanGeneration;
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, splitGear: false, splitNpc: true, name => name);
 
         Assert.Equal(generation, state.ScanGeneration);
     }

@@ -16,16 +16,20 @@ namespace PenumbraOrganizer.Plugin.LibraryWork.Pure;
 /// </summary>
 public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerModRow>
 {
-    private readonly string _npcNameListPath;
-    private readonly string _npcNameSeedJson;
+    private readonly string _configDirectory;
+    private readonly bool _useScrapedNpcNameList;
     private readonly List<string> _warnings = [];
 
     private NpcNameMatcher _npcNameMatcher = NpcNameMatcher.Empty;
 
-    public ScanProcessor(string npcNameListPath, string npcNameSeedJson)
+    /// <param name="useScrapedNpcNameList">
+    /// Already the conjunction of the config flag and the compile-time feature gate - ScanJob
+    /// resolves it on the framework thread. This class never reads Configuration itself.
+    /// </param>
+    public ScanProcessor(string configDirectory, bool useScrapedNpcNameList)
     {
-        _npcNameListPath = npcNameListPath;
-        _npcNameSeedJson = npcNameSeedJson;
+        _configDirectory = configDirectory;
+        _useScrapedNpcNameList = useScrapedNpcNameList;
     }
 
     /// <summary> Framework thread reads this after the run completes. </summary>
@@ -33,7 +37,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
 
     public void Prepare(CancellationToken ct)
     {
-        var result = NpcNameListStore.Load(_npcNameListPath, _npcNameSeedJson);
+        var result = NpcNameListStore.LoadForMatching(_configDirectory, _useScrapedNpcNameList);
         if (result.Warning is not null)
             _warnings.Add(result.Warning);
         _npcNameMatcher = NpcNameListStore.BuildMatcher(result.Document);

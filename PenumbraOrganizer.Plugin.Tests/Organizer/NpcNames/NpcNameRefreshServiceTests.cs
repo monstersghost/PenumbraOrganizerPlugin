@@ -17,18 +17,24 @@ public class NpcNameRefreshServiceTests
             Task.FromResult(responder(request));
     }
 
-    private static string MakeTempPath()
+    private static string MakeTempDir()
     {
         var dir = Path.Combine(Path.GetTempPath(), "PenumbraOrganizer.Plugin.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "npc-name-list.json");
+        return dir;
     }
 
-    private static string CategoryPageHtml(string name) => $"""
-        <html><body>
-        <div id="mw-pages"><div class="mw-category-group"><li><a href="/wiki/{name}" title="{name}">{name}</a></li></div></div>
-        </body></html>
-        """;
+    private static string MakeTempPath() => Path.Combine(MakeTempDir(), "npc-name-list.json");
+
+    private static string CategoryPageHtml(params string[] names)
+    {
+        var items = string.Concat(names.Select(n => $"""<li><a href="/wiki/{n}" title="{n}">{n}</a></li>"""));
+        return $"""
+            <html><body>
+            <div id="mw-pages"><div class="mw-category-group">{items}</div></div>
+            </body></html>
+            """;
+    }
 
     private static NpcNameRefreshService MakeService(Func<Uri, string> htmlForUrl)
     {
@@ -36,6 +42,13 @@ public class NpcNameRefreshServiceTests
             new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(htmlForUrl(req.RequestUri!)) });
         return new NpcNameRefreshService(new NpcWikiScraper(new HttpClient(handler)));
     }
+
+    private static NpcNameRefreshService MakeServiceReturning(string[] npcs, string[] enemies, string[] bosses) =>
+        MakeService(url => url.ToString().Contains("Bosses")
+            ? CategoryPageHtml(bosses)
+            : url.ToString().Contains("Enemies")
+                ? CategoryPageHtml(enemies)
+                : CategoryPageHtml(npcs));
 
     [Fact]
     public async Task RefreshAsync_MergesNewlyScrapedNamesIntoEachCategory()
@@ -52,7 +65,7 @@ public class NpcNameRefreshServiceTests
         Assert.False(result.RecoveredFromCorruption);
         Assert.All(result.Categories, c => Assert.Null(c.FailureReason));
         Assert.Equal(3, result.Categories.Count);
-        Assert.All(result.Categories, c => Assert.Equal(1, c.AddedCount));
+        Assert.All(result.Categories, c => Assert.Equal(1, c.NameCount));
 
         var written = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
         Assert.Contains("Alphinaud", written.NPCs);
@@ -74,7 +87,7 @@ public class NpcNameRefreshServiceTests
         var npcs = result.Categories.Single(c => c.CategoryName == "NPCs");
         Assert.NotNull(enemies.FailureReason);
         Assert.Null(npcs.FailureReason);
-        Assert.Equal(1, npcs.AddedCount);
+        Assert.Equal(1, npcs.NameCount);
 
         var written = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
         Assert.Contains("Alphinaud", written.NPCs);
@@ -98,24 +111,12 @@ public class NpcNameRefreshServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_NeverRemovesExistingNames()
+    public async Task RefreshAsync_CorruptedExistingFile_PreservesBackupAndRebuildsFromThisRefreshAlone()
     {
-        var path = MakeTempPath();
-        var seed = """{"Version":1,"NPCs":["Y'shtola"],"Enemies":[],"Bosses":[],"Excluded":[]}""";
-        // The scrape this run finds nothing under NPCs (simulating a temporarily-empty/changed page).
-        var service = MakeService(url => url.ToString().Contains("NPCs")
-            ? "<html><body><div id=\"mw-pages\"></div></body></html>"
-            : CategoryPageHtml("Placeholder"));
-
-        await service.RefreshAsync(path, seed, CancellationToken.None);
-
-        var written = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
-        Assert.Contains("Y'shtola", written.NPCs); // still present, not silently dropped
-    }
-
-    [Fact]
-    public async Task RefreshAsync_CorruptedExistingFile_PreservesBackupAndRecoversFromSeed()
-    {
+        // NOT "recovers from the seed", which is what this did before snapshot semantics. The
+        // corrupt path now falls back to an empty document, so the file ends up holding what the
+        // wiki returned and nothing else - seeding here would inject bundled names that no later
+        // refresh could ever remove.
         var path = MakeTempPath();
         File.WriteAllText(path, "{ not json");
         var service = MakeService(_ => CategoryPageHtml("Alphinaud"));
@@ -127,8 +128,12 @@ public class NpcNameRefreshServiceTests
         Assert.Single(backups);
         Assert.Equal("{ not json", File.ReadAllText(backups[0]));
 
+        // Exact contents, not Contains: "rebuilt from this refresh alone" is a claim about what is
+        // ABSENT, and Contains would pass just as happily if the corrupt path had seeded the file.
+        // Refresh_NeverInjectsTheBundledSeedIntoTheScrapedFile covers the same rule with a seed
+        // that actually carries names; this one covers the corrupt branch specifically.
         var written = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
-        Assert.Contains("Alphinaud", written.NPCs);
+        Assert.Equal(["Alphinaud"], written.NPCs);
     }
 
     [Fact]
@@ -140,5 +145,111 @@ public class NpcNameRefreshServiceTests
         var result = await service.RefreshAsync(path, SeedJson, CancellationToken.None);
 
         Assert.False(result.RecoveredFromCorruption); // missing file is a normal first run, not corruption
+    }
+
+    // ---- Snapshot semantics: a refresh writes what the wiki returned, nothing more (Task 5) ----
+
+    [Fact]
+    public async Task Refresh_ReplacesRatherThanGrowing()
+    {
+        // The unbounded growth this whole piece exists to stop. Two refreshes returning identical
+        // wiki data must leave the file the same size, not double it.
+        var dir = MakeTempDir();
+        var path = Path.Combine(dir, "npc-name-list-scraped.json");
+        var service = MakeServiceReturning(npcs: ["Alpha", "Beta"], enemies: [], bosses: []);
+
+        await service.RefreshAsync(path, SeedJson, CancellationToken.None);
+        var afterFirst = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
+
+        await service.RefreshAsync(path, SeedJson, CancellationToken.None);
+        var afterSecond = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
+
+        Assert.Equal(afterFirst.NPCs.Count, afterSecond.NPCs.Count);
+        Assert.Equal(["Alpha", "Beta"], afterSecond.NPCs.Order());
+    }
+
+    [Fact]
+    public async Task Refresh_DropsNamesTheWikiNoLongerReturns()
+    {
+        // The other half of snapshot semantics, and the direction MergeAdditive could never do.
+        var dir = MakeTempDir();
+        var path = Path.Combine(dir, "npc-name-list-scraped.json");
+
+        await MakeServiceReturning(npcs: ["Alpha", "Beta"], [], []).RefreshAsync(path, SeedJson, CancellationToken.None);
+        await MakeServiceReturning(npcs: ["Alpha"], [], []).RefreshAsync(path, SeedJson, CancellationToken.None);
+
+        Assert.Equal(["Alpha"], NpcNameListCodec.Parse(File.ReadAllText(path)).Data!.NPCs);
+    }
+
+    [Fact]
+    public async Task Refresh_NeverInjectsTheBundledSeedIntoTheScrapedFile()
+    {
+        // LoadForRefresh used to fall back to the seed document. Under snapshot semantics that
+        // would write bundled names into the scraped file and they would never leave again, since
+        // no later refresh removes what the wiki does not return - it would just be the growth bug
+        // with a smaller constant. A refresh's output is the wiki's contents and nothing else.
+        var dir = MakeTempDir();
+        var path = Path.Combine(dir, "npc-name-list-scraped.json");
+        var seedWithNames = """{"Version":1,"NPCs":["Seed Only Person"],"Enemies":[],"Bosses":[],"Excluded":[]}""";
+
+        await MakeServiceReturning(npcs: ["Alpha"], [], []).RefreshAsync(path, seedWithNames, CancellationToken.None);
+
+        Assert.Equal(["Alpha"], NpcNameListCodec.Parse(File.ReadAllText(path)).Data!.NPCs);
+    }
+
+    [Fact]
+    public async Task Refresh_CarriesExclusionsForwardFromThePreviousScrapedFile()
+    {
+        // Excluded is user state and lives in the scraped file, so a snapshot write must preserve
+        // it - losing it would let the next refresh re-add every name the user had removed.
+        var dir = MakeTempDir();
+        var path = Path.Combine(dir, "npc-name-list-scraped.json");
+        File.WriteAllText(path, """
+            {"Version":1,"NPCs":[],"Enemies":[],"Bosses":[],"Excluded":["Beta"]}
+            """);
+
+        await MakeServiceReturning(npcs: ["Alpha", "Beta"], [], []).RefreshAsync(path, SeedJson, CancellationToken.None);
+
+        var written = NpcNameListCodec.Parse(File.ReadAllText(path)).Data!;
+        Assert.Equal(["Alpha"], written.NPCs);
+        Assert.Equal(["Beta"], written.Excluded);
+    }
+
+    [Fact]
+    public async Task Refresh_FailedCategory_KeepsWhatWasAlreadyOnDisk()
+    {
+        // Snapshot semantics are per category AND conditional on a clean scrape. NpcWikiScraper
+        // returns the names it gathered before failing alongside the FailureReason, so replacing a
+        // category from a partial scrape would delete everything past the failure point - a timeout
+        // on page 3 of 50 would silently discard 47 pages' worth of names.
+        var dir = MakeTempDir();
+        var path = Path.Combine(dir, "npc-name-list-scraped.json");
+        File.WriteAllText(path, """
+            {"Version":1,"NPCs":["Kept Alpha","Kept Beta"],"Enemies":[],"Bosses":[],"Excluded":[]}
+            """);
+        var service = MakeService(url => url.ToString().Contains("NPCs")
+            ? throw new HttpRequestException("timed out")
+            : CategoryPageHtml("Placeholder"));
+
+        var result = await service.RefreshAsync(path, SeedJson, CancellationToken.None);
+
+        Assert.NotNull(result.Categories.Single(c => c.CategoryName == "NPCs").FailureReason);
+        Assert.Equal(["Kept Alpha", "Kept Beta"], NpcNameListCodec.Parse(File.ReadAllText(path)).Data!.NPCs);
+    }
+
+    [Fact]
+    public async Task Refresh_ReportsTheSnapshotTotal_NotADelta()
+    {
+        // AddedCount was merged-minus-existing, which under snapshots is meaningless and can go
+        // negative. NameCount is the count in the file that was just written.
+        var dir = MakeTempDir();
+        var path = Path.Combine(dir, "npc-name-list-scraped.json");
+
+        await MakeServiceReturning(npcs: ["Alpha", "Beta"], [], []).RefreshAsync(path, SeedJson, CancellationToken.None);
+        var second = await MakeServiceReturning(npcs: ["Alpha", "Beta"], [], []).RefreshAsync(
+            path, SeedJson, CancellationToken.None);
+
+        // A delta would report 0 on the second identical run; a total reports 2 both times.
+        Assert.Equal(2, second.Categories.Single(c => c.CategoryName == "NPCs").NameCount);
     }
 }

@@ -72,4 +72,36 @@ public class ConfigurationTests
         Assert.Null(config.LastFolderCleanup);
         Assert.Null(config.LastFolderCleanupRollback);
     }
+
+    [Fact]
+    public void PreExistingConfig_WithoutTheFirstRunField_ShowsTheWalkthrough()
+    {
+        // THE upgrade decision, pinned. A config written before 0.6.0 carries no
+        // FirstRunTutorialSeen, so it deserialises to false and the walkthrough runs once for
+        // existing users too. That is intended: 0.6.0 replaced the sort control outright.
+        //
+        // If this ever flips to true, someone has changed the property to bool? plus a resolver and
+        // silently taken the walkthrough away from every upgrading user.
+        const string legacyJson = """{"Version":1,"ProtectedModIdentifiers":[],"ProtectedFolderPaths":[]}""";
+
+        var config = System.Text.Json.JsonSerializer.Deserialize<Configuration>(legacyJson);
+
+        Assert.False(config!.FirstRunTutorialSeen);
+    }
+
+    [Fact]
+    public void FreshConfig_ShowsTheWalkthrough()
+    {
+        Assert.False(new Configuration().FirstRunTutorialSeen);
+    }
+
+    [Fact]
+    public void FirstRunFlag_SurvivesARoundTrip_SoItIsShownExactlyOnce()
+    {
+        // Written back after the walkthrough closes. If it did not persist, every session would
+        // reopen it - the failure a user would actually report.
+        var json = System.Text.Json.JsonSerializer.Serialize(new Configuration { FirstRunTutorialSeen = true });
+
+        Assert.True(System.Text.Json.JsonSerializer.Deserialize<Configuration>(json)!.FirstRunTutorialSeen);
+    }
 }

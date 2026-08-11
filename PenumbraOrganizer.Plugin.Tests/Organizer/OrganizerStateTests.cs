@@ -5,6 +5,10 @@ namespace PenumbraOrganizer.Plugin.Tests.Organizer;
 
 public class OrganizerStateTests
 {
+    // The strategies that ignore the creator segment still take a canonicalizer. These tests were
+    // written against SortByModType()/SortByModTypeDetailed(), which took none.
+    private static string Identity(string s) => s;
+
     private static OrganizerModRow MakeRow(string id, string name, bool heliosphere = false, string? currentPath = null) => new()
     {
         Identifier = id,
@@ -172,7 +176,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
 
-        var count = state.SortByCreator(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorOnly, false, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Apple", state.Mods.Single().ProposedPath);
@@ -184,7 +188,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple")], new HashSet<string> { "a" });
 
-        var count = state.SortByCreator(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorOnly, false, true, name => name.ToUpperInvariant());
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Apple", state.Mods.Single().ProposedPath);
@@ -236,7 +240,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple"), MakeRow("b", "Banana")], new HashSet<string>());
 
-        state.SortByCreator(name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
 
         Assert.False(state.Validate().HasIssues);
     }
@@ -247,7 +251,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.SortByModType();
+        var count = state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -261,7 +265,7 @@ public class OrganizerStateTests
             [MakeCategorizedRow("a", "Cool Dance", ModCategory.Animation, "Emotes")],
             new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal("Animation and VFX/Emotes/Cool Dance", state.Mods.Single().ProposedPath);
     }
@@ -272,7 +276,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.SortByModType();
+        var count = state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -286,7 +290,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
 
-        var count = state.SortByCreator(_ => canonicalized);
+        var count = state.Sort(SortStrategy.CreatorOnly, false, true, _ => canonicalized);
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Apple", state.Mods.Single().ProposedPath);
@@ -299,7 +303,7 @@ public class OrganizerStateTests
         var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
         state.LoadScan([row], new HashSet<string> { "a" });
 
-        var count = state.SortByModType();
+        var count = state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
@@ -313,7 +317,7 @@ public class OrganizerStateTests
             [MakeRow("Foo", "Foo"), MakeRow("Foo_2", "Foo")],
             new HashSet<string>());
 
-        state.SortByCreator(name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -328,10 +332,10 @@ public class OrganizerStateTests
             [MakeRow("Foo", "Foo"), MakeRow("Foo_2", "Foo")],
             new HashSet<string>());
 
-        state.SortByCreator(name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
         var firstRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
-        state.SortByCreator(name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
         var secondRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
         Assert.Equal(firstRun, secondRun);
@@ -348,7 +352,7 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -366,10 +370,10 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
         var firstRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
         var secondRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
         Assert.Equal(firstRun, secondRun);
@@ -381,7 +385,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.SortByTypeThenCreator(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/SOMEAUTHOR/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -393,7 +397,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.SortByTypeThenCreator(_ => "");
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -405,7 +409,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.SortByTypeThenCreator(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -417,7 +421,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.SortByTypeThenCreator(_ => "");
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -430,7 +434,7 @@ public class OrganizerStateTests
         var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
         state.LoadScan([row], new HashSet<string> { "a" });
 
-        var count = state.SortByTypeThenCreator(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
@@ -447,7 +451,7 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.SortByTypeThenCreator(name => name);
+        state.Sort(SortStrategy.TypeThenCreator, true, true, name => name);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -460,7 +464,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.SortByCreatorThenType(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -472,7 +476,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.SortByCreatorThenType(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -484,7 +488,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.SortByCreatorThenType(_ => "");
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -496,7 +500,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.SortByCreatorThenType(_ => "");
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -509,7 +513,7 @@ public class OrganizerStateTests
         var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
         state.LoadScan([row], new HashSet<string> { "a" });
 
-        var count = state.SortByCreatorThenType(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
@@ -526,7 +530,7 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.SortByCreatorThenType(name => name);
+        state.Sort(SortStrategy.CreatorThenType, true, true, name => name);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -539,12 +543,12 @@ public class OrganizerStateTests
         var typeThenCreatorState = new OrganizerState();
         typeThenCreatorState.LoadScan(
             [MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
-        typeThenCreatorState.SortByTypeThenCreator(name => name.ToUpperInvariant());
+        typeThenCreatorState.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
 
         var creatorThenTypeState = new OrganizerState();
         creatorThenTypeState.LoadScan(
             [MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
-        creatorThenTypeState.SortByCreatorThenType(name => name.ToUpperInvariant());
+        creatorThenTypeState.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal("Gear/SOMEAUTHOR/Cool Jacket", typeThenCreatorState.Mods.Single().ProposedPath);
         Assert.Equal("SOMEAUTHOR/Gear/Cool Jacket", creatorThenTypeState.Mods.Single().ProposedPath);
@@ -557,7 +561,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        var count = state.SortByTypeThenCreatorFlat(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, false, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/SOMEAUTHOR/Cool Boots", state.Mods.Single().ProposedPath);
@@ -571,7 +575,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.SortByTypeThenCreator(name => name.ToUpperInvariant());
+        state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal("Gear/Feet/SOMEAUTHOR/Cool Boots", state.Mods.Single().ProposedPath);
     }
@@ -583,7 +587,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        var count = state.SortByCreatorThenTypeFlat(name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, false, true, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Gear/Cool Boots", state.Mods.Single().ProposedPath);
@@ -597,7 +601,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.SortByCreatorThenType(name => name.ToUpperInvariant());
+        state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
 
         Assert.Equal("SOMEAUTHOR/Gear/Feet/Cool Boots", state.Mods.Single().ProposedPath);
     }
@@ -608,12 +612,12 @@ public class OrganizerStateTests
         var flatState = new OrganizerState();
         flatState.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
-        flatState.SortByModType();
+        flatState.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         var detailedState = new OrganizerState();
         detailedState.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
-        detailedState.SortByModTypeDetailed();
+        detailedState.Sort(SortStrategy.TypeOnly, true, true, Identity);
 
         Assert.Equal("Gear/Cool Boots", flatState.Mods.Single().ProposedPath);
         Assert.Equal("Gear/Feet/Cool Boots", detailedState.Mods.Single().ProposedPath);
@@ -668,7 +672,7 @@ public class OrganizerStateTests
             MakePlacedRow("Foo (3)", "Foo", "Gear/Foo"),
         ], new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.All(state.Mods, m => Assert.Equal(m.CurrentPath, m.ProposedPath));
     }
@@ -681,7 +685,7 @@ public class OrganizerStateTests
         var elsewhere = MakePlacedRow("Foo (2)", "Foo", "Unsorted/Foo");
         state.LoadScan([inPlace, elsewhere], new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal("Gear/Foo (2)", inPlace.ProposedPath);          // pinned, no churn
         Assert.Equal("Gear/Foo", elsewhere.ProposedPath);            // genuinely moves
@@ -696,7 +700,7 @@ public class OrganizerStateTests
         var row = MakePlacedRow("Vespucci ", "Vespucci ", "Gear/Vespucci");
         state.LoadScan([row], new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal("Gear/Vespucci", row.ProposedPath);
     }
@@ -710,7 +714,7 @@ public class OrganizerStateTests
         var row = MakePlacedRow("a", "Foo/Bar", "Unsorted/FooBar");
         state.LoadScan([row], new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal("Gear/Foo\\Bar", row.ProposedPath);
     }
@@ -722,7 +726,7 @@ public class OrganizerStateTests
         var row = MakeRow("a", "Apple");
         state.LoadScan([row], new HashSet<string>());
 
-        state.SortByCreator(_ => " Alice ");
+        state.Sort(SortStrategy.CreatorOnly, false, true, _ => " Alice ");
 
         Assert.Equal("Alice/Apple", row.ProposedPath);
     }
@@ -733,7 +737,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal("Gear/Boots", state.Mods.Single().ProposedPath);
     }
@@ -745,7 +749,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Wave", ModCategory.Animation, "Emotes")], new HashSet<string>());
 
-        state.SortByModType();
+        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
 
         Assert.Equal("Animation and VFX/Emotes/Wave", state.Mods.Single().ProposedPath);
     }
@@ -756,7 +760,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.SortByModTypeDetailed();
+        state.Sort(SortStrategy.TypeOnly, true, true, Identity);
 
         Assert.Equal("Gear/Feet/Boots", state.Mods.Single().ProposedPath);
     }
@@ -767,7 +771,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cloak", ModCategory.Gear, null)], new HashSet<string>());
 
-        state.SortByModTypeDetailed();
+        state.Sort(SortStrategy.TypeOnly, true, true, Identity);
 
         Assert.Equal("Gear/Cloak", state.Mods.Single().ProposedPath);
     }
@@ -837,6 +841,106 @@ public class OrganizerStateTests
         state.SetFolderProtected("Gear/Feet", false);
 
         Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtected_DoesNotUndoAnExplicitHeliosphereUnprotect()
+    {
+        // Reported in-game: untick "Toggle Heliosphere protection", then tick ANY folder, and every
+        // Heliosphere mod snaps back to protected. SetFolderProtected recomputes every row through
+        // IsEffectivelyProtected, whose first clause is `row.HeliosphereManaged ||`, so the user's
+        // explicit choice is silently overwritten by an unrelated action.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("helio", "Boots", heliosphere: true), MakeRow("plain", "Hat", currentPath: "Gear/Top/Hat")],
+            new HashSet<string>());
+
+        state.SetHeliosphereProtection(false);
+        Assert.False(state.Mods.Single(m => m.Identifier == "helio").Protected);
+
+        state.SetFolderProtected("Gear/Top", true);
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "helio").Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtected_Unprotecting_AlsoDoesNotUndoAnExplicitHeliosphereUnprotect()
+    {
+        // The other direction the report named. Both branches of SetFolderProtected run the same
+        // full recompute, so unprotecting re-asserts Heliosphere protection just as protecting does.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("helio", "Boots", heliosphere: true)], new HashSet<string>());
+
+        state.SetFolderProtected("Gear/Top", true);
+        state.SetHeliosphereProtection(false);
+        state.SetFolderProtected("Gear/Top", false);
+
+        Assert.False(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void HeliosphereUnprotectOverride_IsClearedByTheNextScan()
+    {
+        // The documented contract: Heliosphere mods are re-protected on every scan no matter how
+        // the toggle was last left, because Heliosphere owns their location. The override makes the
+        // choice survive unrelated UI actions, NOT survive a scan.
+        var state = new OrganizerState();
+        var row = MakeRow("helio", "Boots", heliosphere: true);
+        state.LoadScan([row], new HashSet<string>());
+        state.SetHeliosphereProtection(false);
+
+        state.LoadScan([MakeRow("helio", "Boots", heliosphere: true)], new HashSet<string>());
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void ProtectingAFolder_StillProtectsAnUnprotectedHeliosphereModInsideIt()
+    {
+        // Protecting a folder is a newer and more specific instruction than "unprotect Heliosphere",
+        // so it wins for mods actually in that folder. The bug was that it also won for every
+        // Heliosphere mod everywhere else.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("inside", "Boots", heliosphere: true, currentPath: "Gear/Feet/Boots"),
+             MakeRow("outside", "Hat", heliosphere: true, currentPath: "Gear/Top/Hat")],
+            new HashSet<string>());
+        state.SetHeliosphereProtection(false);
+
+        state.SetFolderProtected("Gear/Feet", true);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "inside").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "outside").Protected);
+    }
+
+    [Fact]
+    public void RetickingAHeliosphereMod_WithdrawsTheOverride()
+    {
+        // Without withdrawal the row would stay stuck unprotected: the override would outlive the
+        // user's decision to re-protect it.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("helio", "Boots", heliosphere: true)], new HashSet<string>());
+
+        state.SetProtected("helio", false);
+        state.SetProtected("helio", true);
+        state.SetFolderProtected("Unsorted", false);   // any unrelated full recompute
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void ToggleProtectAllOff_AlsoUnticksHeliosphereMods()
+    {
+        // "Toggle protect all" is an explicit instruction about every mod. Before the override
+        // existed, the Heliosphere rows stayed visibly ticked and the button looked broken.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("helio", "Boots", heliosphere: true), MakeRow("plain", "Hat")],
+            new HashSet<string>());
+
+        state.SetAllProtection(false);
+
+        Assert.All(state.Mods, m => Assert.False(m.Protected));
     }
 
     [Fact]

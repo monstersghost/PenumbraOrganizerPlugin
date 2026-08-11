@@ -14,8 +14,6 @@ namespace PenumbraOrganizer.Plugin.Tests.LibrarySearch;
 /// </summary>
 public class ChangedItemIndexBuilderTests
 {
-    private const string EmptyNpcSeedJson = """{"Version":1,"NPCs":[],"Enemies":[],"Bosses":[],"Excluded":[]}""";
-
     private static DirectoryInfo MakeTempModDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "PenumbraOrganizer.Plugin.Tests", Guid.NewGuid().ToString("N"));
@@ -26,10 +24,12 @@ public class ChangedItemIndexBuilderTests
     private static void WriteJson(DirectoryInfo modDirectory, string fileName, string json) =>
         File.WriteAllText(Path.Combine(modDirectory.FullName, fileName), json);
 
-    private static IndexProcessor NewProcessor(string npcSeedJson = EmptyNpcSeedJson)
+    // An empty config directory and the opt-in off, so the matcher is built from the bundled static
+    // list alone. None of the mod titles below match a name in it except the deliberate one.
+    private static IndexProcessor NewProcessor()
     {
         var processor = new IndexProcessor(
-            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString(), "npc-name-list.json"), npcSeedJson);
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()), useScrapedNpcNameList: false);
         processor.Prepare(CancellationToken.None);
         return processor;
     }
@@ -74,10 +74,10 @@ public class ChangedItemIndexBuilderTests
     [Fact]
     public void NpcNameHeuristicMatch_SetsFlagIndependentlyOfCategories()
     {
-        const string npcSeedJson = """{"Version":1,"NPCs":["Zenos"],"Enemies":[],"Bosses":[],"Excluded":[]}""";
+        // "Zenos" is in the bundled static list, which is now the matcher's default source.
         var seed = MakeSeed("a", "Zenos", "Someone", null, ["Customization: Midlander Male Skin Textures"]);
 
-        var result = RunOne(NewProcessor(npcSeedJson), seed, new HashSet<string> { "a" });
+        var result = RunOne(NewProcessor(), seed, new HashSet<string> { "a" });
 
         var mod = Assert.Single(result.Mods);
         Assert.True(mod.MatchedByNpcNameHeuristic);

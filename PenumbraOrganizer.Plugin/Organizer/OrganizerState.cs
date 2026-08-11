@@ -14,6 +14,20 @@ public sealed class OrganizerState
     private HashSet<string> _protectedFolders = new(StringComparer.Ordinal);
     private List<string> _knownFolders = [];
 
+    // Heliosphere-managed mods the user has explicitly unprotected this session.
+    //
+    // This exists because the override needs somewhere to LIVE. It used to be written straight onto
+    // row.Protected and recorded nowhere, so any later full recompute - notably ticking any folder
+    // checkbox - re-derived Protected from HeliosphereManaged and silently reversed the user's
+    // choice, for every Heliosphere mod at once, whether or not it had anything to do with that
+    // folder.
+    //
+    // Deliberately NOT persisted and deliberately cleared by ReplaceScanAtomically: the documented
+    // contract is that Heliosphere mods are re-protected on every scan no matter how the toggle was
+    // last left, because Heliosphere owns their location. This makes the override survive unrelated
+    // UI actions, not survive a scan.
+    private HashSet<string> _heliosphereUnprotectOverrides = new(StringComparer.Ordinal);
+
     public IReadOnlyList<OrganizerModRow> Mods =>
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
@@ -73,13 +87,17 @@ public sealed class OrganizerState
         var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
         var replacementProtectedFolders = new HashSet<string>(
             previouslyProtectedFolders ?? new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal);
+        // A scan re-asserts Heliosphere protection unconditionally, so this session's overrides end
+        // here. Built as a replacement like everything else so a throw below leaves them untouched.
+        var replacementHeliosphereOverrides = new HashSet<string>(StringComparer.Ordinal);
 
         var replacementMods = new Dictionary<string, OrganizerModRow>();
         foreach (var row in scanned)
         {
             // Protection is derived against the REPLACEMENT sets, not the live fields, so this loop
             // reads nothing it is about to overwrite.
-            row.Protected = IsEffectivelyProtected(row, replacementProtectedIdentifiers, replacementProtectedFolders);
+            row.Protected = IsEffectivelyProtected(
+                row, replacementProtectedIdentifiers, replacementProtectedFolders, replacementHeliosphereOverrides);
             row.ProposedPath = row.CurrentPath;
             replacementMods[row.Identifier] = row;
         }
@@ -96,6 +114,7 @@ public sealed class OrganizerState
         // COMMIT. Nothing above this point has touched published state.
         _protectedModIdentifiers = replacementProtectedIdentifiers;
         _protectedFolders = replacementProtectedFolders;
+        _heliosphereUnprotectOverrides = replacementHeliosphereOverrides;
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
         HasScanned = true;
@@ -109,17 +128,27 @@ public sealed class OrganizerState
         else
             _protectedModIdentifiers.Remove(identifier);
 
+        // Unticking a Heliosphere mod records the override; reticking it withdraws it. Without the
+        // withdrawal, re-protecting and then unprotecting a folder would leave the row stuck.
         if (_mods.TryGetValue(identifier, out var row))
-            row.Protected = IsEffectivelyProtectedAfterIndividualToggle(row);
+        {
+            if (row.HeliosphereManaged)
+                SetHeliosphereOverride(identifier, unprotected: !value);
+
+            row.Protected = IsEffectivelyProtectedFull(row);
+        }
     }
 
-    // Deliberately unchanged from the pre-folder-protection behavior: directly toggles
-    // HeliosphereManaged rows, re-asserted on the next Scan. This existing, previously-confirmed
-    // transient-override behavior is not touched by folder protection.
+    // Still a transient override re-asserted on the next Scan - that part is unchanged. What
+    // changed is where it lives: in _heliosphereUnprotectOverrides rather than only on row.Protected,
+    // so a later recompute triggered by an unrelated control cannot silently reverse it.
     public void SetHeliosphereProtection(bool value)
     {
         foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
-            row.Protected = value;
+        {
+            SetHeliosphereOverride(row.Identifier, unprotected: !value);
+            row.Protected = IsEffectivelyProtectedFull(row);
+        }
     }
 
     public void SetAllProtection(bool value)
@@ -129,8 +158,24 @@ public sealed class OrganizerState
         else
             _protectedModIdentifiers.Clear();
 
+        // "Toggle protect all" is an explicit instruction about every mod, Heliosphere ones
+        // included, so it sets their override the same way the Heliosphere toggle does. Otherwise
+        // unprotecting everything would visibly leave the Heliosphere rows ticked.
         foreach (var row in _mods.Values)
-            row.Protected = IsEffectivelyProtectedAfterIndividualToggle(row);
+        {
+            if (row.HeliosphereManaged)
+                SetHeliosphereOverride(row.Identifier, unprotected: !value);
+
+            row.Protected = IsEffectivelyProtectedFull(row);
+        }
+    }
+
+    private void SetHeliosphereOverride(string identifier, bool unprotected)
+    {
+        if (unprotected)
+            _heliosphereUnprotectOverrides.Add(identifier);
+        else
+            _heliosphereUnprotectOverrides.Remove(identifier);
     }
 
     // A folder-rule change is a system/bulk event, not a single-mod interactive toggle, so it
@@ -153,19 +198,32 @@ public sealed class OrganizerState
     }
 
     private bool IsEffectivelyProtectedFull(OrganizerModRow row) =>
-        IsEffectivelyProtected(row, _protectedModIdentifiers, _protectedFolders);
+        IsEffectivelyProtected(row, _protectedModIdentifiers, _protectedFolders, _heliosphereUnprotectOverrides);
 
+    /// <summary>
+    /// The single protection rule. Every path recomputes through this one.
+    /// </summary>
+    /// <remarks>
+    /// There used to be a second, divergent rule for interactive toggles that simply omitted the
+    /// Heliosphere clause. Two rules meant the answer depended on which control the user last
+    /// touched, which is exactly how ticking a folder came to reverse an explicit Heliosphere
+    /// unprotect. The override set replaces that divergence: Heliosphere still protects by default,
+    /// and an explicit unprotect is represented rather than implied by whichever branch ran.
+    /// <para>
+    /// Order matters. An explicit mod protection or a protected folder still wins over the override,
+    /// so unprotecting Heliosphere mods and then protecting a folder containing one protects that
+    /// one - the newer, more specific instruction - while leaving every Heliosphere mod outside that
+    /// folder alone.
+    /// </para>
+    /// </remarks>
     private static bool IsEffectivelyProtected(
-        OrganizerModRow row, IReadOnlySet<string> protectedModIdentifiers, IReadOnlySet<string> protectedFolders) =>
-        row.HeliosphereManaged
+        OrganizerModRow row,
+        IReadOnlySet<string> protectedModIdentifiers,
+        IReadOnlySet<string> protectedFolders,
+        IReadOnlySet<string> heliosphereUnprotectOverrides) =>
+        (row.HeliosphereManaged && !heliosphereUnprotectOverrides.Contains(row.Identifier))
         || protectedModIdentifiers.Contains(row.Identifier)
         || OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, protectedFolders);
-
-    // Deliberately excludes HeliosphereManaged - see SetProtected/SetAllProtection's doc comment
-    // context above and the plan's Global Constraints for why.
-    private bool IsEffectivelyProtectedAfterIndividualToggle(OrganizerModRow row) =>
-        _protectedModIdentifiers.Contains(row.Identifier)
-        || OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, _protectedFolders);
 
     public bool AssignManual(string identifier, string proposedPath)
     {
@@ -202,34 +260,26 @@ public sealed class OrganizerState
         return results;
     }
 
-    // The seven historical sort entry points, each pinned to the (strategy, splits) triple that
-    // reproduces its old behaviour exactly: "Detailed" means splitGear on, the "Flat" variants mean
-    // it off, and every one of them splits NPC mods, which is what these methods did before the
-    // split became a choice.
-    public int SortByCreator(Func<string, string> canonicalizeCreator) =>
-        SortBy(SortStrategy.CreatorOnly, false, true, canonicalizeCreator);
-
-    // No canonicalizer: these two strategies have no creator segment, so none is computed.
-    public int SortByModType() =>
-        SortBy(SortStrategy.TypeOnly, false, true, null);
-
-    public int SortByModTypeDetailed() =>
-        SortBy(SortStrategy.TypeOnly, true, true, null);
-
-    public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
-        SortBy(SortStrategy.TypeThenCreator, true, true, canonicalizeCreator);
-
-    public int SortByTypeThenCreatorFlat(Func<string, string> canonicalizeCreator) =>
-        SortBy(SortStrategy.TypeThenCreator, false, true, canonicalizeCreator);
-
-    public int SortByCreatorThenType(Func<string, string> canonicalizeCreator) =>
-        SortBy(SortStrategy.CreatorThenType, true, true, canonicalizeCreator);
-
-    public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
-        SortBy(SortStrategy.CreatorThenType, false, true, canonicalizeCreator);
-
-    private int SortBy(
-        SortStrategy strategy, bool splitGear, bool splitNpc, Func<string, string>? canonicalizeCreator) =>
+    /// <summary>
+    /// The single sort entry point, replacing the seven <c>SortBy*</c> methods that preceded it.
+    /// Their behaviour is pinned by <c>OrganizerStateSortTests</c>, whose expectations were captured
+    /// from those methods while they still existed.
+    /// </summary>
+    /// <remarks>
+    /// The two splits are independent of each other and both are ignored by
+    /// <see cref="SortStrategy.CreatorOnly"/>, which never consults the category at all. That gives
+    /// 1 + (3 x 2 x 2) = 13 selections, of which the seven buttons offered seven; the six new ones
+    /// are the whole splitNpc: false column, which had no button because NPC subdivision used to be
+    /// unconditional.
+    /// <para>
+    /// The folder-selection expressions live in <see cref="SortFolderSelectors"/> rather than here,
+    /// because the template planner needs the identical computation to place mods a template has no
+    /// entry for. Two copies would let a sorted folder and a planned folder drift apart, which the
+    /// preview promises cannot happen.
+    /// </para>
+    /// </remarks>
+    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc,
+                    Func<string, string> canonicalizeCreator) =>
         Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator));
 
     /// <summary>
@@ -259,8 +309,8 @@ public sealed class OrganizerState
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
-    // over every touched row. Each public SortBy* method supplies only what varies: which
-    // folder segments go where.
+    // over every touched row. Each arm of the public Sort overload above supplies only what
+    // varies: which folder segments go where.
     private int Sort(Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector)
     {
         var count = 0;

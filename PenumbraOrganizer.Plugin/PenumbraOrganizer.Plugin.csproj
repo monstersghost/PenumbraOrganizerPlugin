@@ -2,7 +2,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>0.5.2.0</Version>
+    <!-- Four-part, matching every tag in this repo and the ToString(4) the window title renders.
+         HelpTab.GuideUrl embeds this exact string, so the release tag must match it character for
+         character or the Help tab's guide link 404s in a shipped build. -->
+    <Version>0.6.0.0</Version>
     <Product>Penumbra Organizer Plugin (MVP)</Product>
     <Authors>Penumbra Organizer Contributors</Authors>
     <Copyright>Copyright (c) 2026 Penumbra Organizer Contributors</Copyright>
@@ -24,6 +27,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Organizer\NpcNames\npc-name-list-seed.json" />
+    <EmbeddedResource Include="Organizer\NpcNames\npc-name-list-static.json" />
+    <EmbeddedResource Include="Resources\help-content.json" />
   </ItemGroup>
 
   <ItemGroup>
