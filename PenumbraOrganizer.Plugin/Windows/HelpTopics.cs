@@ -28,6 +28,7 @@ public static class HelpTopics
     public static readonly HelpTopic HelpTabReview = new("help.tab-review");
     public static readonly HelpTopic HelpTabHistory = new("help.tab-history");
     public static readonly HelpTopic HelpTabSearch = new("help.tab-search");
+    public static readonly HelpTopic HelpTabTemplates = new("help.tab-templates");
     public static readonly HelpTopic HelpWhenThingsGoWrong = new("help.when-things-go-wrong");
     public static readonly HelpTopic HelpWhereYourFilesAre = new("help.where-your-files-are");
 
@@ -51,6 +52,15 @@ public static class HelpTopics
     public static readonly HelpTopic SortImportWorkbook = new("sort.import-workbook");
     public static readonly HelpTopic SortManualAssign = new("sort.manual-assign");
     public static readonly HelpTopic SortRefreshNpcList = new("sort.refresh-npc-list");
+
+    // Templates
+    public static readonly HelpTopic TemplatesExport = new("templates.export");
+    public static readonly HelpTopic TemplatesExportName = new("templates.export-name");
+    public static readonly HelpTopic TemplatesExportFallback = new("templates.export-fallback");
+    public static readonly HelpTopic TemplatesExportFolders = new("templates.export-folders");
+    public static readonly HelpTopic TemplatesExportSearch = new("templates.export-search");
+    public static readonly HelpTopic TemplatesExportSave = new("templates.export-save");
+    public static readonly HelpTopic TemplatesExportShareCode = new("templates.export-share-code");
 
     // Review Changes
     public static readonly HelpTopic ReviewApply = new("review.apply");

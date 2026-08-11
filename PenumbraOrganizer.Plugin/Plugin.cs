@@ -516,6 +516,24 @@ public sealed class Plugin : IDalamudPlugin
     private static string OrganizationJsonPath =>
         Path.Combine(PenumbraConfigDirectory, "mod_filesystem", "organization.json");
 
+    /// <summary>
+    /// Penumbra's folder list, for seeding the template export screen. Null when the file cannot be
+    /// read at all — export degrades to the folders derivable from mods and says so, because a
+    /// folder holding no mods is invisible in the scan yet is exactly what an author wants to share.
+    /// </summary>
+    internal string? ReadOrganizationJsonOrNull()
+    {
+        try
+        {
+            return File.Exists(OrganizationJsonPath) ? File.ReadAllText(OrganizationJsonPath) : null;
+        }
+        catch (Exception exception)
+        {
+            Log.Warning($"Could not read organization.json for template export: {exception.Message}");
+            return null;
+        }
+    }
+
     private string FolderBackupFilePath =>
         Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-folder-backup.json");
 

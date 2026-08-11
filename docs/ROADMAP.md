@@ -69,19 +69,30 @@ below unless a phase explicitly says otherwise.
   reappears). 46 new tests (468 total), build clean. See
   `docs/superpowers/specs/2026-07-21-library-search-changed-item-lookup-design.md` and
   `docs/superpowers/plans/2026-07-21-library-search-changed-item-lookup.md`.
-- **Community organization templates, Phases T1 and T2 — implemented, not yet verified in-game.**
+- **Community organization templates, Phases T1, T2 and T3 — implemented, not yet verified in-game.**
   A portable, identity-free template document (normalized mod name → folder entries, an
-  author-declared fallback strategy, and a longest-prefix folder-label rename map) with staged
+  author-declared fallback, and a longest-prefix folder-label rename map) with staged
   validation and a `POT1:` share-code transport, plus a Templates tab that imports a `.json`
   someone shared, previews the resulting folder tree and match counts against the current
   library, and stages proposals through the existing Review Changes pipeline. Unlike the
-  workbook, a template carries no `installationIdentity`, so it travels between users. T3
-  (export review-and-trim, clipboard sharing) is not started, and its review-and-trim screen is a
-  privacy mechanism rather than polish, since export publishes the author's mod names. Verifying
-  the feature end to end needs two libraries and therefore a second tester. Design:
+  workbook, a template carries no `installationIdentity`, so it travels between users.
+
+  T3 adds export: a review-and-trim screen, `.json` output and a clipboard share code. That screen
+  is a privacy mechanism rather than polish — exporting publishes the author's mod names — so it
+  opens with everything included, lists every name that would go out, and is the only path in the
+  plugin to a written template or a clipboard write. **No "quick export" affordance may be added
+  that bypasses it.** Export reads each mod's *current* path, never a pending proposal, so a user
+  who has sorted without applying cannot unknowingly share the layout they are about to replace.
+
+  The fallback travels as a `SortStrategy` plus the two split flags, matching the Sort tab's own
+  selection. An earlier draft used a seven-member enum that could not express "do not split NPC
+  mods" at all; see the reversal note in the design doc before changing this field.
+
+  Verifying the feature end to end needs two libraries and therefore a second tester. Design:
   `docs/superpowers/specs/2026-07-30-community-templates-design.md`. Plans:
   `docs/superpowers/plans/2026-07-30-community-templates-t1-core.md`,
-  `docs/superpowers/plans/2026-07-31-community-templates-t2-import-and-preview.md`.
+  `docs/superpowers/plans/2026-07-31-community-templates-t2-import-and-preview.md`,
+  `docs/superpowers/plans/2026-08-11-community-templates-t3-export.md`.
 
 ## Phase 1c — done
 

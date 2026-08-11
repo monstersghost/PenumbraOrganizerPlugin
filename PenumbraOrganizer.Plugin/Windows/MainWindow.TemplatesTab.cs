@@ -68,6 +68,14 @@ public sealed partial class MainWindow
         if (_templateStatus is not null)
             ImGui.TextWrapped(_templateStatus);
 
+        // Export sits above the list rather than below it: the list can be hundreds of rows tall,
+        // and a control that publishes data should not be somewhere the user has to scroll to find
+        // and might miss the review screen attached to it.
+        DrawTemplateExportSection();
+
+        if (_exportOpen)
+            return;
+
         var listing = _templateListing!;
 
         foreach (var unreadable in listing.UnreadableFiles)

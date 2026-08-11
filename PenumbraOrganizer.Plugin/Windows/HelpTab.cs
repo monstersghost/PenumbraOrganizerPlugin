@@ -116,6 +116,16 @@ public static class HelpTab
             HelpTopics.SearchCategories,
             HelpTopics.SearchSlots,
         ]),
+        new(HelpTopics.HelpTabTemplates,
+        [
+            HelpTopics.TemplatesExport,
+            HelpTopics.TemplatesExportName,
+            HelpTopics.TemplatesExportFallback,
+            HelpTopics.TemplatesExportFolders,
+            HelpTopics.TemplatesExportSearch,
+            HelpTopics.TemplatesExportSave,
+            HelpTopics.TemplatesExportShareCode,
+        ]),
 
         new(HelpTopics.HelpWhenThingsGoWrong,
         [

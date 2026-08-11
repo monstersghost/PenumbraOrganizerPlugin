@@ -264,6 +264,42 @@ A few things worth knowing:
 - If you rescan your library after previewing, the preview is discarded — preview again before
   applying.
 
+#### Sharing your own layout
+
+**Export my layout as a template...** builds a template from your library.
+
+Read this part before you use it: **a template contains a list of your mod names, and anyone you
+send it to can read that list.** That is the whole point of the format — it is how an importer knows
+which of their mods you have an opinion about — but it means exporting is publishing. If any of your
+mods are things you would not want a stranger, or a friend, reading off a list, take them out first.
+
+That is what the review screen is for, and there is no way to export without going through it:
+
+1. Click **Export my layout as a template...**. The screen opens with **everything included**, so
+   what you see is your actual library.
+2. Give it a name, and optionally your name and a description.
+3. Pick the **fallback grouping** — where an importer's mods go when your template says nothing
+   about them. These are the same choices the Sort tab offers.
+4. Go through the folder and mod lists and untick anything you would rather not share. Unticking a
+   folder also unticks the mods in it. The search box narrows what you are looking at; **Include
+   all** and **Exclude all** always apply to every mod, not only the ones showing.
+5. Then either **Save to templates folder**, which writes a `.json` you can send to anyone, or
+   **Copy share code**, which puts the whole template on your clipboard as one line of text.
+
+Some things worth knowing:
+
+- **Export uses where your mods are now**, not any proposals sitting on Review Changes. If you have
+  sorted but not applied, the template describes your *old* layout, because that is the one your
+  library actually has. The screen says so.
+- **Share codes only work for small templates.** A chat message holds about 2000 characters, which
+  is roughly a hundred mods. Past that the button is disabled and the screen tells you the length —
+  send the file instead.
+- **Mods sitting loose at the top level are left out.** A template only carries folders, so a mod
+  that is not in one has nothing to record. The screen tells you how many.
+- If two of your mods have names that match once suffixes and tags are stripped, and they are in
+  *different* folders, that name is left out and the screen says so — a template cannot say two
+  things about one name. Exclude one of them to include the other.
+
 ### Help
 
 Every explanation the plugin holds, at reading length rather than tooltip length. It is grouped into

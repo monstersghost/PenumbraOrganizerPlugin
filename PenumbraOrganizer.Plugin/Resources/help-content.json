@@ -279,6 +279,46 @@
       "id": "recovery.close-all",
       "title": "Accept Current State and Close All Interrupted Operations",
       "short": "Permanently abandons every interrupted operation at once. None can be continued or rolled back. No mod moves - it only stops the plugin blocking further actions."
+    },
+    {
+      "id": "templates.export",
+      "title": "Export my layout as a template",
+      "short": "Builds a shareable template from the folders your mods are in now, not from pending proposals. A review screen opens first, because a template lists your mod names."
+    },
+    {
+      "id": "templates.export-name",
+      "title": "Template name",
+      "short": "How your template appears in someone else's list. Required. The file on disk gets a tidied version of it, but this is the name other people see."
+    },
+    {
+      "id": "templates.export-fallback",
+      "title": "Fallback grouping",
+      "short": "Where an importer's mods go when your template does not mention them. Same groupings the Sort tab offers, so a template can only ask for a layout this plugin can produce."
+    },
+    {
+      "id": "templates.export-folders",
+      "title": "Folders",
+      "short": "Every folder that goes into the template, empty ones included, so an importer gets your whole structure. Unticking a folder also leaves out the mods inside it."
+    },
+    {
+      "id": "templates.export-search",
+      "title": "Search mods",
+      "short": "Narrows the list you are looking at. It never changes what is included - Include all and Exclude all always apply to every mod, not just the ones shown."
+    },
+    {
+      "id": "templates.export-save",
+      "title": "Save to templates folder",
+      "short": "Writes the template as a .json file you can send to anyone. Use this for a real library: it works at any size, unlike a share code."
+    },
+    {
+      "id": "templates.export-share-code",
+      "title": "Copy share code",
+      "short": "Copies the template as one line of text to paste into chat. Small templates only - a chat message holds about 2000 characters and a big library will not fit."
+    },
+    {
+      "id": "help.tab-templates",
+      "title": "Templates",
+      "body": "A template is a folder layout someone shared. Importing one proposes where your mods would go; mods you both have land where they put them, and the rest follow the fallback grouping they chose.\n\nNothing is applied until you review it on Review Changes.\n\nExport builds a template from your own library. It shows you every mod name that would be included first, because whoever you send it to can read that list."
     }
   ]
 }
