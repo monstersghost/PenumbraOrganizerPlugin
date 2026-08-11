@@ -5,7 +5,7 @@
 This is mostly a release about explaining itself. The Sort tab is simpler, every control tells you
 what it does, there is a Help tab, and there is a short walkthrough the first time you open it.
 
-**If you are upgrading, the walkthrough runs once for you too.** That is deliberate, not a bug: the
+**If you are upgrading, the walkthrough runs once for you too.** the
 Sort tab has changed enough that an existing user has about as much new to look at as a new one.
 Dismiss it and it will not come back.
 
@@ -42,19 +42,21 @@ What did change:
   no refresh.
 - The name matching was rebuilt. It no longer builds one giant pattern per category, so a large list
   is no longer expensive to load. This was done for cost and correctness.
-- The wiki scrape is now a **separate, optional second list** rather than the list. When it is
-  eventually enabled, turning it on adds names to the curated list rather than replacing it, and a
-  refresh now **replaces** its contents rather than adding to them, so it cannot grow without bound
-  the way it did before.
+- The wiki scrape is now a **separate, optional second list** rather than the list. If it is ever
+  enabled it would add names to the curated list rather than replacing it, and a refresh now
+  **replaces** its contents rather than adding to them, so it could not grow without bound the way
+  it did before.
 - Your existing `npc-name-list.json` is renamed to `npc-name-list-scraped.json` automatically on
   first run. Nothing in it is lost, and nothing in it is loaded unless you opt in - which you
   currently cannot.
 
 **Why the toggle is still off, plainly:** we know that resetting an oversized list stops the game
 closing, and we still do not know *why* an oversized list correlated with it. The new matching is
-cheaper and we are confident in it, but "cheaper" is not the same as "we found the cause".
-Enabling a 20,000-name list before we can explain the original failure would be guessing with your
-game. It stays off until it has been tested in-game against a full list.
+cheaper and we are confident in it, but "cheaper" is not the same as "we found the cause". Enabling
+a 20,000-name list before we can explain the original failure would be guessing with your game.
+
+**And it may simply stay off.** See "About the wiki list" below - 827 curated names is not a
+placeholder for 20,000.
 
 The curated list is unaffected by any of this and works from the first scan.
 
@@ -78,8 +80,8 @@ Nothing on that tab changes anything.
 
 ### Added: a way to reach us from inside the game
 
-The Help tab opens with a **Join the Discord for support** button. It is the fastest way to get help,
-and where testing builds get announced. The same link is in the README.
+The Help tab opens with a **Join the Discord for support** button. It is the fastest way to get
+help, and where testing builds get announced. The same link is in the README.
 
 ### Added: a guided first run
 
@@ -110,10 +112,21 @@ This was not new in 0.6.0; it has been there since the first public release.
   running the scan again will work, but the message is misleading. *(Unchanged from 0.5.3.1.)*
 - "Refresh NPC list from wiki" remains disabled, as above.
 
-## Coming next
+## About the wiki list, plainly
 
-Enabling the scraped NPC list, once it has been verified in-game against a full list. That is the
-only thing this release deliberately left unfinished.
+**The curated 827-name list is the answer, not a stopgap.** It covers the characters, bosses and
+enemies people actually sort a mod library by, it ships with the plugin, and it needs no network
+access, no refresh and no setup.
+
+**The scraped list may never be turned on, and this is not a promise that it will be.** 0.5.3.1's
+notes said 0.6.0 would bring it back; we are not making that mistake twice. It exists in the code,
+switched off, because separating the two lists was worth doing regardless - but 20,000 names was
+never the goal, and at that size classification got *worse*, not better: with 21,000 names loaded
+almost any mod title matched something, and gear was being filed as NPC.
+
+**If a character you sort by is missing from the curated list, tell us on Discord.** Adding names to
+it is easy, it needs none of the above, and it is a far better use of everyone's time than switching
+on a list of every name the wiki has ever had.
 
 ## For developers
 
