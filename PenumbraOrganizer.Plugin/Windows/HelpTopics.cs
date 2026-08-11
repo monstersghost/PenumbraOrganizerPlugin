@@ -54,6 +54,11 @@ public static class HelpTopics
     public static readonly HelpTopic SortRefreshNpcList = new("sort.refresh-npc-list");
 
     // Templates
+    public static readonly HelpTopic TemplatesRefreshList = new("templates.refresh-list");
+    public static readonly HelpTopic TemplatesOpenFolder = new("templates.open-folder");
+    public static readonly HelpTopic TemplatesImportFile = new("templates.import-file");
+    public static readonly HelpTopic TemplatesPreview = new("templates.preview");
+    public static readonly HelpTopic TemplatesApply = new("templates.apply");
     public static readonly HelpTopic TemplatesExport = new("templates.export");
     public static readonly HelpTopic TemplatesExportName = new("templates.export-name");
     public static readonly HelpTopic TemplatesExportFallback = new("templates.export-fallback");

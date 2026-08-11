@@ -34,6 +34,13 @@ public static class HelpTopicUsage
         HelpTopics.SortManualAssign,
         HelpTopics.SortRefreshNpcList,
 
+        // Templates - MainWindow.TemplatesTab.cs
+        HelpTopics.TemplatesRefreshList,
+        HelpTopics.TemplatesOpenFolder,
+        HelpTopics.TemplatesImportFile,
+        HelpTopics.TemplatesPreview,
+        HelpTopics.TemplatesApply,
+
         // Templates - MainWindow.TemplatesExport.cs
         HelpTopics.TemplatesExport,
         HelpTopics.TemplatesExportName,

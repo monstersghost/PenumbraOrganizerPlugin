@@ -31,6 +31,8 @@ public sealed partial class MainWindow
             _templateStatus = null;
         }
 
+        Help.Tooltip(HelpTopics.TemplatesRefreshList);
+
         ImGui.SameLine();
         if (ImGui.Button("Open templates folder"))
         {
@@ -49,6 +51,8 @@ public sealed partial class MainWindow
             }
         }
 
+        Help.Tooltip(HelpTopics.TemplatesOpenFolder);
+
         ImGui.SameLine();
         if (ImGui.Button("Import template file..."))
         {
@@ -64,6 +68,8 @@ public sealed partial class MainWindow
                 },
                 selectionCountMax: 1);
         }
+
+        Help.Tooltip(HelpTopics.TemplatesImportFile);
 
         if (_templateStatus is not null)
             ImGui.TextWrapped(_templateStatus);
@@ -129,8 +135,10 @@ public sealed partial class MainWindow
             BuildTemplatePlan(stored);
         ImGui.EndDisabled();
 
-        if (!gates.CanStageProposals && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Library work is in progress.");
+        // Help.Tooltip passes AllowWhenDisabled itself and appends the reason under the
+        // explanation, so the control keeps its help text while gated rather than swapping to a
+        // bare "library work is in progress" that says nothing about what the button does.
+        Help.Tooltip(HelpTopics.TemplatesPreview, gates.CanStageProposals ? null : LibraryWorkInProgress);
 
         if (_templatePlan is null)
             return;
@@ -169,7 +177,11 @@ public sealed partial class MainWindow
         if (ImGui.Button("Apply this template to my proposals"))
             ApplyTemplatePlan();
         ImGui.EndDisabled();
+
+        Help.Tooltip(HelpTopics.TemplatesApply, gates.CanStageProposals ? null : LibraryWorkInProgress);
     }
+
+    private const string LibraryWorkInProgress = "Library work is in progress.";
 
     private static void DrawTemplateTree(IReadOnlyList<Organizer.Templates.TemplateTreeNode> nodes)
     {

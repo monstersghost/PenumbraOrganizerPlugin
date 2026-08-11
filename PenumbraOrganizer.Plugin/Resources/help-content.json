@@ -319,6 +319,31 @@
       "id": "help.tab-templates",
       "title": "Templates",
       "body": "A template is a folder layout someone shared. Importing one proposes where your mods would go; mods you both have land where they put them, and the rest follow the fallback grouping they chose.\n\nNothing is applied until you review it on Review Changes.\n\nExport builds a template from your own library. It shows you every mod name that would be included first, because whoever you send it to can read that list."
+    },
+    {
+      "id": "templates.refresh-list",
+      "title": "Refresh list",
+      "short": "Re-reads the templates folder. Use it after dropping a .json in there yourself. Files that are not readable templates are listed as skipped rather than hidden."
+    },
+    {
+      "id": "templates.open-folder",
+      "title": "Open templates folder",
+      "short": "Opens the folder templates are kept in, creating it if it does not exist yet. Handy for putting a file there by hand, or for finding one you saved to send to someone."
+    },
+    {
+      "id": "templates.import-file",
+      "title": "Import template file",
+      "short": "Copies a .json someone shared into your templates folder. It is checked before it is stored, and it never overwrites a template you already have - a name clash gets a numbered filename."
+    },
+    {
+      "id": "templates.preview",
+      "title": "Preview against my library",
+      "short": "Works out where this template would put your mods and shows the folder tree with counts, plus how many of your mods it matched. Nothing is staged or moved yet."
+    },
+    {
+      "id": "templates.apply",
+      "title": "Apply this template to my proposals",
+      "short": "Fills in proposed paths from the preview. Still nothing moves - open Review Changes to check them and apply from there, exactly as with any sort."
     }
   ]
 }

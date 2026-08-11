@@ -118,6 +118,11 @@ public static class HelpTab
         ]),
         new(HelpTopics.HelpTabTemplates,
         [
+            HelpTopics.TemplatesRefreshList,
+            HelpTopics.TemplatesOpenFolder,
+            HelpTopics.TemplatesImportFile,
+            HelpTopics.TemplatesPreview,
+            HelpTopics.TemplatesApply,
             HelpTopics.TemplatesExport,
             HelpTopics.TemplatesExportName,
             HelpTopics.TemplatesExportFallback,
