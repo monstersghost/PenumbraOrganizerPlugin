@@ -1,9 +1,13 @@
 # Handoff: the 0.6.0 UI overhaul
 
-Written 2026-08-08, updated 2026-08-11. Everything is on `main`, committed and pushed.
+Written 2026-08-08, closed 2026-08-11.
 
-**The overhaul is finished and verified in-game. What is left is publishing** - see the release
-checklist below. Nothing has been tagged.
+**SHIPPED.** 0.6.0.0 is tagged, released and live: tag `0.6.0.0` on `8cba152`, release **v0.6.0.0**
+flagged Latest, `repo.json` pointing at it as of `963fb30`. Users on 0.5.3.1 get it on their next
+plugin refresh.
+
+This file is now a record rather than a work queue. The parts still worth reading before touching
+this code are "Traps already hit", "The protection model", and "Known debt" - the rest is history.
 
 ## Where things stand
 
@@ -138,36 +142,39 @@ Sorting gained six combinations that no button ever offered - the whole `splitNp
 NPC mods can now land in `NPC` rather than `NPC/Bosses`. The release notes must say so; nobody will
 expect it.
 
-## Release checklist for 0.6.0.0
+## How 0.6.0.0 was released
 
-Notes are written at `docs/RELEASE_NOTES_0.6.0.0.md` and the version is bumped. Code is complete and
-verified in-game. Nothing is tagged or published.
+Done 2026-08-11, in this order. Recorded because the next release should follow the same shape:
 
-Remaining, in order - all four are the maintainer's to do:
-
-1. **Review the notes.** They are deliberately explicit that the scraped-list opt-in is still off,
-   which 0.5.3.1's notes had promised would return in 0.6.0. That is the one promise this release
-   does not keep, and it is stated rather than omitted.
-2. **Tag `0.6.0.0` - exactly that string.** `HelpTab.GuideUrl` embeds it, so `0.6.0` or `v0.6.0.0`
-   ships a Help tab whose guide link 404s. No test catches this: the URL test asserts the tag is not
-   `main` and that the path is right, both of which pass against a tag that does not exist. **Until
-   the tag is pushed, that link is dead in every build**, including the one just tested.
-3. **Publish the release.** Short user-facing note plus a link to the full notes, per the usual
-   pattern.
-4. **Update `repo.json`** so installed plugins see the new version.
+1. Notes reviewed by the maintainer at `docs/RELEASE_NOTES_0.6.0.0.md`.
+2. **Tagged `0.6.0.0`** - bare, lightweight, matching every prior tag. Pushed, then the Help tab's
+   guide URL was checked with `curl` and confirmed to return 200. It had been 404 until that moment,
+   and no test can catch it: the URL test asserts the tag is not `main` and that the path shape is
+   right, both of which pass happily against a tag that does not exist.
+3. **Release built** with `dotnet build -c Release`, which produces
+   `bin/Release/PenumbraOrganizer.Plugin/latest.zip`. Verified the packaged manifest read
+   `AssemblyVersion: 0.6.0.0` before uploading. Renamed to `PenumbraOrganizer.Plugin.zip` to match
+   the asset name every prior release used.
+4. **Published** with `gh release create`, title `v0.6.0.0`, `--latest`. Note the asymmetry: the
+   **tag is bare** (`0.6.0.0`) and the **title carries the v** (`v0.6.0.0`). Both prior releases do
+   the same, and getting them the wrong way round breaks the guide link.
+5. **`repo.json` updated last**, after confirming the download URL returned 200 and the exact byte
+   count of the uploaded asset. Until that file lands, installers keep serving the old version no
+   matter what the release page says.
 
 **The version is four-part on purpose.** Every tag here is, the csproj was, and `MainWindow` renders
 `Assembly.Version.ToString(4)`. The plan said `0.6.0`; following it literally would have made the
 displayed version, the tag and the guide URL disagree.
 
-## Release gates
+## Release gates, as they stood for 0.6.0.0
 
-- **The scraped-list toggle ships disabled.** It is gated on reproducing the crash and verifying the
-  new matcher in-game against a full 20,115-name list. That is a release decision, not a task.
+- **The scraped-list toggle shipped disabled**, and the notes now say plainly it may never be turned
+  on rather than promising a follow-up - 0.5.3.1's notes made exactly that promise about 0.6.0 and
+  it was not kept. 827 curated names is the answer, not a placeholder for 20,000.
 - **The NPC work must not be described as a crash fix**, in notes, comments or commit messages.
   Established: resetting the oversized list stops the observed crash. The mechanism is still unknown.
-- Release notes get written but **not published**. The maintainer reviews them first and says go.
-  Short user-facing note plus a link to the full notes.
+  This held through the code, the plans, the notes and the release body.
+- Release notes were written, reviewed by the maintainer, and only then published.
 
 ## The protection model, after `261db03`
 
@@ -212,6 +219,9 @@ the button looked broken.
   across 49 files: store, preview tree, planner, a Templates tab, plus fixes for filesystem errors
   escaping the draw call and untrusted template input reaching the UI). None of it is on `main`. It
   was deliberately kept when the other worktrees were pruned.
-- **Community review of the static NPC list.** A Discord post was drafted and never posted.
+- **Community review of the static NPC list.** Now the obvious next thing and cheap: the 0.6.0.0
+  release notes actively ask people to report missing characters on Discord, and the invite is live
+  at `https://discord.gg/NHssF8ux6B`. Adding names needs no code change beyond the counts pinned by
+  `StaticList_LoadsFromTheEmbeddedResource_AndHasTheExpectedShape`.
 - **Piece 0's multi-root recovery branch was not verified in-game** and will not be without a
   contrived two-root interrupted state. Everything else in piece 0 was.
