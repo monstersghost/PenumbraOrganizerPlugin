@@ -25,6 +25,10 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </remarks>
 public sealed partial class MainWindow
 {
+    private const string ExportNeedsScanReason =
+        "Press Refresh mod list on the Scan tab first. Until then the plugin does not know which "
+        + "mods you have, and a template built now would contain your folders and nothing else.";
+
     private bool _exportOpen;
     private TemplateExportSelection? _exportSelection;
     private TemplateExportFolderSeed? _exportFolderSeed;
@@ -47,13 +51,22 @@ public sealed partial class MainWindow
     {
         if (!_exportOpen)
         {
+            // Without a scan the plugin knows no mods, but the folder list is seeded from
+            // Penumbra's organization.json, which needs no scan at all. Exporting in that state
+            // silently produced a folders-only template with zero entries - a tester shipped one
+            // and it looked like a working template. The two halves of this screen have different
+            // prerequisites, so the screen has to gate on the stricter one.
+            var scanned = _plugin.OrganizerState.HasScanned;
+
+            ImGui.BeginDisabled(!scanned);
             if (ImGui.Button("Export my layout as a template..."))
             {
                 BeginTemplateExport();
                 _exportOpen = true;
             }
+            ImGui.EndDisabled();
 
-            Help.Tooltip(HelpTopics.TemplatesExport);
+            Help.Tooltip(HelpTopics.TemplatesExport, scanned ? null : ExportNeedsScanReason);
             return;
         }
 
@@ -67,9 +80,11 @@ public sealed partial class MainWindow
             "A template contains a list of your mod names. Anyone you send it to can read that list. "
             + "Check it below and remove anything you would rather not share.");
 
-        if (_exportSelection is null || _exportFolderSeed is null)
+        // Belt and braces behind the gate above: the screen can be open across a scan being reset,
+        // and this must never fall through to the emit controls with no rows behind them.
+        if (_exportSelection is null || _exportFolderSeed is null || !_plugin.OrganizerState.HasScanned)
         {
-            ImGui.TextWrapped("Scan your library first, then reopen this screen.");
+            ImGui.TextWrapped(ExportNeedsScanReason);
             if (ImGui.Button("Close export"))
                 _exportOpen = false;
             return;
@@ -248,6 +263,18 @@ public sealed partial class MainWindow
         var share = _exportShare!;
 
         ImGui.Text($"{build.Document.Entries.Count} mods would be written into this template.");
+
+        // Deliberately a warning and not a block. "Here is my folder skeleton, sort your own mods
+        // into it" is a real thing to share, and TemplateBuilder already guarantees the result
+        // stays importable. What went wrong before was that it happened by accident and said
+        // nothing, so this makes the consequence explicit instead of forbidding it.
+        if (build.Document.Entries.Count == 0)
+        {
+            ImGui.TextColored(
+                ImGuiColors.DalamudYellow,
+                "This template will carry your folders only. It will not place any mod - anyone "
+                + "importing it gets the empty folder structure and their own fallback sort.");
+        }
 
         if (build.RootLevelSkipped > 0)
         {

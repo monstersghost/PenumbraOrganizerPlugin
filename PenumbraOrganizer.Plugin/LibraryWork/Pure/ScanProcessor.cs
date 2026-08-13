@@ -18,6 +18,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
 {
     private readonly string _configDirectory;
     private readonly bool _useScrapedNpcNameList;
+    private readonly IReadOnlySet<string> _knownHeliosphereIdentifiers;
     private readonly List<string> _warnings = [];
 
     private NpcNameMatcher _npcNameMatcher = NpcNameMatcher.Empty;
@@ -26,10 +27,20 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
     /// Already the conjunction of the config flag and the compile-time feature gate - ScanJob
     /// resolves it on the framework thread. This class never reads Configuration itself.
     /// </param>
-    public ScanProcessor(string configDirectory, bool useScrapedNpcNameList)
+    /// <param name="knownHeliosphereIdentifiers">
+    /// Identifiers an earlier scan already resolved as Heliosphere-managed. Carried so a mod whose
+    /// heliosphere.json is momentarily absent - which is precisely what an in-progress Heliosphere
+    /// update looks like - is not silently unprotected and then moved by the next Apply. Defaults to
+    /// empty so existing tests construct this unchanged.
+    /// </param>
+    public ScanProcessor(
+        string configDirectory,
+        bool useScrapedNpcNameList,
+        IReadOnlySet<string>? knownHeliosphereIdentifiers = null)
     {
         _configDirectory = configDirectory;
         _useScrapedNpcNameList = useScrapedNpcNameList;
+        _knownHeliosphereIdentifiers = knownHeliosphereIdentifiers ?? new HashSet<string>(StringComparer.Ordinal);
     }
 
     /// <summary> Framework thread reads this after the run completes. </summary>
@@ -75,7 +86,8 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             Author = item.Author,
             CurrentPath = item.CurrentPath,
             ProposedPath = item.CurrentPath,
-            HeliosphereManaged = HeliosphereDetector.IsHeliosphereManaged(item.Identifier, modPath),
+            HeliosphereManaged = HeliosphereDetector.IsHeliosphereManaged(
+                item.Identifier, modPath, item.Name, _knownHeliosphereIdentifiers),
             Category = classification.Category,
             SubCategory = classification.SubCategory,
             GearSlotDiagnostic = gearSlotDiagnostic,

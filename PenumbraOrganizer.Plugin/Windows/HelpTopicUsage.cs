@@ -23,6 +23,7 @@ public static class HelpTopicUsage
         HelpTopics.ProtectFolders,
         HelpTopics.ProtectMods,
         HelpTopics.ProtectHeliosphereNote,
+        HelpTopics.ProtectStrandedAtRoot,
 
         // Sort - SortPanel.cs and MainWindow.SortTab.cs
         HelpTopics.SortGrouping,

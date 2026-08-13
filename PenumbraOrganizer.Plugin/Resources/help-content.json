@@ -344,6 +344,11 @@
       "id": "templates.apply",
       "title": "Apply this template to my proposals",
       "short": "Fills in proposed paths from the preview. Still nothing moves - open Review Changes to check them and apply from there, exactly as with any sort."
+    },
+    {
+      "id": "protect.stranded-at-root",
+      "title": "Protected mods at the top level",
+      "short": "Protected mods outside any folder. Sorting never moves a protected mod, so these stay at the top level until you untick one. Heliosphere installs new mods here and they are protected on sight."
     }
   ]
 }

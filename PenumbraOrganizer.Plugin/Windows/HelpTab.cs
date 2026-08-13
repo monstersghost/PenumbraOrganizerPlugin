@@ -77,6 +77,7 @@ public static class HelpTab
             HelpTopics.ProtectFolders,
             HelpTopics.ProtectMods,
             HelpTopics.ProtectHeliosphereNote,
+            HelpTopics.ProtectStrandedAtRoot,
         ]),
         new(HelpTopics.HelpTabSort,
         [

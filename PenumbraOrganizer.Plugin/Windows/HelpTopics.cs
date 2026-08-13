@@ -42,6 +42,7 @@ public static class HelpTopics
     public static readonly HelpTopic ProtectFolders = new("protect.folders");
     public static readonly HelpTopic ProtectMods = new("protect.mods");
     public static readonly HelpTopic ProtectHeliosphereNote = new("protect.heliosphere-note");
+    public static readonly HelpTopic ProtectStrandedAtRoot = new("protect.stranded-at-root");
 
     // Sort
     public static readonly HelpTopic SortGrouping = new("sort.grouping");
