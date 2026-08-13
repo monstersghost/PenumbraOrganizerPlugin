@@ -66,8 +66,11 @@ checkbox (a folder, or Heliosphere) shows a note next to it explaining why.
 
 Toggle protect all is a true toggle: it protects everything if anything is currently unprotected,
 and unprotects everything otherwise. Toggle Heliosphere protection does the same, scoped to
-[Heliosphere](https://heliosphere.app/)-managed mods (detected by the `hs-` directory prefix, or
-by a `heliosphere.json` file in the mod folder; see [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)).
+[Heliosphere](https://heliosphere.app/)-managed mods (detected by the `hs-` directory prefix, by
+Heliosphere's `[HS] ` name prefix, by a `heliosphere.json` file in the mod folder, or by having been
+recognised as Heliosphere's on any earlier scan; see [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)). That
+last one matters during a Heliosphere update, which briefly removes the mod's folder and writes a new
+one — without it, a scan landing in that moment would see an ordinary mod and offer to move it.
 Heliosphere mods are re-protected on every scan no matter how that toggle was last left, because
 Heliosphere owns their location and the plugin never proposes moving them during Sort or Apply.
 Manually unprotecting a non-Heliosphere mod does persist across scans; that choice, along with your
@@ -75,6 +78,13 @@ protected folders, is saved to the plugin's own config.
 
 Protection governs Sort and Apply only. Restoring a snapshot from the History tab reproduces its
 recorded paths regardless of current protection. See History below.
+
+If any protected mods are sitting at the very top level of your library, outside every folder, the
+tab says so. That combination is a dead end worth knowing about: protection means the plugin never
+proposes a path for a mod, so sorting will never file those away and they stay at the top level
+indefinitely. Heliosphere installs new mods there and they are protected by the same scan that first
+notices them, so this can happen without you doing anything. Untick one and it sorts like any other
+mod.
 
 ### Sort
 

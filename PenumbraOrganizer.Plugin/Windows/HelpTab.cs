@@ -44,7 +44,7 @@ public static class HelpTab
     /// exist yet - so "push the tag before announcing" is on the release checklist instead.
     /// </remarks>
     public const string GuideUrl =
-        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.0.1/docs/USER_GUIDE.md";
+        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.0.2/docs/USER_GUIDE.md";
 
     /// <summary>
     /// The support Discord. A permanent invite, deliberately - a `discord.gg` code that can expire

@@ -5,7 +5,7 @@
     <!-- Four-part, matching every tag in this repo and the ToString(4) the window title renders.
          HelpTab.GuideUrl embeds this exact string, so the release tag must match it character for
          character or the Help tab's guide link 404s in a shipped build. -->
-    <Version>0.6.0.1</Version>
+    <Version>0.6.0.2</Version>
     <Product>Penumbra Organizer Plugin (MVP)</Product>
     <Authors>Penumbra Organizer Contributors</Authors>
     <Copyright>Copyright (c) 2026 Penumbra Organizer Contributors</Copyright>
