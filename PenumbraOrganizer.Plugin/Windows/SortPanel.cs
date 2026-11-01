@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -14,11 +15,15 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// from PenumbraOrganizer.Plugin.Tests and SortSelectionTests would not compile.
 /// </para>
 /// </remarks>
-public readonly record struct SortSelection(SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair)
+public readonly record struct SortSelection(
+    SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
+    string? HairRaceCode = null, bool MidlanderFallback = false)
 {
     // By Creator never consults category, so no split can change its output. All three checkboxes
     // are disabled when this is false.
     public bool SplitsApply => Strategy != SortStrategy.CreatorOnly;
+
+    public HairPriority HairPriority => new(HairRaceCode, MidlanderFallback);
 }
 
 /// <summary>
@@ -64,7 +69,19 @@ public sealed class SortPanel
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
+    private int _hairRaceIndex;              // 0 is None; see HairRaceLabels
+    private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
     private SortSelection? _lastSorted;
+
+    private const string Male = "\u2642";
+    private const string Female = "\u2640";
+
+    // None first, then every confirmed race in table order. Labels are "Miqo'te <male sign>" and so on.
+    private static readonly string[] HairRaceLabels =
+        ["None", .. HairRaceCodes.All.Select(r => $"{r.Race} {(r.Gender == "Male" ? Male : Female)}")];
+
+    private static string? HairRaceCodeAt(int index) =>
+        index == 0 ? null : HairRaceCodes.All[index - 1].Code;
 
     // A rule and a coloured heading above each mod-type group. The rule is ImGui's own separator,
     // so the groups read as separate without a new widget.
@@ -129,6 +146,17 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortSplitHair, splitsApply ? null : SplitsInapplicableReason);
 
+        ImGui.BeginDisabled(!splitsApply);
+        ImGui.SetNextItemWidth(220);
+        ImGui.Combo("Priority race", ref _hairRaceIndex, HairRaceLabels, HairRaceLabels.Length);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortPriorityRace, splitsApply ? null : SplitsInapplicableReason);
+
+        ImGui.BeginDisabled(!splitsApply);
+        ImGui.Checkbox("Midlander fallback", ref _midlanderFallback);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortMidlanderFallback, splitsApply ? null : SplitsInapplicableReason);
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -136,13 +164,15 @@ public sealed class SortPanel
         // Every control above has now been submitted, so this is the selection as the user has it
         // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
         // the checkboxes held before the user's click was processed.
-        var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair);
+        var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback);
 
         // Stable id: a label varying with mod count makes the widget id vary with it, so a background
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
-            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair, canonicalizeCreator);
+            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
+                canonicalizeCreator, selection.HairPriority);
             _lastSorted = selection;
         }
 

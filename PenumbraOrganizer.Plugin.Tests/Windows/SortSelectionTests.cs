@@ -1,4 +1,5 @@
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Windows;
 
 namespace PenumbraOrganizer.Plugin.Tests.Windows;
@@ -88,4 +89,22 @@ public class SortSelectionTests
     // see SortPanel's _splitHair initialiser, which is the thing that would actually be wrong.
     // Those fields are private with no seam, so the fresh-panel default is on the in-game
     // checklist instead, where it is observable.
+
+    [Fact]
+    public void SortSelection_ValueEquality_CoversThePriorityFields()
+    {
+        var a = new SortSelection(SortStrategy.TypeOnly, false, true, true, "1801", false);
+        var b = new SortSelection(SortStrategy.TypeOnly, false, true, true, "0201", false);
+        var c = new SortSelection(SortStrategy.TypeOnly, false, true, true, "1801", true);
+
+        Assert.NotEqual(a, b);
+        Assert.NotEqual(a, c);
+    }
+
+    [Fact]
+    public void SortSelection_HairPriority_IsNoneWhenTheRaceIsNull()
+    {
+        var selection = new SortSelection(SortStrategy.TypeOnly, false, true, true);
+        Assert.Equal(new HairPriority(null, false), selection.HairPriority);
+    }
 }

@@ -29,6 +29,8 @@ public static class HelpTopicUsage
         HelpTopics.SortSplitGear,
         HelpTopics.SortSplitNpc,
         HelpTopics.SortSplitHair,
+        HelpTopics.SortPriorityRace,
+        HelpTopics.SortMidlanderFallback,
         HelpTopics.SortButton,
         HelpTopics.SortHelpButton,
         HelpTopics.SortScrapedNpcList,

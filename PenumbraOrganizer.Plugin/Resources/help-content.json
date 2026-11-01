@@ -156,6 +156,16 @@
       "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
     },
     {
+      "id": "sort.priority-race",
+      "title": "Priority race",
+      "short": "When a hair mod has one hair number for this race, files it under that number. Pick None to turn this off."
+    },
+    {
+      "id": "sort.midlander-fallback",
+      "title": "Midlander fallback",
+      "short": "When a mod uses different hair numbers across races, uses the Midlander number if male and female Midlanders agree. Otherwise the mod stays flat."
+    },
+    {
       "id": "sort.button",
       "title": "Sort",
       "short": "Works out a new folder for every unprotected mod and shows it on the Review Changes tab. Your library is not touched until you apply it."
