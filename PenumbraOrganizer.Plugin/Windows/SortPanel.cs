@@ -14,9 +14,9 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// from PenumbraOrganizer.Plugin.Tests and SortSelectionTests would not compile.
 /// </para>
 /// </remarks>
-public readonly record struct SortSelection(SortStrategy Strategy, bool SplitGear, bool SplitNpc)
+public readonly record struct SortSelection(SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair)
 {
-    // By Creator never consults category, so neither split can change its output. Both checkboxes
+    // By Creator never consults category, so no split can change its output. All three checkboxes
     // are disabled when this is false.
     public bool SplitsApply => Strategy != SortStrategy.CreatorOnly;
 }
@@ -57,11 +57,12 @@ public sealed class SortPanel
     // Instance, not static: ImGui.Combo(ref int) and Checkbox(ref bool) need backing storage that
     // survives between frames. A per-frame instance would reset the selection every frame.
     //
-    // These four are SESSION state. A sort strategy is a choice about the action you are about to
+    // These five are SESSION state. A sort strategy is a choice about the action you are about to
     // take, not a preference worth persisting.
     private int _groupingIndex = DefaultGroupingIndex;
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
+    private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
     private SortSelection? _lastSorted;
 
     public void Draw(
@@ -81,7 +82,7 @@ public sealed class SortPanel
         // Strategy, so gating the checkboxes on it here is correct even though the split values
         // themselves may still change further down this same frame.
         var strategy = Groupings[_groupingIndex].Strategy;
-        var splitsApply = new SortSelection(strategy, _splitGear, _splitNpc).SplitsApply;
+        var splitsApply = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair).SplitsApply;
 
         // Each checkbox closes its own disabled scope before its tooltip: ImGui is positional, so
         // Help.Tooltip binds to whichever widget was submitted last, and EndDisabled submits none.
@@ -94,6 +95,11 @@ public sealed class SortPanel
         ImGui.Checkbox("Split NPC mods by kind", ref _splitNpc);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortSplitNpc, splitsApply ? null : SplitsInapplicableReason);
+
+        ImGui.BeginDisabled(!splitsApply);
+        ImGui.Checkbox("Split hair by hair number", ref _splitHair);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortSplitHair, splitsApply ? null : SplitsInapplicableReason);
 
         // Piece 1's opt-in. Bound directly to config, saved on change, and force-disabled for 0.6.0
         // through the SAME gate the backend consults - so a config value left true cannot quietly
@@ -112,17 +118,13 @@ public sealed class SortPanel
         // Every control above has now been submitted, so this is the selection as the user has it
         // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
         // the checkboxes held before the user's click was processed.
-        var selection = new SortSelection(strategy, _splitGear, _splitNpc);
+        var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair);
 
         // Stable id: a label varying with mod count makes the widget id vary with it, so a background
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
-            // splitHair is a hard-coded false placeholder until the checkbox exists: SortSelection
-            // has no SplitHair member yet, so there is nothing to read here. It becomes
-            // selection.SplitHair in the task that adds the checkbox, and until then the hair
-            // split is simply always off - which is also its intended default.
-            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, splitHair: false, canonicalizeCreator);
+            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair, canonicalizeCreator);
             _lastSorted = selection;
         }
 
