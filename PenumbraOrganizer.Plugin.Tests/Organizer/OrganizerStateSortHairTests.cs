@@ -102,4 +102,34 @@ public class OrganizerStateSortHairTests
         Assert.Equal("Gear/Gear Mod", PathOf(state, "gear"));
         Assert.Equal("NPC/Bosses/Npc Mod", PathOf(state, "npc"));
     }
+
+    [Fact]
+    public void Sort_HairSplitOff_FlattensHairWithoutTouchingGearOrNpc()
+    {
+        // The mirror of the test above, and the one that actually exercises
+        // FlattenHairSubCategory - the other runs with splitHair: true, so the flattener never
+        // fires there at all. Without this, a flattener that nulled EVERY category's subcategory,
+        // or that tested the wrong category, would pass this fixture.
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "hair", Name = "Hair Mod", Author = "Ann",
+                CurrentPath = "Hair Mod", ProposedPath = "Hair Mod",
+                Category = ModCategory.Hair, SubCategory = "115" },
+            new OrganizerModRow { Identifier = "gear", Name = "Gear Mod", Author = "Ann",
+                CurrentPath = "Gear Mod", ProposedPath = "Gear Mod",
+                Category = ModCategory.Gear, SubCategory = "Feet" },
+            new OrganizerModRow { Identifier = "npc", Name = "Npc Mod", Author = "Bob",
+                CurrentPath = "Npc Mod", ProposedPath = "Npc Mod",
+                Category = ModCategory.NPC, SubCategory = "Bosses" },
+        ], new HashSet<string>());
+
+        // Hair off, the other two ON: the hair subfolder must disappear while the gear and NPC
+        // ones survive untouched.
+        state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: true, splitHair: false, Canon);
+
+        Assert.Equal("Hair/Hair Mod", PathOf(state, "hair"));
+        Assert.Equal("Gear/Feet/Gear Mod", PathOf(state, "gear"));
+        Assert.Equal("NPC/Bosses/Npc Mod", PathOf(state, "npc"));
+    }
 }

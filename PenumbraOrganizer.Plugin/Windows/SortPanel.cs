@@ -118,6 +118,10 @@ public sealed class SortPanel
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
+            // splitHair is a hard-coded false placeholder until the checkbox exists: SortSelection
+            // has no SplitHair member yet, so there is nothing to read here. It becomes
+            // selection.SplitHair in the task that adds the checkbox, and until then the hair
+            // split is simply always off - which is also its intended default.
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, splitHair: false, canonicalizeCreator);
             _lastSorted = selection;
         }
