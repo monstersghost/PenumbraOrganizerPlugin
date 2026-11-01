@@ -68,6 +68,16 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             };
         }
 
+        // Disk I/O only for mods the changed-items rule already confirmed are Hair, matching the
+        // gear gate above - every other category never touches disk for this. No diagnostic
+        // counterpart to gearSlotDiagnostic on purpose: both readers share one walker and read the
+        // same files, so a library-wide read failure is already visible through the gear one.
+        if (classification.Category == ModCategory.Hair)
+        {
+            var hairNumbers = ModHairFileReader.ReadHairNumbers(modPath);
+            classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairNumbers);
+        }
+
         return new OrganizerModRow
         {
             Identifier = item.Identifier,

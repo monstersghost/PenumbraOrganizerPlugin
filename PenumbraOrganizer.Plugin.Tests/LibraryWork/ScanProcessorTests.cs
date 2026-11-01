@@ -126,4 +126,85 @@ public class ScanProcessorTests
         Assert.Throws<OperationCanceledException>(() =>
             NewProcessor().Process(Seed(Path.GetTempPath()), cts.Token));
     }
+
+    [Fact]
+    public void HairModWithOneHairNumber_GetsThatNumberAsItsSubCategory()
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"hair.mdl"}}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, "Some Hair", "Customization: Midlander Female Hair 157"),
+                CancellationToken.None);
+
+            Assert.NotNull(row);
+            Assert.Equal(ModCategory.Hair, row!.Category);
+            // 115 from the files, not 157 from the changed-item key - the subcategory must come
+            // from the file read.
+            Assert.Equal("115", row.SubCategory);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void HairModWithTwoHairNumbers_StaysFlat()
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"a.mdl","chara/human/c0101/obj/hair/h0009/model/c0101h0009_hir.mdl":"b.mdl"}}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, "Some Hair Pack", "Customization: Midlander Female Hair 157"),
+                CancellationToken.None);
+
+            Assert.NotNull(row);
+            Assert.Equal(ModCategory.Hair, row!.Category);
+            Assert.Null(row.SubCategory);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void GearModWithHairPaths_KeepsNoHairSubCategory()
+    {
+        // NOTE what this does and does not prove. It proves the OUTCOME is protected: a Gear row
+        // never carries a hair number, which would throw in GetFolder the moment it reached the
+        // sort. It does NOT prove the disk-I/O gate exists - it passes just as well if the hair
+        // reader runs for every mod, because EnrichHairSubCategory independently refuses to touch
+        // a non-Hair classification. The gate is a performance property with no seam to assert it
+        // through, so it is verified by reading the code in review, not here. Inventing an
+        // injection seam solely for this assertion would not be worth it.
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"hair.mdl"}}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, changedItemKeys: "Ala Mhigan Gown"),
+                CancellationToken.None);
+
+            Assert.NotNull(row);
+            Assert.Equal(ModCategory.Gear, row!.Category);
+            Assert.Null(row.SubCategory);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 }

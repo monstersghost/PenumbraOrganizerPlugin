@@ -73,7 +73,7 @@ public static class ModTypeClassifier
     // Second pass, run by the caller only when Classify already returned Category: Gear — never
     // a new top-level classification path, and Classify itself is never modified to call this.
     // Disk I/O for equipment-slot detection only happens where the caller chooses to call this,
-    // which Plugin.RunScan() gates on Category == Gear (see Plugin.cs).
+    // which ScanProcessor.Process gates on Category == Gear (see ScanProcessor.cs).
     public static ClassificationResult EnrichGearSubCategory(
         ClassificationResult baseResult, IReadOnlySet<EquipmentSlot>? equipmentSlots)
     {
