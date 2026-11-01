@@ -1133,6 +1133,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs:265-291` (the `Sort` overload and `Sub`), plus a third flattener after `FlattenNpcSubCategory` at line 302
 - Modify: `PenumbraOrganizer.Plugin/Windows/SortPanel.cs:121` (the one production call site)
 - Modify: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateSortTests.cs` - seven `Sort(` call sites, at lines 68, 86, 109, 119, 120, 133 and 144
+- Modify: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateTests.cs` - **43 further `Sort(` call sites.** Found during implementation (2026-11-01); an earlier draft of this plan said there were eight call sites in total and there are 51. The suite does not compile without these. Each takes `splitHair: false` and nothing else changes.
 - Create: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateSortHairTests.cs`
 
 **Interfaces:**
@@ -1299,7 +1300,7 @@ Then update the `<remarks>` arithmetic on the `Sort` doc comment, which document
     /// 1 + (3 x 2 x 2 x 2) = 25 selections, of which the seven original buttons offered seven.
 ```
 
-- [ ] **Step 4: Update the eight existing call sites**
+- [ ] **Step 4: Update the 51 existing call sites**
 
 One in production, at `SortPanel.cs:121`:
 
