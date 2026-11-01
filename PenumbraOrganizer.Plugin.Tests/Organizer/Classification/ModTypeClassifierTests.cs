@@ -434,6 +434,28 @@ public class ModTypeClassifierTests
         Assert.Throws<ArgumentOutOfRangeException>(() => ModTypeFolders.GetFolder(ModCategory.Hair, subCategory));
     }
 
+    [Fact]
+    public void GetFolder_HairWithANonAsciiDigit_Throws()
+    {
+        // The mutation test for char.IsAsciiDigit vs char.IsDigit. Swap the guard to IsDigit and
+        // this is the ONLY test in the suite that goes red - everything else still passes, which
+        // is exactly how this class of defect has reached this repo before.
+        //
+        // The first character must be an ASCII digit for this to bite. IsHairNumber also requires
+        // subCategory[0] to be in '1'..'9', and a fullwidth digit fails THAT check on its own - so
+        // a wholly fullwidth string like fullwidth-115 would be rejected either way and would
+        // prove nothing. "1" followed by a fullwidth 5 passes the first-char check and is caught
+        // only by the per-character ASCII test.
+        //
+        // Built from a code point, not written as a "\u-FF15" escape (hyphen inserted so this
+        // comment cannot be mangled): the escape form has already been silently converted into a
+        // pasted glyph once on its way into this repo. 0xFF15 is FULLWIDTH DIGIT FIVE.
+        var oneThenFullwidthFive = "1" + (char)0xFF15;
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ModTypeFolders.GetFolder(ModCategory.Hair, oneThenFullwidthFive));
+    }
+
     // --- EnrichGearSubCategory ---
 
     [Fact]
