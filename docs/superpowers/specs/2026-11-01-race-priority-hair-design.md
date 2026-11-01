@@ -210,9 +210,9 @@ On the Sort tab, in the Hair group (see the layout spec):
 
 ## Open questions
 
-2. **A tiebreak for two numbers in one race.** The Midlander rule is the only tiebreak in this draft, and it
+1. **A tiebreak for two numbers in one race.** The Midlander rule is the only tiebreak in this draft, and it
    leaves Zutail flat for Midlander ♀. A principled option is the number that appears under the most race
    folders (169 here, under seven of eight). It is not arbitrary, but it is a new rule. Adopt it, or keep
    the draft?
-3. **Timing.** This feature changes filing only when its controls are used. It does not depend on the EST
+2. **Timing.** This feature changes filing only when its controls are used. It does not depend on the EST
    question, since Zutail has no manipulations. Should it still wait for the in-game confirmation?
