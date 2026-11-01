@@ -346,10 +346,20 @@ public class ModHairFileReaderTests
     [Fact]
     public void ReadHairNumbers_NonAsciiDigitsInThePath_AreRejectedWithoutThrowing()
     {
-        // .NET's \d matches Unicode decimal digits, so an earlier draft of the pattern MATCHED
-        // this and then threw FormatException inside the parse - an exception the walker does not
-        // catch, so it escaped into the scan. The escapes are written out rather than pasted: a
-        // literal glyph here is exactly the hazard this test exists for.
+        // A non-ASCII-digit path yields no number and does NOT fail the read.
+        //
+        // What this test does NOT pin, measured rather than assumed: swapping the pattern's
+        // [0-9] back to \d leaves all 26 tests in this file green. .NET's \d does match these
+        // fullwidth digits, so the path matches - but int.TryParse with NumberStyles.None and
+        // InvariantCulture then rejects them, so nothing is added and the result is empty either
+        // way. The two spellings are behaviourally identical HERE.
+        //
+        // They were not identical in the design: the original draft used int.Parse, where \d let
+        // a fullwidth path through to a FormatException that the walker does not catch and that
+        // would have escaped into the scan. TryParse closes that hole. [0-9] is kept as a second
+        // line - it says what the pattern means and stops a future edit back to Parse from
+        // reopening it - but it is defence in depth, not the thing holding the behaviour up, and
+        // no test can distinguish the two while TryParse is there.
         //
         // Built from code points rather than written as "\u-FF10" escapes (hyphen inserted here so
         // this comment cannot be mangled the same way): the escape form has already been silently

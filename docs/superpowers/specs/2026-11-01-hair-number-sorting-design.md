@@ -57,8 +57,17 @@ Two evidence sources, mirroring how the equipment reader uses both `Files` and `
    "4 digits" means `[0-9]{4}`, explicitly, **not** `\d{4}`. .NET's `\d` matches every Unicode
    decimal digit, so a path carrying fullwidth or Devanagari digits would match and then throw
    `FormatException` in the parse - an exception the walker does not catch, so it would escape
-   into the scan. This repo has been bitten three times by a non-ASCII codepoint reaching code as
+   into the scan. This repo has been bitten four times by a non-ASCII codepoint reaching code as
    something other than what it looked like; this is that hazard in regex form.
+
+   **Correction, measured during implementation (2026-11-01):** the above is the argument for
+   `[0-9]` as originally written, and it holds only against `int.Parse`. The reader parses with
+   `int.TryParse` under `NumberStyles.None` and `InvariantCulture`, which rejects non-ASCII digits
+   without throwing. So with TryParse in place, `[0-9]` and `\d` are behaviourally identical here:
+   mutating the pattern back to `\d` leaves all 26 of the reader's tests green. `[0-9]` stays,
+   because it documents intent and because it keeps the hole shut if someone ever changes TryParse
+   back to Parse - but it is defence in depth, not a load-bearing guard, and no test can pin it
+   while TryParse is there. Do not claim test coverage for it.
 
 2. **`Est` manipulations** whose `Slot` is `Hair`, whose `SetId` is the hair number.
 
