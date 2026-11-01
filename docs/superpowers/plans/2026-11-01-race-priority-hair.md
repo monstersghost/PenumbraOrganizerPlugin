@@ -177,7 +177,7 @@ public static class HairRaceCodes
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~HairRaceCodesTests"`
-Expected: PASS, 21 tests (18 theory rows, 1 count, 3 unknown rows counted as cases).
+Expected: PASS, 22 tests (18 confirmed-code rows, 3 unknown-code rows, 1 count test).
 
 - [ ] **Step 5: Commit**
 
@@ -192,25 +192,49 @@ git commit -m "feat: add the eighteen confirmed hair race codes" -m "Co-Authored
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin/Organizer/Classification/ModHairFileReader.cs`
-- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/Classification/ModHairFileReaderTests.cs` (extend the existing 26-case file; read it first and follow its fixture style)
+- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/Classification/ModHairFileReaderTests.cs` (extend the existing file; read it first)
 
 **Interfaces:**
 - Consumes: `ModConfigFileWalker.TryWalk` (already used).
-- Produces: `ModHairFileReader.ReadHairEvidence(DirectoryInfo) : HairEvidence?` where `public sealed record HairEvidence(IReadOnlySet<int> Flat, IReadOnlyDictionary<string, IReadOnlySet<int>> ByRaceCode)`. `ReadHairNumbers` returns `ReadHairEvidence(dir)?.Flat` and keeps its 0.6.1.0 contract, including `null` on a failed read.
+- Produces: `ModHairFileReader.ReadHairEvidence(DirectoryInfo) : HairEvidence?`, where `public sealed record HairEvidence(IReadOnlySet<int> Flat, IReadOnlyDictionary<string, IReadOnlySet<int>> ByRaceCode)`. `ReadHairNumbers` keeps its 0.6.1.0 contract, including `null` on a failed read, and now returns `ReadHairEvidence(dir)?.Flat`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `ModHairFileReaderTests.cs`, inside the class. These use the reader's file-key path so they need no disk fixtures; if the existing file builds fixtures a different way, match that way:
+The tests build real mod folders in a temp directory and call the public `ReadHairEvidence`. This is the same seam the production scan uses, so no internals are needed. Add these to `ModHairFileReaderTests.cs`, inside the class, and add a `using System.IO;` and `using PenumbraOrganizer.Plugin.Organizer.Classification;` if the file lacks them:
 
 ```csharp
+    // Creates empty files at the given mod-relative paths under a fresh temp folder.
+    private static DirectoryInfo ModWithFiles(params string[] relativePaths)
+    {
+        var root = Directory.CreateTempSubdirectory("hair-evidence-");
+        foreach (var path in relativePaths)
+        {
+            var full = Path.Combine(root.FullName, path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, []);
+        }
+        return root;
+    }
+
+    // Writes a meta.json with one EST manipulation on the Hair slot, plus the given file paths.
+    private static DirectoryInfo ModWithEstAndFiles(int setId, params string[] relativePaths)
+    {
+        var root = ModWithFiles(relativePaths);
+        File.WriteAllText(Path.Combine(root.FullName, "meta.json"),
+            $"{{\"Manipulations\":[{{\"Type\":\"Est\",\"Manipulation\":{{\"Slot\":\"Hair\",\"SetId\":{setId}}}}}]}}");
+        return root;
+    }
+
     [Fact]
     public void ReadHairEvidence_KeysEachFileSetByItsRaceCode()
     {
-        // Two race folders, one with two numbers: c0201 has 147 and 169, c1801 has 3.
-        var evidence = ReadEvidenceFromKeys(
+        // c0201 has 147 and 169; c1801 has 3.
+        var mod = ModWithFiles(
             "chara/human/c0201/obj/hair/h0147/texture/a.tex",
             "chara/human/c0201/obj/hair/h0169/texture/b.tex",
             "chara/human/c1801/obj/hair/h0003/model/c.mdl");
+
+        var evidence = ModHairFileReader.ReadHairEvidence(mod);
 
         Assert.Equal(new HashSet<int> { 147, 169 }, evidence!.ByRaceCode["0201"].ToHashSet());
         Assert.Equal(new HashSet<int> { 3 }, evidence.ByRaceCode["1801"].ToHashSet());
@@ -220,9 +244,11 @@ Append to `ModHairFileReaderTests.cs`, inside the class. These use the reader's 
     [Fact]
     public void ReadHairEvidence_FlatSetIsTheUnionOfTheRaceSets()
     {
-        var evidence = ReadEvidenceFromKeys(
+        var mod = ModWithFiles(
             "chara/human/c0201/obj/hair/h0115/model/a.mdl",
             "chara/human/c0801/obj/hair/h0115/model/b.mdl");
+
+        var evidence = ModHairFileReader.ReadHairEvidence(mod);
 
         Assert.Equal(new HashSet<int> { 115 }, evidence!.Flat.ToHashSet());
         Assert.Equal(new HashSet<int> { 115 }, evidence.ByRaceCode["0801"].ToHashSet());
@@ -231,66 +257,51 @@ Append to `ModHairFileReaderTests.cs`, inside the class. These use the reader's 
     [Fact]
     public void ReadHairEvidence_EstEntriesFeedTheFlatSetOnly()
     {
-        // An EST entry names a race in the metadata but the reader does not read that race, so its
-        // SetId must never appear under any race code.
-        var evidence = ReadEvidenceFromKeysAndManipulation(
-            manipulationSetId: 115,
-            fileKeys: "chara/human/c0201/obj/hair/h0147/model/a.mdl");
+        // The EST entry's SetId is 115. It must reach the flat set and never any race code, because
+        // the reader does not use the race an EST entry names.
+        var mod = ModWithEstAndFiles(115, "chara/human/c0201/obj/hair/h0147/model/a.mdl");
+
+        var evidence = ModHairFileReader.ReadHairEvidence(mod);
 
         Assert.Equal(new HashSet<int> { 115, 147 }, evidence!.Flat.ToHashSet());
-        Assert.False(evidence.ByRaceCode.Values.Any(s => s.Contains(115)));
+        Assert.False(evidence.ByRaceCode.Values.Any(set => set.Contains(115)));
+    }
+
+    [Fact]
+    public void ReadHairNumbers_StillReturnsTheFlatSet()
+    {
+        // The 0.6.1.0 callers keep working: ReadHairNumbers is the flat set, unchanged.
+        var mod = ModWithFiles("chara/human/c0201/obj/hair/h0115/model/a.mdl");
+
+        Assert.Equal(new HashSet<int> { 115 }, ModHairFileReader.ReadHairNumbers(mod)!.ToHashSet());
     }
 ```
-
-Add these two helpers to the same test class. They call the same private methods the production reader uses, through the walker's callbacks, so they test the real collection code:
-
-```csharp
-    private static HairEvidence? ReadEvidenceFromKeys(params string[] fileKeys)
-    {
-        var numbers = new HashSet<int>();
-        var byRace = new Dictionary<string, HashSet<int>>();
-        foreach (var key in fileKeys)
-            ModHairFileReader.CollectForTest(key, numbers, byRace);
-        return ModHairFileReader.BuildEvidenceForTest(numbers, byRace);
-    }
-
-    private static HairEvidence? ReadEvidenceFromKeysAndManipulation(int manipulationSetId, params string[] fileKeys)
-    {
-        var json = System.Text.Json.JsonDocument.Parse(
-            $"{{\"Type\":\"Est\",\"Manipulation\":{{\"Slot\":\"Hair\",\"SetId\":{manipulationSetId}}}}}").RootElement;
-        var numbers = new HashSet<int>();
-        var byRace = new Dictionary<string, HashSet<int>>();
-        foreach (var key in fileKeys)
-            ModHairFileReader.CollectForTest(key, numbers, byRace);
-        ModHairFileReader.CollectManipulationForTest(json, numbers);
-        return ModHairFileReader.BuildEvidenceForTest(numbers, byRace);
-    }
-```
-
-Note: the `*ForTest` members are `internal` in the production class, and this repo has no `InternalsVisibleTo`. Use the public seam instead, which is already the reader's contract: write the fixtures as a real directory under the test's temp folder, then call `ReadHairEvidence(new DirectoryInfo(dir))`. If the existing 26 tests already do that, use their helper and drop the `ForTest` helpers entirely. Read the file before writing these.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ModHairFileReaderTests"`
-Expected: build FAILS with `CS1061` for `ReadHairEvidence`.
+Expected: build FAILS with `CS1061` for `ReadHairEvidence` (the three new tests do not compile until it exists).
 
 - [ ] **Step 3: Write the implementation**
 
-In `ModHairFileReader.cs`, add the record and the new method, and make `ReadHairNumbers` delegate. Replace the whole public `ReadHairNumbers` method and the `HairPath` regex with:
+In `ModHairFileReader.cs`, make these changes. Replace the `HairPath` regex so it captures the race code as well as the number:
 
 ```csharp
-    // Capture the race code as well as the hair number, so the per-race evidence can be keyed by
-    // folder code. The race code is still verified by the same pattern; it is only kept, not dropped.
     private static readonly Regex HairPath = new(
         @"^chara/human/c([0-9]{4})/obj/hair/h([0-9]{4})/",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+```
 
+Keep the existing `[0-9]` rationale comment above it, and add one line: "Group 1 is the race folder code, kept for the per-race evidence; group 2 is the hair number."
+
+Replace the public `ReadHairNumbers` method with the record, the new method, and the delegating wrapper:
+
+```csharp
     /// <summary>The flat set and the per-race sets, read in one walk of the mod.</summary>
     /// <remarks>
     /// <c>Flat</c> is every supported hair number from file paths and EST entries. <c>ByRaceCode</c>
-    /// holds only the file paths, keyed by the four-digit race folder code. An EST entry names a race
-    /// in the metadata, but this reader does not use that race, so an EST <c>SetId</c> never appears
-    /// under any code. That is deliberate and matches the race-priority spec.
+    /// holds only file paths, keyed by the four-digit race folder code. An EST entry names a race in the
+    /// metadata, but this reader does not use that race, so an EST SetId never appears under any code.
     /// </remarks>
     public sealed record HairEvidence(
         IReadOnlySet<int> Flat,
@@ -323,7 +334,11 @@ In `ModHairFileReader.cs`, add the record and the new method, and make `ReadHair
     /// <summary>The flat set only, for callers that do not need the race split.</summary>
     public static IReadOnlySet<int>? ReadHairNumbers(DirectoryInfo modDirectory) =>
         ReadHairEvidence(modDirectory)?.Flat;
+```
 
+Replace `CollectFromFileKey` so it writes to both sets. It owns the file-path range check:
+
+```csharp
     private static void CollectFromFileKey(
         string path, HashSet<int> flat, Dictionary<string, HashSet<int>> byRace)
     {
@@ -340,19 +355,19 @@ In `ModHairFileReader.cs`, add the record and the new method, and make `ReadHair
         if (number is < MinHairNumber or > MaxHairNumber)
             return;
 
-        var raceCode = match.Groups[1].Value;
         flat.Add(number);
+        var raceCode = match.Groups[1].Value;
         if (!byRace.TryGetValue(raceCode, out var set))
             byRace[raceCode] = set = [];
         set.Add(number);
     }
 ```
 
-Then update `CollectFromManipulation` so it takes only the flat set: change its signature to `private static void CollectFromManipulation(JsonElement item, HashSet<int> flat)` and rename its `numbers` uses to `flat`. Keep `AddIfSupported` for the EST path; rewrite `AddIfSupported` to take `HashSet<int> flat` and remove the per-race duplicate range check from `CollectFromFileKey` so the range guard stays in one place:
+Change `CollectFromManipulation` to take the flat set and call `AddIfSupported`. Rename its parameter from `numbers` to `flat` and change its last line to `AddIfSupported(number, flat);`. Change `AddIfSupported` to:
 
 ```csharp
-    // The ONE place the supported range is enforced for EST evidence. File-path evidence is checked
-    // by the same bounds in CollectFromFileKey, which is the one other producer.
+    // The range guard for EST evidence. File-path evidence is bounded in CollectFromFileKey by the
+    // same two constants, so the range is defined once.
     private static void AddIfSupported(int number, HashSet<int> flat)
     {
         if (number is >= MinHairNumber and <= MaxHairNumber)
@@ -360,30 +375,14 @@ Then update `CollectFromManipulation` so it takes only the flat set: change its 
     }
 ```
 
-Then in `CollectFromFileKey` remove the explicit range check and the Flat add's extra guard, and call `AddIfSupported(number, flat)` for the flat set, adding to the race set only when in range:
-
-```csharp
-        if (!int.TryParse(match.Groups[2].ValueSpan, System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture, out var number))
-            return;
-        if (number is < MinHairNumber or > MaxHairNumber)
-            return;
-
-        var raceCode = match.Groups[1].Value;
-        flat.Add(number);
-        if (!byRace.TryGetValue(raceCode, out var set))
-            byRace[raceCode] = set = [];
-        set.Add(number);
-```
-
-(The explicit range check here is the file-path guard; `AddIfSupported` is the EST guard. Both bounds are `MinHairNumber`/`MaxHairNumber`, so there is still one definition of the range.)
+Leave the rest of `CollectFromManipulation` as it is.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ModHairFileReaderTests"`
-Expected: PASS, the 26 existing cases plus the 3 new ones. Then run the whole suite once to confirm `ReadHairNumbers`' callers are unchanged:
+Expected: PASS, the 26 existing cases plus the four new ones. Then the whole suite:
 `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj`
-Expected: all pass, 1111 + the new tests from Task 1 and this task.
+Expected: all pass.
 
 - [ ] **Step 5: Commit**
 
@@ -978,7 +977,7 @@ Pass the new fields wherever `SortSelection` is built in `Draw` and into `Sort`:
             canonicalizeCreator, selection.HairPriority);
 ```
 
-Update the `splitsApply` line that builds a `SortSelection` for the gate to pass the same two new arguments, or leave them at their defaults since only `SplitsApply` reads it.
+Leave the existing `splitsApply` line unchanged. Only `SplitsApply` reads it, and the new arguments default, so it needs no change.
 
 In `help-content.json`, add two control entries next to `sort.split-hair`. Both are short, one line, at most 200 characters:
 
