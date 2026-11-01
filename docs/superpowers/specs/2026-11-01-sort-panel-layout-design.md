@@ -34,7 +34,8 @@ Top to bottom:
 
 1. **Grouping** (not a category heading; it applies to all categories)
    - Group by dropdown.
-   - Sort button, with its gate tooltip.
+   - Sort button, with its gate tooltip, followed by a `?` button that opens the Sort help
+     section (see the help-update spec).
 2. rule
 3. **Gear**
    - Split gear by equipment slot.

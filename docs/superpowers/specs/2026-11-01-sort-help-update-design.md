@@ -93,3 +93,35 @@ and not a tooltip. It is registered in `HelpTopics`, `HelpTab` and `HelpTopicUsa
    order matters and reads better as a paragraph.
 2. Should the Sort overview name the Midlander fallback, or leave it to its own entry? Proposed: name
    it, once, so the overview is accurate on its own.
+
+## Clarifications from in-game review
+
+Reviewed against the 0.6.1.0 screenshots. Changes to the text above:
+
+- **Group by** needs examples, not just a description. Each option gets one example path for a
+  gear mod and one for a hair mod, for example "Creator: `Creator/Mod`", "Mod type: `Gear/Mod`",
+  "Type then creator: `Gear/Creator/Mod`", "Creator then type: `Creator/Gear/Mod`". The examples are
+  generated from the real folder names, not written by hand, so they cannot drift.
+- **Sort section overview** still says "decide whether gear and NPC mods get subfolders". It must
+  name Hair too, since the hair split now exists.
+- **Assign selected mods** is named in the help, but the button reads "Assign N selected mods". The
+  help title should match the button's wording, so a reader can find it.
+- **Split hair by hair number** keeps its current text. Its example ("Hair/115", "Hair/9 sorts after
+  Hair/115") is the one line in the tab that already explains the ordering oddity, and it stays.
+
+## Sort help button
+
+A `?` button sits directly to the right of the Sort button. Clicking it:
+
+1. Switches the main window to the Help tab.
+2. Opens the Sort section of the Help tab (its collapsing header is forced open for that frame) and
+   scrolls it to the top.
+
+Implementation shape, for the plan to confirm against the code: a single request field on
+`MainWindow` (for example a `HelpTarget` enum with a `Sort` value) that the Sort button sets and
+the Help tab consumes once, then clears. It is not a persistent setting. The button uses the
+existing `Help` helper for its tooltip, "How sorting works", and is not gated by the activity
+gates, because it only navigates.
+
+The Help tab already owns its section order, so the `?` button does not need to know the section
+index; it names the section topic (`HelpTabSort`) and the Help tab finds it.
