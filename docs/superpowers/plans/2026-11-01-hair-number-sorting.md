@@ -718,7 +718,13 @@ public class ModHairFileReaderTests
         // this and then threw FormatException inside the parse - an exception the walker does not
         // catch, so it escaped into the scan. The escapes are written out rather than pasted: a
         // literal glyph here is exactly the hazard this test exists for.
-        const string fullwidthDigits = "０１１５"; // fullwidth 0115
+        //
+        // Built from code points, NOT from "\u-FF10"-style escapes (hyphen inserted in this
+        // comment so it cannot be mangled the same way). The escape form was silently converted
+        // into the pasted glyph on its way into this plan file - the very failure this test
+        // covers, committed in the document describing it. Code points cannot be mangled.
+        // 0xFF10/0xFF11/0xFF15 are FULLWIDTH DIGIT ZERO / ONE / FIVE, so this spells 0115.
+        var fullwidthDigits = new string([(char)0xFF10, (char)0xFF11, (char)0xFF11, (char)0xFF15]);
         var mod = MakeTempModDirectory();
         WriteJson(mod, "default_mod.json", $$"""
             {"Files":{"chara/human/c0101/obj/hair/h{{fullwidthDigits}}/model/x.mdl":"files/a.mdl"},"Manipulations":[]}
@@ -854,7 +860,7 @@ public static class ModHairFileReader
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ModHairFileReaderTests"`
 
-Expected: PASS, 28 test cases (12 original, plus uppercase, Containers, the good-then-malformed case, 3 path boundaries, 4 Est range cases, the mixed valid/invalid case, the two path-versus-Est agreement cases, and the non-ASCII digit case).
+Expected: PASS, 26 test cases (12 original, plus uppercase, Containers, the good-then-malformed case, 3 path boundaries, 4 Est range cases, the mixed valid/invalid case, the two path-versus-Est agreement cases, and the non-ASCII digit case). Count the `[InlineData]` rows, not the methods - and do not invent tests to reach a number if your count differs; report the discrepancy instead.
 
 - [ ] **Step 5: Run the full suite**
 

@@ -350,7 +350,12 @@ public class ModHairFileReaderTests
         // this and then threw FormatException inside the parse - an exception the walker does not
         // catch, so it escaped into the scan. The escapes are written out rather than pasted: a
         // literal glyph here is exactly the hazard this test exists for.
-        const string fullwidthDigits = "０１１５"; // fullwidth 0115
+        //
+        // Built from code points rather than written as "\u-FF10" escapes (hyphen inserted here so
+        // this comment cannot be mangled the same way): the escape form has already been silently
+        // converted to the pasted glyph once on its way into this repo. Code points cannot be.
+        // 0xFF10/0xFF11/0xFF15 are FULLWIDTH DIGIT ZERO / ONE / FIVE, so this spells 0115.
+        var fullwidthDigits = new string([(char)0xFF10, (char)0xFF11, (char)0xFF11, (char)0xFF15]);
         var mod = MakeTempModDirectory();
         WriteJson(mod, "default_mod.json", $$"""
             {"Files":{"chara/human/c0101/obj/hair/h{{fullwidthDigits}}/model/x.mdl":"files/a.mdl"},"Manipulations":[]}
@@ -362,3 +367,4 @@ public class ModHairFileReaderTests
         Assert.Empty(result);
     }
 }
+// marker
