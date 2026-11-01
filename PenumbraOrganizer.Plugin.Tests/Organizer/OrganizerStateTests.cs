@@ -176,7 +176,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorOnly, false, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Apple", state.Mods.Single().ProposedPath);
@@ -188,7 +188,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple")], new HashSet<string> { "a" });
 
-        var count = state.Sort(SortStrategy.CreatorOnly, false, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Apple", state.Mods.Single().ProposedPath);
@@ -240,7 +240,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple"), MakeRow("b", "Banana")], new HashSet<string>());
 
-        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, name => name);
 
         Assert.False(state.Validate().HasIssues);
     }
@@ -251,7 +251,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        var count = state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -265,7 +265,7 @@ public class OrganizerStateTests
             [MakeCategorizedRow("a", "Cool Dance", ModCategory.Animation, "Emotes")],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal("Animation and VFX/Emotes/Cool Dance", state.Mods.Single().ProposedPath);
     }
@@ -276,7 +276,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        var count = state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -290,7 +290,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeRow("a", "Apple")], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorOnly, false, true, _ => canonicalized);
+        var count = state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, _ => canonicalized);
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Apple", state.Mods.Single().ProposedPath);
@@ -303,7 +303,7 @@ public class OrganizerStateTests
         var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
         state.LoadScan([row], new HashSet<string> { "a" });
 
-        var count = state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        var count = state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
@@ -317,7 +317,7 @@ public class OrganizerStateTests
             [MakeRow("Foo", "Foo"), MakeRow("Foo_2", "Foo")],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, name => name);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -332,10 +332,10 @@ public class OrganizerStateTests
             [MakeRow("Foo", "Foo"), MakeRow("Foo_2", "Foo")],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, name => name);
         var firstRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
-        state.Sort(SortStrategy.CreatorOnly, false, true, name => name);
+        state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, name => name);
         var secondRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
         Assert.Equal(firstRun, secondRun);
@@ -352,7 +352,7 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -370,10 +370,10 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
         var firstRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
         var secondRun = state.Mods.ToDictionary(m => m.Identifier, m => m.ProposedPath);
 
         Assert.Equal(firstRun, secondRun);
@@ -385,7 +385,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/SOMEAUTHOR/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -397,7 +397,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, _ => "");
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -409,7 +409,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -421,7 +421,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, _ => "");
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -434,7 +434,7 @@ public class OrganizerStateTests
         var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
         state.LoadScan([row], new HashSet<string> { "a" });
 
-        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
@@ -451,7 +451,7 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeThenCreator, true, true, name => name);
+        state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, name => name);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -464,7 +464,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -476,7 +476,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -488,7 +488,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorThenType, true, true, _ => "");
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/Cool Jacket", state.Mods.Single().ProposedPath);
@@ -500,7 +500,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Mystery Mod", category: null)], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorThenType, true, true, _ => "");
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, _ => "");
 
         Assert.Equal(1, count);
         Assert.Equal("Review/Mystery Mod", state.Mods.Single().ProposedPath);
@@ -513,7 +513,7 @@ public class OrganizerStateTests
         var row = MakeCategorizedRow("a", "Guarded Mod", ModCategory.Gear);
         state.LoadScan([row], new HashSet<string> { "a" });
 
-        var count = state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(0, count);
         Assert.Equal("Unsorted/Guarded Mod", state.Mods.Single().ProposedPath);
@@ -530,7 +530,7 @@ public class OrganizerStateTests
             ],
             new HashSet<string>());
 
-        state.Sort(SortStrategy.CreatorThenType, true, true, name => name);
+        state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, name => name);
 
         Assert.False(state.Validate().HasIssues);
         var paths = state.Mods.Select(m => m.ProposedPath).ToHashSet();
@@ -543,12 +543,12 @@ public class OrganizerStateTests
         var typeThenCreatorState = new OrganizerState();
         typeThenCreatorState.LoadScan(
             [MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
-        typeThenCreatorState.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
+        typeThenCreatorState.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         var creatorThenTypeState = new OrganizerState();
         creatorThenTypeState.LoadScan(
             [MakeCategorizedRow("a", "Cool Jacket", ModCategory.Gear)], new HashSet<string>());
-        creatorThenTypeState.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
+        creatorThenTypeState.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal("Gear/SOMEAUTHOR/Cool Jacket", typeThenCreatorState.Mods.Single().ProposedPath);
         Assert.Equal("SOMEAUTHOR/Gear/Cool Jacket", creatorThenTypeState.Mods.Single().ProposedPath);
@@ -561,7 +561,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.TypeThenCreator, false, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.TypeThenCreator, false, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("Gear/SOMEAUTHOR/Cool Boots", state.Mods.Single().ProposedPath);
@@ -575,7 +575,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeThenCreator, true, true, name => name.ToUpperInvariant());
+        state.Sort(SortStrategy.TypeThenCreator, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal("Gear/Feet/SOMEAUTHOR/Cool Boots", state.Mods.Single().ProposedPath);
     }
@@ -587,7 +587,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        var count = state.Sort(SortStrategy.CreatorThenType, false, true, name => name.ToUpperInvariant());
+        var count = state.Sort(SortStrategy.CreatorThenType, false, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal(1, count);
         Assert.Equal("SOMEAUTHOR/Gear/Cool Boots", state.Mods.Single().ProposedPath);
@@ -601,7 +601,7 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.Sort(SortStrategy.CreatorThenType, true, true, name => name.ToUpperInvariant());
+        state.Sort(SortStrategy.CreatorThenType, true, true, splitHair: false, name => name.ToUpperInvariant());
 
         Assert.Equal("SOMEAUTHOR/Gear/Feet/Cool Boots", state.Mods.Single().ProposedPath);
     }
@@ -612,12 +612,12 @@ public class OrganizerStateTests
         var flatState = new OrganizerState();
         flatState.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
-        flatState.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        flatState.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         var detailedState = new OrganizerState();
         detailedState.LoadScan(
             [MakeCategorizedRow("a", "Cool Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
-        detailedState.Sort(SortStrategy.TypeOnly, true, true, Identity);
+        detailedState.Sort(SortStrategy.TypeOnly, true, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Cool Boots", flatState.Mods.Single().ProposedPath);
         Assert.Equal("Gear/Feet/Cool Boots", detailedState.Mods.Single().ProposedPath);
@@ -672,7 +672,7 @@ public class OrganizerStateTests
             MakePlacedRow("Foo (3)", "Foo", "Gear/Foo"),
         ], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.All(state.Mods, m => Assert.Equal(m.CurrentPath, m.ProposedPath));
     }
@@ -685,7 +685,7 @@ public class OrganizerStateTests
         var elsewhere = MakePlacedRow("Foo (2)", "Foo", "Unsorted/Foo");
         state.LoadScan([inPlace, elsewhere], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Foo (2)", inPlace.ProposedPath);          // pinned, no churn
         Assert.Equal("Gear/Foo", elsewhere.ProposedPath);            // genuinely moves
@@ -700,7 +700,7 @@ public class OrganizerStateTests
         var row = MakePlacedRow("Vespucci ", "Vespucci ", "Gear/Vespucci");
         state.LoadScan([row], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Vespucci", row.ProposedPath);
     }
@@ -714,7 +714,7 @@ public class OrganizerStateTests
         var row = MakePlacedRow("a", "Foo/Bar", "Unsorted/FooBar");
         state.LoadScan([row], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Foo\\Bar", row.ProposedPath);
     }
@@ -726,7 +726,7 @@ public class OrganizerStateTests
         var row = MakeRow("a", "Apple");
         state.LoadScan([row], new HashSet<string>());
 
-        state.Sort(SortStrategy.CreatorOnly, false, true, _ => " Alice ");
+        state.Sort(SortStrategy.CreatorOnly, false, true, splitHair: false, _ => " Alice ");
 
         Assert.Equal("Alice/Apple", row.ProposedPath);
     }
@@ -737,7 +737,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Boots", state.Mods.Single().ProposedPath);
     }
@@ -749,7 +749,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Wave", ModCategory.Animation, "Emotes")], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, false, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Identity);
 
         Assert.Equal("Animation and VFX/Emotes/Wave", state.Mods.Single().ProposedPath);
     }
@@ -760,7 +760,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Boots", ModCategory.Gear, "Feet")], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, true, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, true, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Feet/Boots", state.Mods.Single().ProposedPath);
     }
@@ -771,7 +771,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         state.LoadScan([MakeCategorizedRow("a", "Cloak", ModCategory.Gear, null)], new HashSet<string>());
 
-        state.Sort(SortStrategy.TypeOnly, true, true, Identity);
+        state.Sort(SortStrategy.TypeOnly, true, true, splitHair: false, Identity);
 
         Assert.Equal("Gear/Cloak", state.Mods.Single().ProposedPath);
     }

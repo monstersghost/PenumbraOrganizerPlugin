@@ -118,7 +118,7 @@ public sealed class SortPanel
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
-            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, canonicalizeCreator);
+            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, splitHair: false, canonicalizeCreator);
             _lastSorted = selection;
         }
 
