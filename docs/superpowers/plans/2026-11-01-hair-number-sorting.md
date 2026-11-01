@@ -14,6 +14,7 @@
 
 - **Folder name is the bare number, not padded, not prefixed**: the proposed path is `Hair/115/`. Not `Hair/0115/`, not `Hair/Hair 115/`. The checkbox label carries the "hair number" meaning so the folder does not repeat it.
 - **Exactly one** resolved hair number gets a subfolder. Two or more, zero, or a failed read all leave the mod directly in `Hair/`. There is no `Mixed` bucket and no lowest-number-wins rule. This mirrors `EnrichGearSubCategory`, which assigns only on `Count == 1`.
+- **The supported range is 1..9999 inclusive**, enforced in `ModHairFileReader` and nowhere else. `h0000` and an `Est` `SetId` of 0, negative, or 10000+ are discarded as evidence - not treated as a read failure, so a stray `h0000` beside a real `h0115` still files the mod under 115. Everything downstream may assume the range holds.
 - **Race is ignored.** `c0101` and `c0801` paths naming `h0115` contribute the single number 115, not two entries. Without this the common multi-clan hair mod would read as ambiguous and get no subfolder at all.
 - The checkbox **defaults off**, like `SplitGear`, and is **session state, not persisted config**, like the rest of `SortPanel`'s selection.
 - **No `HairNumberDiagnostic`.** Explicitly out of scope (maintainer decision, 2026-11-01). Do not touch `ChangedItemIndex`, `ChangedItemIndexSummary`, `LibrarySearchFilter`, `IndexProcessor` or `OrganizerExportFormatter`. Do not add a hair-number search facet.
@@ -39,7 +40,11 @@
 | Help resource file | **Modify.** The topic's title, short and body. Task 7 locates it. |
 | `docs/HOW_SORTING_WORKS.md`, `docs/USER_GUIDE.md` | **Modify.** Document the third split. |
 
-Tasks are ordered so every commit builds and tests green on its own. Tasks 1-4 are pure logic with no UI; 5-7 carry it to the screen; 8 is documentation and the in-game check.
+Tasks are ordered so every commit builds and tests green on its own, **and so no intermediate commit changes how an existing install sorts.** Those are different properties, and the second is the stronger one.
+
+That is why the `splitHair` flattener (Task 5) lands *before* the scan starts producing hair numbers (Task 6). In the other order there is a commit where rows carry a hair subcategory, `GetFolder` already accepts it, and nothing flattens it - so the split is effectively on, with no checkbox to turn it off, and every test still passes. Task 5 does not depend on Task 6: its tests construct rows with a hair subcategory directly.
+
+Tasks 1-4 are pure logic with no UI; 5-7 carry it to the screen; 8 is documentation and the in-game check.
 
 ---
 
@@ -56,6 +61,10 @@ A pure refactor, no behaviour change, done first so Task 2 has something to buil
 - Consumes: nothing.
 - Produces, both used by Task 2 and by the rewritten equipment reader:
   - `ModConfigFileWalker.TryWalk(DirectoryInfo modDirectory, Action<string> onFileKey, Action<JsonElement> onManipulation)` returns `bool` - `false` means a file could not be enumerated, read or parsed. `onFileKey` receives each `Files` key **already normalised** so separators are `/`. `onManipulation` receives each element of each `Manipulations` array. A non-existent directory returns `true` with no callbacks.
+
+    **Callbacks must consume their `JsonElement` synchronously.** A `JsonElement` is a view into the `JsonDocument` that owns it, and that document is disposed when its file's `using` scope ends. Reading values inside the callback is fine; storing the element for later is a use-after-dispose. Both readers only extract ints and strings, so both are safe.
+
+    A `false` return means the caller **discards everything collected so far**. The callbacks write into the caller's own collection as the walk proceeds, so a failure part-way through leaves a partial set that must never be returned as an answer.
   - `ModConfigFileWalker.CountConfigFiles(DirectoryInfo modDirectory)` returns `int`, `0` on a missing directory or an enumeration failure.
 
 - [ ] **Step 1: Create the walker**
@@ -342,7 +351,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `ModConfigFileWalker.TryWalk` from Task 1.
-- Produces: `ModHairFileReader.ReadHairNumbers(DirectoryInfo modDirectory)` returning `IReadOnlySet<int>?` - `null` on read failure, otherwise the distinct hair numbers found. Task 4 and Task 5 call this.
+- Produces: `ModHairFileReader.ReadHairNumbers(DirectoryInfo modDirectory)` returning `IReadOnlySet<int>?` - `null` on read failure, otherwise the distinct hair numbers found, each guaranteed to be in 1..9999. Task 4 and Task 6 call this.
 
 **On the `Est` manipulation:** its shape is corroborated by a fixture already in this repo, in `ModEquipmentFileReaderTests.ReadEquipmentSlots_EstManipulation_ContributesNothing`:
 
@@ -560,6 +569,166 @@ public class ModHairFileReaderTests
         Assert.NotNull(result);
         Assert.Empty(result);
     }
+
+    [Fact]
+    public void ReadHairNumbers_UppercasePath_StillResolves()
+    {
+        // The pattern is IgnoreCase; this pins that rather than leaving it to the flag's presence.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"CHARA/HUMAN/C0101/OBJ/HAIR/H0115/MODEL/C0101H0115_HIR.MDL":"files/hair.mdl"},"Manipulations":[]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        Assert.Equal([115], result);
+    }
+
+    [Fact]
+    public void ReadHairNumbers_NestedUnderContainers_IsReached()
+    {
+        // Options and Groups are covered above; Containers is the third nesting shape the walker
+        // recurses into and was otherwise untested.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Containers":[{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"files/a.mdl"},"Manipulations":[]}]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        Assert.Equal([115], result);
+    }
+
+    [Fact]
+    public void ReadHairNumbers_GoodFileThenMalformedFile_ReturnsNullAndDiscardsWhatItFound()
+    {
+        // The important failure case. The walker collects into the caller's set as it goes, so a
+        // failure AFTER a successful file must discard the partial result rather than return a
+        // confident-looking subset. Without this test, returning the 115 it already had would pass
+        // every other test in this file.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"files/a.mdl"},"Manipulations":[]}
+            """);
+        WriteJson(mod, "group_001_broken.json", "{\"Options\":[");
+
+        Assert.Null(ModHairFileReader.ReadHairNumbers(mod));
+    }
+
+    [Theory]
+    [InlineData("h0000", null)]      // parses to 0, which IsHairNumber rejects - would throw in GetFolder
+    [InlineData("h0001", 1)]         // the bottom of the supported range
+    [InlineData("h9999", 9999)]      // the top of it
+    public void ReadHairNumbers_BoundaryPathNumbers_AreFilteredToTheSupportedRange(
+        string hairToken, int? expected)
+    {
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", $$"""
+            {"Files":{"chara/human/c0101/obj/hair/{{hairToken}}/model/x.mdl":"files/a.mdl"},"Manipulations":[]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        if (expected is null)
+            Assert.Empty(result);
+        else
+            Assert.Equal([expected.Value], result);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(10000)]
+    [InlineData(2147483647)]
+    public void ReadHairNumbers_EstSetIdOutsideTheSupportedRange_IsDiscarded(int setId)
+    {
+        // Every one of these would format into a subcategory GetFolder throws on.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", $$"""
+            {"Files":{},"Manipulations":[{"Type":"Est","Manipulation":{"Entry":1,"Gender":"Female","Race":"Miqote","SetId":{{setId}},"Slot":"Hair"}}]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ReadHairNumbers_ValidEvidenceBesideOutOfRangeEvidence_KeepsTheValidNumber()
+    {
+        // The deliberate policy: out-of-range evidence is discarded, NOT promoted to a read
+        // failure. A stray h0000 beside a real h0115 still files the mod under 115.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{
+              "chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"files/a.mdl",
+              "chara/human/c0101/obj/hair/h0000/model/c0101h0000_hir.mdl":"files/b.mdl"
+            },"Manipulations":[]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        Assert.Equal([115], result);
+    }
+
+    [Fact]
+    public void ReadHairNumbers_PathsAndEstAgreeing_YieldOneNumber()
+    {
+        // The two evidence sources overlapping is the normal case for a hair mod, and it must not
+        // read as ambiguous.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"files/a.mdl"},
+             "Manipulations":[{"Type":"Est","Manipulation":{"Entry":1,"Gender":"Female","Race":"Miqote","SetId":115,"Slot":"Hair"}}]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        Assert.Equal([115], result);
+    }
+
+    [Fact]
+    public void ReadHairNumbers_PathsAndEstDisagreeing_YieldBoth()
+    {
+        // Two numbers, so the mod files flat. This is the CORRECT reading of a mod that carries an
+        // EST entry for one hair and replacement paths for another - it is not evidence that
+        // SetId was misunderstood.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"files/a.mdl"},
+             "Manipulations":[{"Type":"Est","Manipulation":{"Entry":1,"Gender":"Female","Race":"Miqote","SetId":157,"Slot":"Hair"}}]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);
+        Assert.Equal([115, 157], result!.Order());
+    }
+
+    [Fact]
+    public void ReadHairNumbers_NonAsciiDigitsInThePath_AreRejectedWithoutThrowing()
+    {
+        // .NET's \d matches Unicode decimal digits, so an earlier draft of the pattern MATCHED
+        // this and then threw FormatException inside the parse - an exception the walker does not
+        // catch, so it escaped into the scan. The escapes are written out rather than pasted: a
+        // literal glyph here is exactly the hazard this test exists for.
+        const string fullwidthDigits = "０１１５"; // fullwidth 0115
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", $$"""
+            {"Files":{"chara/human/c0101/obj/hair/h{{fullwidthDigits}}/model/x.mdl":"files/a.mdl"},"Manipulations":[]}
+            """);
+
+        var result = ModHairFileReader.ReadHairNumbers(mod);
+
+        Assert.NotNull(result);   // NOT null: this is a rejected path, not a read failure
+        Assert.Empty(result);
+    }
 }
 ```
 
@@ -588,11 +757,21 @@ namespace PenumbraOrganizer.Plugin.Organizer.Classification;
 /// </remarks>
 public static class ModHairFileReader
 {
+    /// <summary>The supported hair numbers, inclusive. Also what ModTypeFolders.IsHairNumber accepts.</summary>
+    private const int MinHairNumber = 1;
+    private const int MaxHairNumber = 9999;
+
     // Anchored at the start: Files keys are full game paths, and an unanchored match would accept
     // a path that merely CONTAINS this shape. The c#### race code is matched so the path shape is
     // actually verified, then discarded - one hair shipped for eight clans is one number, not eight.
+    //
+    // [0-9], NOT \d: .NET's \d matches every Unicode decimal digit, so a path with fullwidth or
+    // Devanagari digits would MATCH here and then throw FormatException inside the parse - an
+    // exception the walker does not catch, so it would escape into the scan. This repo has been
+    // bitten three times by a non-ASCII codepoint reaching code as something other than what it
+    // looked like; this is that same hazard in regex form.
     private static readonly Regex HairPath = new(
-        @"^chara/human/c\d{4}/obj/hair/h(\d{4})/",
+        @"^chara/human/c[0-9]{4}/obj/hair/h([0-9]{4})/",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     /// <summary>
@@ -623,8 +802,23 @@ public static class ModHairFileReader
         if (!match.Success)
             return;
 
-        // Four ASCII digits by construction of the pattern, so this cannot overflow or fail.
-        numbers.Add(int.Parse(match.Groups[1].ValueSpan, provider: System.Globalization.CultureInfo.InvariantCulture));
+        // TryParse, not Parse: four ASCII digits cannot overflow an int, but a defensive parse
+        // costs nothing and survives someone widening the pattern later.
+        if (int.TryParse(match.Groups[1].ValueSpan, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var number))
+            AddIfSupported(number, numbers);
+    }
+
+    // The ONE place the supported range is enforced, for both evidence sources. h0000 parses
+    // cleanly to 0 and an Est SetId can be any int; either would format into a subcategory that
+    // ModTypeFolders.IsHairNumber rejects, and GetFolder throws on rejection - a crash inside the
+    // sort rather than a mod quietly staying flat. Out-of-range evidence is DISCARDED, not
+    // promoted to a read failure: a stray h0000 beside a real h0115 should still file the mod
+    // under 115, and treating it as untrustworthy would throw away a good answer.
+    private static void AddIfSupported(int number, HashSet<int> numbers)
+    {
+        if (number is >= MinHairNumber and <= MaxHairNumber)
+            numbers.Add(number);
     }
 
     private static void CollectFromManipulation(JsonElement item, HashSet<int> numbers)
@@ -647,11 +841,11 @@ public static class ModHairFileReader
         // SetId is the hair number. "Entry" on the same object is the EST skeleton row the hair
         // maps to - a different, equally plausible-looking integer, so reading it would be a
         // silent wrong answer rather than a visible failure.
+        // TryGetInt32 also guards a SetId that is fractional or wider than an int.
         if (manipulation.TryGetProperty("SetId", out var setId)
             && setId.ValueKind == JsonValueKind.Number
-            && setId.TryGetInt32(out var number)
-            && number > 0)
-            numbers.Add(number);
+            && setId.TryGetInt32(out var number))
+            AddIfSupported(number, numbers);
     }
 }
 ```
@@ -660,7 +854,7 @@ public static class ModHairFileReader
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ModHairFileReaderTests"`
 
-Expected: PASS, 12 tests.
+Expected: PASS, 28 test cases (12 original, plus uppercase, Containers, the good-then-malformed case, 3 path boundaries, 4 Est range cases, the mixed valid/invalid case, the two path-versus-Est agreement cases, and the non-ASCII digit case).
 
 - [ ] **Step 5: Run the full suite**
 
@@ -695,7 +889,7 @@ Hair numbers are an open set of several hundred values, so they cannot be enumer
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `ModTypeFolders.GetFolder(ModCategory.Hair, "115")` returns `"Hair/115"`. Task 6's sorting relies on this.
+- Produces: `ModTypeFolders.GetFolder(ModCategory.Hair, "115")` returns `"Hair/115"`. Task 5's sorting relies on this.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -754,10 +948,14 @@ In `ModTypeFolders`, add the hair arm to the switch immediately after the Gear a
             nameof(subCategory), subCategory, $"Unsupported subcategory '{subCategory}' for {category}."),
     };
 
-    // One to four ASCII digits, no leading zero. EnrichHairSubCategory is the only producer and
-    // formats an int invariantly, so the two agree by construction - this guard is what makes a
-    // future second producer fail loudly rather than quietly creating a "Hair/0115" folder beside
-    // an existing "Hair/115" one.
+    // One to four ASCII digits, no leading zero - that is, 1..9999 written plainly.
+    //
+    // This agrees with EnrichHairSubCategory because ModHairFileReader FILTERS its numbers to
+    // 1..9999, not because formatting an int guarantees anything: ToString gives you a well-formed
+    // decimal string, and "0" and "10000" are both well-formed and both rejected here. The range
+    // check in the reader is what makes the two sides line up, and this guard is what turns a
+    // future producer that skips it into a loud failure rather than a "Hair/0115" folder sitting
+    // beside an existing "Hair/115" one.
     private static bool IsHairNumber(string? subCategory) =>
         subCategory is { Length: >= 1 and <= 4 }
         && subCategory[0] is >= '1' and <= '9'
@@ -795,7 +993,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `ModHairFileReader.ReadHairNumbers`'s return type from Task 2; `IsHairNumber`'s contract from Task 3.
-- Produces: `ModTypeClassifier.EnrichHairSubCategory(ClassificationResult baseResult, IReadOnlySet<int>? hairNumbers)` returning `ClassificationResult`. Task 5 calls this.
+- Produces: `ModTypeClassifier.EnrichHairSubCategory(ClassificationResult baseResult, IReadOnlySet<int>? hairNumbers)` returning `ClassificationResult`. Task 6 calls this.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -891,6 +1089,10 @@ Add directly after `EnrichGearSubCategory` in `ModTypeClassifier`, so the two si
         // Invariant, and unpadded: ModTypeFolders.IsHairNumber rejects a leading zero, so a
         // culture-dependent or padded format here would throw inside the sort rather than quietly
         // creating a second folder for the same hair.
+        //
+        // The VALUE is in range because ModHairFileReader filtered it to 1..9999. This method does
+        // not re-check that: one owner for the domain, and the reader is it. If this ever takes
+        // numbers from somewhere else, that source must filter too.
         return baseResult with
         {
             SubCategory = hairNumbers.Single().ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -919,149 +1121,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 5: Read hair numbers during the scan
-
-**Files:**
-- Modify: `PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanProcessor.cs:54-68` (the gear block and just after it)
-- Test: `PenumbraOrganizer.Plugin.Tests/LibraryWork/ScanProcessorTests.cs`
-
-**Interfaces:**
-- Consumes: `ModHairFileReader.ReadHairNumbers` (Task 2) and `ModTypeClassifier.EnrichHairSubCategory` (Task 4).
-- Produces: an `OrganizerModRow` whose `SubCategory` holds the hair number for a single-number hair mod. Task 6 sorts on it.
-
-- [ ] **Step 1: Write the failing test**
-
-Append to the existing `ScanProcessorTests` class. This uses that file's own helpers - `NewProcessor()` and `Seed(modDirectoryPath, name, params changedItemKeys)` - and its temp-directory-with-`try`/`finally` idiom, which is what the surrounding tests do.
-
-The changed-item key matters: classification is driven by it, not by the mod's name or files. `"Customization: Midlander Female Hair 157"` is a real key form that classifies as `ModCategory.Hair`, pinned by `ModTypeClassifierTests` at line 522. The hair number in the *key* (157) is deliberately different from the one in the *files* (115), so the test proves the subcategory came from the file read rather than from the key.
-
-```csharp
-    [Fact]
-    public void HairModWithOneHairNumber_GetsThatNumberAsItsSubCategory()
-    {
-        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
-        dir.Create();
-        try
-        {
-            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
-                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"hair.mdl"}}}""");
-
-            var row = NewProcessor().Process(
-                Seed(dir.FullName, "Some Hair", "Customization: Midlander Female Hair 157"),
-                CancellationToken.None);
-
-            Assert.NotNull(row);
-            Assert.Equal(ModCategory.Hair, row!.Category);
-            // 115 from the files, not 157 from the changed-item key - the subcategory must come
-            // from the file read.
-            Assert.Equal("115", row.SubCategory);
-        }
-        finally
-        {
-            dir.Delete(recursive: true);
-        }
-    }
-
-    [Fact]
-    public void HairModWithTwoHairNumbers_StaysFlat()
-    {
-        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
-        dir.Create();
-        try
-        {
-            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
-                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"a.mdl","chara/human/c0101/obj/hair/h0009/model/c0101h0009_hir.mdl":"b.mdl"}}}""");
-
-            var row = NewProcessor().Process(
-                Seed(dir.FullName, "Some Hair Pack", "Customization: Midlander Female Hair 157"),
-                CancellationToken.None);
-
-            Assert.NotNull(row);
-            Assert.Equal(ModCategory.Hair, row!.Category);
-            Assert.Null(row.SubCategory);
-        }
-        finally
-        {
-            dir.Delete(recursive: true);
-        }
-    }
-
-    [Fact]
-    public void HairPathsInAGearMod_ContributeNoSubCategory()
-    {
-        // Guards the gate itself: a Gear mod must not pick up a hair number, which would throw in
-        // GetFolder the moment it reached the sort.
-        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
-        dir.Create();
-        try
-        {
-            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
-                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"hair.mdl"}}}""");
-
-            var row = NewProcessor().Process(
-                Seed(dir.FullName, changedItemKeys: "Ala Mhigan Gown"),
-                CancellationToken.None);
-
-            Assert.NotNull(row);
-            Assert.Equal(ModCategory.Gear, row!.Category);
-            Assert.Null(row.SubCategory);
-        }
-        finally
-        {
-            dir.Delete(recursive: true);
-        }
-    }
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ScanProcessorTests"`
-
-Expected: `HairModWithOneHairNumber_GetsThatNumberAsItsSubCategory` FAILS, asserting `"115"` against an actual of `null`. The other two should already PASS - they pin behaviour that must survive this change.
-
-- [ ] **Step 3: Add the gated block**
-
-In `ScanProcessor.Process`, immediately after the closing brace of the existing `if (classification.Category == ModCategory.Gear) { ... }` block, add:
-
-```csharp
-        // Disk I/O only for mods the changed-items rule already confirmed are Hair, matching the
-        // gear gate above - every other category never touches disk for this. No diagnostic
-        // counterpart to gearSlotDiagnostic on purpose: both readers share one walker and read the
-        // same files, so a library-wide read failure is already visible through the gear one.
-        if (classification.Category == ModCategory.Hair)
-        {
-            var hairNumbers = ModHairFileReader.ReadHairNumbers(modPath);
-            classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairNumbers);
-        }
-```
-
-- [ ] **Step 4: Run the tests to verify they pass**
-
-Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ScanProcessorTests"`
-
-Expected: PASS.
-
-- [ ] **Step 5: Run the full suite, with attention to purity**
-
-Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj`
-
-Expected: all tests pass. `LibraryWorkPurityTests` exists specifically to police what this file may touch; if it fails, the new block reached something it must not - re-read that test's message rather than working around it.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanProcessor.cs PenumbraOrganizer.Plugin.Tests/LibraryWork/ScanProcessorTests.cs
-git commit -m "feat: resolve hair numbers during the scan
-
-Gated on Category == Hair, exactly like the gear-slot read beside it, so
-no other category touches disk for this.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-### Task 6: The `splitHair` axis on `OrganizerState.Sort`
+### Task 5: The `splitHair` axis on `OrganizerState.Sort`
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs:265-291` (the `Sort` overload and `Sub`), plus a third flattener after `FlattenNpcSubCategory` at line 302
@@ -1070,7 +1130,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Create: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateSortHairTests.cs`
 
 **Interfaces:**
-- Consumes: `ModTypeFolders.GetFolder(Hair, "115")` from Task 3; rows carrying a hair subcategory from Task 5.
+- Consumes: `ModTypeFolders.GetFolder(Hair, "115")` from Task 3. Nothing from Task 6 - this task's tests construct rows with a hair subcategory directly, which is why it can and must come first.
 - Produces: `OrganizerState.Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair, Func<string, string> canonicalizeCreator)` returning `int`. Task 7's panel calls it.
 
 **Why hair coverage gets its own fixture.** `OrganizerStateSortTests` is a 16-row `[Theory]` over `(strategy, splitGear, splitNpc)` plus three expected paths, and its comment records that those expectations were *captured* from the seven original `SortBy*` methods rather than hand-written, "rather than getting the order wrong and then 'fixing' the expectations until green, which destroys the guarantee." Adding a hair row to its shared fixture changes all 16 rows' expected output; adding a `splitHair` axis doubles it to 32 hand-written rows. Both are the exact failure that comment warns about. So: pass `splitHair: false` at its call sites, leaving every captured expectation byte-identical, and put hair coverage in a new file.
@@ -1290,30 +1350,172 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+### Task 6: Read hair numbers during the scan
+
+**Files:**
+- Modify: `PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanProcessor.cs:54-68` (the gear block and just after it)
+- Test: `PenumbraOrganizer.Plugin.Tests/LibraryWork/ScanProcessorTests.cs`
+
+**Interfaces:**
+- Consumes: `ModHairFileReader.ReadHairNumbers` (Task 2) and `ModTypeClassifier.EnrichHairSubCategory` (Task 4).
+- Produces: an `OrganizerModRow` whose `SubCategory` holds the hair number for a single-number hair mod. Task 5's flattener already clears it unless the split is on, which is why that task comes first.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to the existing `ScanProcessorTests` class. This uses that file's own helpers - `NewProcessor()` and `Seed(modDirectoryPath, name, params changedItemKeys)` - and its temp-directory-with-`try`/`finally` idiom, which is what the surrounding tests do.
+
+The changed-item key matters: classification is driven by it, not by the mod's name or files. `"Customization: Midlander Female Hair 157"` is a real key form that classifies as `ModCategory.Hair`, pinned by `ModTypeClassifierTests` at line 522. The hair number in the *key* (157) is deliberately different from the one in the *files* (115), so the test proves the subcategory came from the file read rather than from the key.
+
+```csharp
+    [Fact]
+    public void HairModWithOneHairNumber_GetsThatNumberAsItsSubCategory()
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"hair.mdl"}}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, "Some Hair", "Customization: Midlander Female Hair 157"),
+                CancellationToken.None);
+
+            Assert.NotNull(row);
+            Assert.Equal(ModCategory.Hair, row!.Category);
+            // 115 from the files, not 157 from the changed-item key - the subcategory must come
+            // from the file read.
+            Assert.Equal("115", row.SubCategory);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void HairModWithTwoHairNumbers_StaysFlat()
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"a.mdl","chara/human/c0101/obj/hair/h0009/model/c0101h0009_hir.mdl":"b.mdl"}}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, "Some Hair Pack", "Customization: Midlander Female Hair 157"),
+                CancellationToken.None);
+
+            Assert.NotNull(row);
+            Assert.Equal(ModCategory.Hair, row!.Category);
+            Assert.Null(row.SubCategory);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void GearModWithHairPaths_KeepsNoHairSubCategory()
+    {
+        // NOTE what this does and does not prove. It proves the OUTCOME is protected: a Gear row
+        // never carries a hair number, which would throw in GetFolder the moment it reached the
+        // sort. It does NOT prove the disk-I/O gate exists - it passes just as well if the hair
+        // reader runs for every mod, because EnrichHairSubCategory independently refuses to touch
+        // a non-Hair classification. The gate is a performance property with no seam to assert it
+        // through, so it is verified by reading the code in review, not here. Inventing an
+        // injection seam solely for this assertion would not be worth it.
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/human/c0101/obj/hair/h0115/model/c0101h0115_hir.mdl":"hair.mdl"}}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, changedItemKeys: "Ala Mhigan Gown"),
+                CancellationToken.None);
+
+            Assert.NotNull(row);
+            Assert.Equal(ModCategory.Gear, row!.Category);
+            Assert.Null(row.SubCategory);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ScanProcessorTests"`
+
+Expected: `HairModWithOneHairNumber_GetsThatNumberAsItsSubCategory` FAILS, asserting `"115"` against an actual of `null`. The other two should already PASS - they pin behaviour that must survive this change.
+
+- [ ] **Step 3: Add the gated block**
+
+In `ScanProcessor.Process`, immediately after the closing brace of the existing `if (classification.Category == ModCategory.Gear) { ... }` block, add:
+
+```csharp
+        // Disk I/O only for mods the changed-items rule already confirmed are Hair, matching the
+        // gear gate above - every other category never touches disk for this. No diagnostic
+        // counterpart to gearSlotDiagnostic on purpose: both readers share one walker and read the
+        // same files, so a library-wide read failure is already visible through the gear one.
+        if (classification.Category == ModCategory.Hair)
+        {
+            var hairNumbers = ModHairFileReader.ReadHairNumbers(modPath);
+            classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairNumbers);
+        }
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~ScanProcessorTests"`
+
+Expected: PASS.
+
+- [ ] **Step 5: Run the full suite, with attention to purity**
+
+Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj`
+
+Expected: all tests pass. `LibraryWorkPurityTests` exists specifically to police what this file may touch; if it fails, the new block reached something it must not - re-read that test's message rather than working around it.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanProcessor.cs PenumbraOrganizer.Plugin.Tests/LibraryWork/ScanProcessorTests.cs
+git commit -m "feat: resolve hair numbers during the scan
+
+Gated on Category == Hair, exactly like the gear-slot read beside it, so
+no other category touches disk for this.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 7: The checkbox
 
 **Files:**
-- Modify: `PenumbraOrganizer.Plugin/Windows/SortPanel.cs` - `SortSelection` at line 17, `_splitHair` field near line 63, the checkbox block after the gear one at lines 88-91, the `selection` construction at line 115, and the `Sort` call at line 121
+- Modify: `PenumbraOrganizer.Plugin/Windows/SortPanel.cs` - `SortSelection` at line 17, `_splitHair` field near line 63, a new checkbox block **after the NPC one** (which is at lines 93-96, below the gear one), the `selection` construction at line 115, and the `Sort` call at line 121
 - Modify: `PenumbraOrganizer.Plugin/Windows/HelpTopics.cs` (near line 47), `PenumbraOrganizer.Plugin/Windows/HelpTab.cs` (the Sort section, near line 84), `PenumbraOrganizer.Plugin/Windows/HelpTopicUsage.cs` (near line 29)
 - Modify: the help resource file holding each topic's title/short/body. Find it with `grep -rln "sort.split-gear" PenumbraOrganizer.Plugin` - `Help.TryGet` reads from it, and `HelpTabTests` enforces that every section topic has a body.
 - Test: `PenumbraOrganizer.Plugin.Tests/Windows/SortSelectionTests.cs`
 
 **Interfaces:**
-- Consumes: `OrganizerState.Sort`'s five-parameter signature from Task 6.
+- Consumes: `OrganizerState.Sort`'s five-parameter signature from Task 5.
 - Produces: `SortSelection(SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair)`. Nothing later depends on it.
 
 - [ ] **Step 1: Write the failing tests**
 
 `SortSelectionTests` constructs `SortSelection` positionally in five places, so adding the fourth parameter breaks them at compile time - that is wanted, since it makes every construction site visible. Update each existing `new SortSelection(x, y, z)` to `new SortSelection(x, y, z, false)`, then append:
 
-```csharp
-    [Fact]
-    public void SplitHair_DefaultsOffInTheRecord()
-    {
-        // Off by default, like SplitGear: an unchanged install keeps producing flat Hair/.
-        Assert.False(new SortSelection(SortStrategy.TypeOnly, false, false, false).SplitHair);
-    }
+Deliberately **not** added: a "SplitHair defaults off" test on the record. Passing `false` in and asserting `false` comes out only proves the record stores its constructor argument - it cannot see `_splitHair`'s initialiser in the panel, which is the thing that would actually be wrong. `SortPanel`'s fields are private with no seam, so the fresh-panel default is checked in Task 8's in-game list instead, where it is observable.
 
+```csharp
     [Fact]
     public void SplitsApply_StillIgnoresEveryFlagAndOnlyReadsStrategy()
     {
@@ -1373,7 +1575,7 @@ Add the checkbox immediately after the NPC one, following that file's exact patt
         Help.Tooltip(HelpTopics.SortSplitHair, splitsApply ? null : SplitsInapplicableReason);
 ```
 
-And the `Sort` call near line 121 becomes what Task 6 deferred:
+And the `Sort` call near line 121 becomes what Task 5 deferred:
 
 ```csharp
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair, canonicalizeCreator);
@@ -1457,12 +1659,20 @@ Build, load in game, and run a scan over a real library before sorting anything.
 
 This is the one correctness question no unit test can answer.
 
+Establish what `SetId` MEANS first, from Penumbra's own source - its EST manipulation model and
+the code that applies it - not from agreement between numbers. Then corroborate against real mods:
+
 - [ ] Pick three hair mods whose `Files` paths name a hair number AND whose config contains an
       `Est` manipulation with `"Slot":"Hair"`.
-- [ ] For each, confirm the `SetId` on that manipulation equals the `h####` number in the paths.
-- [ ] If they disagree on real mods, `SetId` is not the hair number: delete
-      `CollectFromManipulation` from `ModHairFileReader`, drop its two Est tests, and ship path
-      matching alone. Say so in the report - it changes the spec.
+- [ ] Record, for each, the path number and the `SetId`.
+- [ ] Where they agree, `SetId` is corroborated.
+- [ ] Where they **disagree**, do not conclude anything on its own. A mod can legitimately carry
+      an EST entry for one hair and replacement paths for another, in which case two numbers is
+      the correct reading and the mod should file flat - which is what the code already does.
+      Settle it against Penumbra's source, and only then decide.
+- [ ] Drop `CollectFromManipulation` and its Est tests only if `SetId` turns out not to name a
+      hair number at all. That is a conservative fallback, not the default outcome of a
+      disagreement. Say so in the report either way - it changes the spec.
 
 ## Plausibility
 

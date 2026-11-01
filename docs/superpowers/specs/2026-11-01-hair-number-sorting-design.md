@@ -54,6 +54,12 @@ Two evidence sources, mirroring how the equipment reader uses both `Files` and `
    after normalising backslashes to forward slashes. The captured 4-digit group parses to the `int`
    collected. The `c####` race code is matched but discarded.
 
+   "4 digits" means `[0-9]{4}`, explicitly, **not** `\d{4}`. .NET's `\d` matches every Unicode
+   decimal digit, so a path carrying fullwidth or Devanagari digits would match and then throw
+   `FormatException` in the parse - an exception the walker does not catch, so it would escape
+   into the scan. This repo has been bitten three times by a non-ASCII codepoint reaching code as
+   something other than what it looked like; this is that hazard in regex form.
+
 2. **`Est` manipulations** whose `Slot` is `Hair`, whose `SetId` is the hair number.
 
    `Est` is explicitly excluded by `ModEquipmentFileReader`, whose comment reads: "Est also has a
@@ -70,10 +76,16 @@ Two evidence sources, mirroring how the equipment reader uses both `Files` and `
    `SetId` (157) is the hair number; `Entry` (161) is the EST skeleton row the hair maps to, which
    is why the two differ. Read `SetId`, never `Entry`.
 
-   **Still verify before shipping**, narrowly: that `SetId` on a real library's hair mods agrees
-   with the hair number its `Files` paths name. The two sources overlapping is the check - if they
-   disagree on real mods, drop source 2 and ship source 1 alone. Path matching is the load-bearing
-   source either way.
+   **Still verify before shipping**, from Penumbra's own EST manipulation model and the code that
+   applies it - then corroborate against real mods.
+
+   Agreement between `SetId` and the `Files` path number confirms the reading. Disagreement, on
+   its own, confirms nothing: a mod may legitimately carry an EST entry for one hair and
+   replacement paths for another, in which case two numbers is the correct reading and the mod
+   files flat, which is what this design already does. Dropping source 2 is a conservative
+   fallback for the case where `SetId` turns out not to name a hair number at all - not the
+   automatic consequence of two numbers differing. Path matching is the load-bearing source
+   either way.
 
 ### Shared traversal
 
@@ -113,9 +125,25 @@ intent for a genuinely nonsense pairing:
 where `IsHairNumber` accepts one to four ASCII digits with no leading zero. `Hair` + `"Bosses"`
 still throws, which is the property the existing comment is protecting.
 
-`EnrichHairSubCategory` is the only producer of these subcategories and formats them with
-`ToString(CultureInfo.InvariantCulture)` from an `int`, so the two agree by construction - but the
-guard is what makes a future second producer fail loudly rather than silently.
+### The supported range, and who owns it
+
+`IsHairNumber` implies a domain of 1..9999. **`ModHairFileReader` enforces it, and nothing else
+does.**
+
+Formatting an `int` invariantly guarantees a well-formed decimal string, not a value in range -
+`"0"` and `"10000"` are both well-formed and both rejected by the guard, which means both would
+throw inside the sort. Two real inputs produce them: a path containing `h0000`, which parses
+cleanly to `0`, and an `Est` `SetId`, which can be any `int`. So the reader filters its numbers to
+1..9999 before anyone sees them, and everything downstream may assume the range holds.
+
+Out-of-range evidence is **discarded, not promoted to a read failure**. A stray `h0000` beside a
+real `h0115` still files the mod under 115; treating it as untrustworthy would throw away a good
+answer. That is a deliberate policy, not a side effect.
+
+`EnrichHairSubCategory` is the only producer of these subcategories. It does not re-check the
+range - one owner for the domain, and the reader is it. The guard in `GetFolder` is what turns a
+future producer that skips the filter into a loud failure rather than a `Hair/0115` folder sitting
+beside an existing `Hair/115` one.
 
 ## Plumbing
 
@@ -170,7 +198,15 @@ Unit tests, in the existing projects, against fixture directories written per te
 - `ModHairFileReader`: one hair number across several race codes collapses to one; two distinct
   numbers return two; `meta.json` and the legacy `default_mod.json` + `group_*.json` layouts both
   work; numbers nested under `DefaultData`, `Options`, `Containers` and `Groups` are all reached;
-  malformed JSON returns `null`; a missing directory returns empty, not `null`.
+  uppercase paths still resolve; malformed JSON returns `null`; a missing directory returns empty,
+  not `null`; **a good file followed by a malformed one returns `null` and discards what it had
+  already collected**, since the callbacks write into the result as the walk proceeds.
+- Range boundaries, which are where the crashes would be: `h0000` yields nothing, `h0001` and
+  `h9999` resolve, an `Est` `SetId` of 0, -1, 10000 or `int.MaxValue` yields nothing, and
+  out-of-range evidence beside valid evidence keeps the valid number rather than failing the read.
+- A path whose digits are non-ASCII is rejected without throwing - written as `\uXXXX` escapes in
+  the test, never a pasted glyph.
+- Paths and `Est` naming the same number yield one; naming different numbers yield two.
 - `EnrichHairSubCategory`: assigns `"115"` on exactly one number; returns the input untouched for a
   non-Hair category, for `null`, for empty, and for two or more numbers.
 - `FlattenHairSubCategory`: clears the subcategory for Hair only, leaving Gear and NPC alone.
@@ -192,6 +228,16 @@ Unit tests, in the existing projects, against fixture directories written per te
   byte-identical, and put hair coverage in a new `OrganizerStateSortHairTests` with its own
   two-row fixture.
 - `ModEquipmentFileReaderTests`: unchanged, and passing, after the walker refactor.
+
+What the tests deliberately do **not** prove, so nobody mistakes a green run for more than it is:
+
+- That the `Category == Hair` disk-I/O gate exists. A Gear mod with hair paths keeps no hair
+  subcategory whether or not the gate is there, because `EnrichHairSubCategory` independently
+  refuses a non-Hair classification. The gate is a performance property with no seam to assert
+  through; it is checked by reading the code in review.
+- That the checkbox itself defaults off. `SortPanel`'s fields are private with no seam, so a
+  record-level test would only prove the record stores its constructor argument. The fresh-panel
+  default is on the in-game checklist instead.
 - The existing help-topic coverage test should fail until `SortSplitHair` is registered everywhere.
 
 Manual, in game, on a real library: the checkbox appears and is disabled under Creator-only; a
