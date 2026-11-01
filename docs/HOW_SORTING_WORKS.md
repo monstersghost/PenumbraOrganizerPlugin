@@ -8,7 +8,7 @@ anything the rules below don't recognize stays unclassified.
 
 Sort strategy decides what folder layout to build, given a mod's category and creator (see "Sort
 strategies" below). You choose one explicitly on the Sort tab: a "Group by" dropdown picks the
-strategy, two checkboxes decide whether Gear and NPC mods get subfolders, and the Sort button
+strategy, three checkboxes decide whether Gear, NPC and hair mods get subfolders, and the Sort button
 applies the combination.
 
 Classification happens once during `RunScan()` and is stored on each `OrganizerModRow`. Sorting
@@ -136,6 +136,36 @@ Slot names (`Head`, `Top`, `Hands`, `Legs`, `Feet`, `Ears`, `Neck`, `Wrists`, `R
 named `"Body"`, maps to `Top` here, deliberately distinct from this plugin's unrelated
 `ModCategory.Body` bucket for Smallclothes and skin mods.
 
+## Hair sub-classification (hair number)
+
+A mod classified `Hair` (its `Customization:` keys point at hair, which beats body and skin) gets
+its folder number from a second pass, the same shape as Gear: `ModTypeClassifier.EnrichHairSubCategory`
+runs only for mods already classified `Hair`, reading the mod's config once per Scan.
+
+`ModHairFileReader.ReadHairNumbers` collects vanilla hair numbers from two places in the mod's own
+Penumbra config JSON, and nowhere else:
+
+- `Files` game paths matching `chara/human/c####/obj/hair/h####/`. The number is the `h####` part.
+  The race code is matched to verify the path shape, then discarded, so a hair shipped for eight
+  clans is one number.
+- `Est` manipulations whose `Slot` is `Hair`. The number is the manipulation's `SetId`. `Entry` on
+  the same object is the EST skeleton row, not the hair, and is never read.
+
+The mod's name and its changed-item keys are never consulted. Numbers outside 1 to 9999 are
+discarded as evidence without failing the read. The read is fail-closed, as the equipment reader is:
+a config file that cannot be read, parsed, or enumerated makes the whole result unknown.
+
+Exactly one distinct number gives a subfolder: `Hair/115`. Zero numbers, two or more, or an unknown
+result all leave the mod directly in `Hair/`. There is no `Mixed` bucket. A mod can legitimately
+carry an `Est` entry for one hair and replacement paths for another; that reads as two numbers and
+files flat.
+
+The `Est` source rests on `SetId` naming the hair number. The repo's fixture and the implementation
+agree with that reading, but no real library has confirmed it yet. The manual checklist at
+`docs/testing/2026-11-01-hair-number-sorting-checklist.md` is where that happens.
+
+The **Split hair by hair number** checkbox defaults off and is disabled when Group by is Creator.
+
 ## Sort strategies
 
 Given each mod's `Category`, `SubCategory` (from classification above), and `Author`, one entry
@@ -155,7 +185,7 @@ OrganizerState.Sort(SortStrategy strategy, bool splitGear, bool splitNpc,
 | `TypeThenCreator` | Type then creator | `{Category}[/{SubCategory}]/{Creator}/{Name}` |
 | `CreatorThenType` | Creator then type | `{Creator}/{Category}[/{SubCategory}]/{Name}` |
 
-The two flags come from the checkboxes and decide whether `[/{SubCategory}]` survives, per
+The three flags come from the checkboxes and decide whether `[/{SubCategory}]` survives, per
 category. They are independent of each other and applied in sequence, which is what makes every
 combination reachable without writing a variant of each strategy:
 
@@ -163,12 +193,17 @@ combination reachable without writing a variant of each strategy:
 |------|-----|----|
 | `splitGear` | Gear mods get plain `Gear` | `Gear/Feet`, `Gear/Head`, and so on where the slot resolved |
 | `splitNpc` | **NPC mods get plain `NPC`** | `NPC/NPCs`, `NPC/Bosses`, `NPC/Enemies` |
+| `splitHair` | Hair mods get plain `Hair` | `Hair/115` where exactly one hair number resolved |
 
-`splitNpc: false` is new. NPC subdivision used to be unconditional, so no button ever produced a
-bare `NPC` folder. The selection space is 1 + (3 × 2 × 2) = 13 — `CreatorOnly` ignores both flags
-because it never consults the category — of which the seven buttons offered seven. **The six new
-ones are the whole `splitNpc: false` column**, and the checkbox defaults to on so an upgrading user
-keeps the old shape unless they change it.
+`splitNpc: false` arrived in 0.6.0. NPC subdivision used to be unconditional, so no button ever
+produced a bare `NPC` folder. At that point the selection space became 1 + (3 x 2 x 2) = 13 -
+`CreatorOnly` ignores the flags because it never consults the category - of which the seven
+original buttons offered seven. **The six new ones were the whole `splitNpc: false` column**, and
+that checkbox defaults to on so an upgrading user keeps the old shape unless they change it.
+
+`splitHair` then took the space to 1 + (3 x 2 x 2 x 2) = 25. Unlike `splitNpc` it defaults to
+**off**, so an unchanged install keeps producing flat `Hair/` and nobody's library reorganises
+itself because they updated the plugin.
 
 `{Category}[/{SubCategory}]` comes from `ModTypeFolders.GetFolder`, an explicit
 `(category, subCategory)` to folder-string mapping rather than an open-ended interpolation, so an

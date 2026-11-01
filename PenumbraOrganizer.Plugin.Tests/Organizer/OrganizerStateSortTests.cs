@@ -65,7 +65,7 @@ public class OrganizerStateSortTests
         string expectedGear, string expectedNpc, string expectedUnknown)
     {
         var state = WithMods();
-        state.Sort(strategy, splitGear, splitNpc, Canon);
+        state.Sort(strategy, splitGear, splitNpc, splitHair: false, Canon);
 
         Assert.Equal(
             [expectedGear, expectedNpc, expectedUnknown],
@@ -83,7 +83,7 @@ public class OrganizerStateSortTests
     {
         // The six new combinations. NPC-classified mods land in "NPC", never "NPC/Bosses".
         var state = WithMods();
-        state.Sort(strategy, splitGear, splitNpc: false, Canon);
+        state.Sort(strategy, splitGear, splitNpc: false, splitHair: false, Canon);
 
         var npcPaths = state.Mods
             .Where(m => m.Category == ModCategory.NPC)
@@ -106,7 +106,7 @@ public class OrganizerStateSortTests
         // Guards the fixture itself: if the NPC row ever stopped producing "NPC/Bosses" with the
         // split ON, every Sort_NpcSplitOff assertion above would pass vacuously.
         var state = WithMods();
-        state.Sort(strategy, splitGear, splitNpc: true, Canon);
+        state.Sort(strategy, splitGear, splitNpc: true, splitHair: false, Canon);
 
         var npcPath = state.Mods.Single(m => m.Category == ModCategory.NPC).ProposedPath;
         Assert.Contains("NPC/Bosses", npcPath);
@@ -116,8 +116,8 @@ public class OrganizerStateSortTests
     public void Sort_CreatorOnly_IgnoresBothSplits()
     {
         // By Creator never consults category, so neither split can change its output.
-        var a = WithMods(); a.Sort(SortStrategy.CreatorOnly, false, false, Canon);
-        var b = WithMods(); b.Sort(SortStrategy.CreatorOnly, true, true, Canon);
+        var a = WithMods(); a.Sort(SortStrategy.CreatorOnly, false, false, splitHair: false, Canon);
+        var b = WithMods(); b.Sort(SortStrategy.CreatorOnly, true, true, splitHair: false, Canon);
 
         Assert.Equal(a.Mods.Select(m => m.ProposedPath), b.Mods.Select(m => m.ProposedPath));
     }
@@ -130,7 +130,7 @@ public class OrganizerStateSortTests
         state.SetProtected("npc", true);
         var before = state.Mods.Single(m => m.Identifier == "npc").ProposedPath;
 
-        state.Sort(SortStrategy.TypeThenCreator, splitGear: true, splitNpc: true, Canon);
+        state.Sort(SortStrategy.TypeThenCreator, splitGear: true, splitNpc: true, splitHair: false, Canon);
 
         Assert.Equal(before, state.Mods.Single(m => m.Identifier == "npc").ProposedPath);
     }
@@ -141,6 +141,6 @@ public class OrganizerStateSortTests
         var state = WithMods();
         state.SetProtected("npc", true);
 
-        Assert.Equal(2, state.Sort(SortStrategy.TypeOnly, false, true, Canon));
+        Assert.Equal(2, state.Sort(SortStrategy.TypeOnly, false, true, splitHair: false, Canon));
     }
 }

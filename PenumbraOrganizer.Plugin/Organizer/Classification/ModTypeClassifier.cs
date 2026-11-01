@@ -24,9 +24,26 @@ public static class ModTypeFolders
         (ModCategory.NPC, "NPCs" or "Enemies" or "Bosses") => $"{ModCategory.NPC}/{subCategory}",
         (ModCategory.Gear, "Head" or "Top" or "Hands" or "Legs" or "Feet" or "Ears" or "Neck" or "Wrists" or "Rings")
             => $"{ModCategory.Gear}/{subCategory}",
+        // Hair cannot be enumerated the way the nine gear slots and three NPC kinds are - there are
+        // several hundred vanilla hair numbers. The shape is validated instead, which keeps the
+        // fail-fast intent above: Hair + "Bosses" still throws.
+        (ModCategory.Hair, _) when IsHairNumber(subCategory) => $"{ModCategory.Hair}/{subCategory}",
         _ => throw new ArgumentOutOfRangeException(
             nameof(subCategory), subCategory, $"Unsupported subcategory '{subCategory}' for {category}."),
     };
+
+    // One to four ASCII digits, no leading zero - that is, 1..9999 written plainly.
+    //
+    // This agrees with EnrichHairSubCategory because ModHairFileReader FILTERS its numbers to
+    // 1..9999, not because formatting an int guarantees anything: ToString gives you a well-formed
+    // decimal string, and "0" and "10000" are both well-formed and both rejected here. The range
+    // check in the reader is what makes the two sides line up, and this guard is what turns a
+    // future producer that skips it into a loud failure rather than a "Hair/0115" folder sitting
+    // beside an existing "Hair/115" one.
+    private static bool IsHairNumber(string? subCategory) =>
+        subCategory is { Length: >= 1 and <= 4 }
+        && subCategory[0] is >= '1' and <= '9'
+        && subCategory.All(char.IsAsciiDigit);
 }
 
 /// <summary>
@@ -56,13 +73,36 @@ public static class ModTypeClassifier
     // Second pass, run by the caller only when Classify already returned Category: Gear — never
     // a new top-level classification path, and Classify itself is never modified to call this.
     // Disk I/O for equipment-slot detection only happens where the caller chooses to call this,
-    // which Plugin.RunScan() gates on Category == Gear (see Plugin.cs).
+    // which ScanProcessor.Process gates on Category == Gear (see ScanProcessor.cs).
     public static ClassificationResult EnrichGearSubCategory(
         ClassificationResult baseResult, IReadOnlySet<EquipmentSlot>? equipmentSlots)
     {
         if (baseResult.Category != ModCategory.Gear || equipmentSlots is null || equipmentSlots.Count != 1)
             return baseResult; // not Gear, read failed, no evidence, or ambiguous (>1 slot) — untouched
         return baseResult with { SubCategory = EquipmentSlotMapper.FolderName(equipmentSlots.Single()) };
+    }
+
+    // The hair mirror of EnrichGearSubCategory, with the same guard shape and the same caller
+    // contract: a second pass the caller runs only when Classify already returned Category: Hair,
+    // never a new top-level classification path. Disk I/O happens only where the caller chooses to
+    // call this, which ScanProcessor gates on Category == Hair.
+    public static ClassificationResult EnrichHairSubCategory(
+        ClassificationResult baseResult, IReadOnlySet<int>? hairNumbers)
+    {
+        if (baseResult.Category != ModCategory.Hair || hairNumbers is null || hairNumbers.Count != 1)
+            return baseResult; // not Hair, read failed, no evidence, or ambiguous (>1 number) - untouched
+
+        // Invariant, and unpadded: ModTypeFolders.IsHairNumber rejects a leading zero, so a
+        // culture-dependent or padded format here would throw inside the sort rather than quietly
+        // creating a second folder for the same hair.
+        //
+        // The VALUE is in range because ModHairFileReader filtered it to 1..9999. This method does
+        // not re-check that: one owner for the domain, and the reader is it. If this ever takes
+        // numbers from somewhere else, that source must filter too.
+        return baseResult with
+        {
+            SubCategory = hairNumbers.Single().ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
     }
 
     // Returns the single category one changed-item key alone implies, with no cross-key

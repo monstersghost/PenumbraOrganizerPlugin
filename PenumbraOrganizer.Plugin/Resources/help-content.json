@@ -141,6 +141,11 @@
       "short": "Puts NPC mods in NPC/NPCs, NPC/Bosses or NPC/Enemies. Turn it off to keep every NPC mod in one NPC folder."
     },
     {
+      "id": "sort.split-hair",
+      "title": "Split hair by hair number",
+      "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
+    },
+    {
       "id": "sort.button",
       "title": "Sort",
       "short": "Works out a new folder for every unprotected mod and shows it on the Review Changes tab. Your library is not touched until you apply it."

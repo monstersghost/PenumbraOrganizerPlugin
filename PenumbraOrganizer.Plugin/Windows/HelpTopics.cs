@@ -46,6 +46,7 @@ public static class HelpTopics
     public static readonly HelpTopic SortGrouping = new("sort.grouping");
     public static readonly HelpTopic SortSplitGear = new("sort.split-gear");
     public static readonly HelpTopic SortSplitNpc = new("sort.split-npc");
+    public static readonly HelpTopic SortSplitHair = new("sort.split-hair");
     public static readonly HelpTopic SortButton = new("sort.button");
     public static readonly HelpTopic SortScrapedNpcList = new("sort.scraped-npc-list");
     public static readonly HelpTopic SortImportWorkbook = new("sort.import-workbook");

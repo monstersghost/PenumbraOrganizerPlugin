@@ -8,10 +8,10 @@ public class SortSelectionTests
     [Fact]
     public void SplitsApply_IsFalseOnlyForCreatorOnly()
     {
-        Assert.False(new SortSelection(SortStrategy.CreatorOnly, false, false).SplitsApply);
-        Assert.True(new SortSelection(SortStrategy.TypeOnly, false, false).SplitsApply);
-        Assert.True(new SortSelection(SortStrategy.TypeThenCreator, false, false).SplitsApply);
-        Assert.True(new SortSelection(SortStrategy.CreatorThenType, false, false).SplitsApply);
+        Assert.False(new SortSelection(SortStrategy.CreatorOnly, false, false, false).SplitsApply);
+        Assert.True(new SortSelection(SortStrategy.TypeOnly, false, false, false).SplitsApply);
+        Assert.True(new SortSelection(SortStrategy.TypeThenCreator, false, false, false).SplitsApply);
+        Assert.True(new SortSelection(SortStrategy.CreatorThenType, false, false, false).SplitsApply);
     }
 
     [Fact]
@@ -51,10 +51,41 @@ public class SortSelectionTests
         // The staleness line compares the current selection against the one last sorted with. A
         // class here would compare by reference and the line would show after every sort.
         Assert.Equal(
-            new SortSelection(SortStrategy.TypeOnly, true, false),
-            new SortSelection(SortStrategy.TypeOnly, true, false));
+            new SortSelection(SortStrategy.TypeOnly, true, false, false),
+            new SortSelection(SortStrategy.TypeOnly, true, false, false));
         Assert.NotEqual(
-            new SortSelection(SortStrategy.TypeOnly, true, false),
-            new SortSelection(SortStrategy.TypeOnly, true, true));
+            new SortSelection(SortStrategy.TypeOnly, true, false, false),
+            new SortSelection(SortStrategy.TypeOnly, true, true, false));
     }
+
+    [Fact]
+    public void SortSelection_ValueEquality_CoversSplitHair()
+    {
+        // Pins exactly one thing: that two selections differing only in SplitHair compare unequal,
+        // i.e. that SplitHair is a positional member the generated equality covers.
+        //
+        // It does NOT pin the staleness behaviour it enables, and should not be counted as
+        // coverage of it. The staleness line lives in SortPanel, which builds the selection and
+        // assigns _lastSorted; a mutation there - a selection built with SplitHair hard-coded, or
+        // from a stale _splitHair - passes this test unchanged. SortPanel.Draw is ImGui-bound with
+        // private fields and no seam, so that path is on the in-game checklist instead.
+        Assert.NotEqual(
+            new SortSelection(SortStrategy.TypeOnly, false, false, false),
+            new SortSelection(SortStrategy.TypeOnly, false, false, true));
+    }
+
+    [Fact]
+    public void SplitsApply_IgnoresEveryFlag_AndReadsOnlyTheStrategy()
+    {
+        // The hair checkbox is disabled under Creator-only for the same reason as the other two:
+        // that strategy never consults the category at all.
+        Assert.False(new SortSelection(SortStrategy.CreatorOnly, true, true, true).SplitsApply);
+        Assert.True(new SortSelection(SortStrategy.TypeOnly, false, false, true).SplitsApply);
+    }
+
+    // Deliberately NOT here: a "SplitHair defaults off" test on the record. Passing false in and
+    // asserting false comes out only proves the record stores its constructor argument - it cannot
+    // see SortPanel's _splitHair initialiser, which is the thing that would actually be wrong.
+    // Those fields are private with no seam, so the fresh-panel default is on the in-game
+    // checklist instead, where it is observable.
 }

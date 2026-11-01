@@ -98,7 +98,14 @@ back to the plain `Gear` folder.
 earlier versions, where NPC mods were always subdivided — if you preferred the old behaviour, leave
 this ticked, as it is by default.
 
-Both checkboxes are greyed out when Group by is set to Creator, because grouping by creator alone
+**Split hair by hair number** puts a hair mod in a folder named after the vanilla hair number it
+replaces, such as `Hair/115`, when the mod targets exactly one number. A mod that targets two or more
+numbers, or whose files could not be read, stays directly in `Hair`, as does every hair mod while
+this is off. The numbers come from the mod's own configuration, not its name. The checkbox is off by
+default. Penumbra sorts its folders as text, so `Hair/9` appears after `Hair/115`; that is expected,
+not a fault.
+
+All three checkboxes are greyed out when Group by is set to Creator, because grouping by creator alone
 never looks at a mod's type.
 
 A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it's

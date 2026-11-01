@@ -256,23 +256,22 @@ public sealed class OrganizerState
     /// from those methods while they still existed.
     /// </summary>
     /// <remarks>
-    /// The two splits are independent of each other and both are ignored by
+    /// The three splits are independent of each other and all are ignored by
     /// <see cref="SortStrategy.CreatorOnly"/>, which never consults the category at all. That gives
-    /// 1 + (3 x 2 x 2) = 13 selections, of which the seven buttons offered seven; the six new ones
-    /// are the whole splitNpc: false column, which had no button because NPC subdivision used to be
-    /// unconditional.
+    /// 1 + (3 x 2 x 2 x 2) = 25 selections, of which the seven original buttons offered seven.
     /// </remarks>
-    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc,
+    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
                     Func<string, string> canonicalizeCreator)
     {
-        // Composed, not switched over: the two flatteners are independent decisions about the same
-        // subcategory, so applying them in sequence is what makes all four combinations reachable
-        // without writing four variants of each strategy.
+        // Composed, not switched over: the three flatteners are independent decisions about the same
+        // subcategory, so applying them in sequence is what makes every combination reachable
+        // without writing eight variants of each strategy.
         string? Sub(OrganizerModRow row)
         {
             var sub = row.SubCategory;
             if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
             if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
+            if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
             return sub;
         }
 
@@ -301,6 +300,11 @@ public sealed class OrganizerState
     // all six newly reachable combinations.
     private static string? FlattenNpcSubCategory(ModCategory? category, string? subCategory) =>
         category == ModCategory.NPC ? null : subCategory;
+
+    // The hair mirror of the two above. Like gear and unlike NPC, this has a checkbox and defaults
+    // off, so flat "Hair" is what an unchanged install produces.
+    private static string? FlattenHairSubCategory(ModCategory? category, string? subCategory) =>
+        category == ModCategory.Hair ? null : subCategory;
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
