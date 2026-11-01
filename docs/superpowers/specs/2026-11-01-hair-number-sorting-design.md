@@ -250,7 +250,21 @@ What the tests deliberately do **not** prove, so nobody mistakes a green run for
 - The existing help-topic coverage test should fail until `SortSplitHair` is registered everywhere.
 
 Manual, in game, on a real library: the checkbox appears and is disabled under Creator-only; a
-library with hair mods produces plausible numbers; the diagnostic export is unchanged.
+library with hair mods produces plausible numbers.
+
+Two things that DO change for a user who never touches the checkbox, neither affecting their
+proposed layout (corrected 2026-11-01; an earlier draft of this line claimed the diagnostic export
+was unchanged, which is false):
+
+- **The diagnostic export differs.** `OrganizerExportFormatter` prints `SubCategory:` for every
+  mod, and enrichment happens at scan time regardless of the checkbox, so a hair mod whose number
+  resolves now exports `SubCategory: 115` where it previously exported nothing. The checklist uses
+  this deliberately - it is how the tester spot-checks the numbers.
+- **Scanning a hair mod costs one extra config-file walk.** The `Category == Hair` gate skips every
+  other category, but it does not consult the checkbox, so a hair-heavy library pays that cost on
+  every scan even with the split permanently off. Filing is what the checkbox controls, not the
+  read. Acceptable - the walk is the same one the gear path already does per gear mod - but "the
+  checkbox is off so nothing changed" is not true at scan time.
 
 ## Non-ASCII note
 

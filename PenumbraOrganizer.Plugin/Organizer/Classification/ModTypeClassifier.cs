@@ -90,7 +90,7 @@ public static class ModTypeClassifier
         ClassificationResult baseResult, IReadOnlySet<int>? hairNumbers)
     {
         if (baseResult.Category != ModCategory.Hair || hairNumbers is null || hairNumbers.Count != 1)
-            return baseResult; // not Hair, read failed, no evidence, or ambiguous (>1 number) — untouched
+            return baseResult; // not Hair, read failed, no evidence, or ambiguous (>1 number) - untouched
 
         // Invariant, and unpadded: ModTypeFolders.IsHairNumber rejects a leading zero, so a
         // culture-dependent or padded format here would throw inside the sort rather than quietly

@@ -22,9 +22,10 @@ public readonly record struct SortSelection(SortStrategy Strategy, bool SplitGea
 }
 
 /// <summary>
-/// The Sort tab's grouping control: a Group by dropdown, two split checkboxes, the scraped-list
+/// The Sort tab's grouping control: a Group by dropdown, three split checkboxes, the scraped-list
 /// opt-in and the Sort button. Replaces the seven sort buttons, and exposes the six combinations
-/// they never offered - the whole splitNpc-off column.
+/// they never offered - the whole splitNpc-off column - plus, since the hair split was added,
+/// everything in the splitHair-on half.
 /// </summary>
 /// <remarks>
 /// public, not internal: see <see cref="SortSelection"/>.

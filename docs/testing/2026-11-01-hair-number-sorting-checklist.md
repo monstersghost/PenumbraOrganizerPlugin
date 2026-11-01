@@ -41,7 +41,9 @@ the code that applies it - not from agreement between numbers. Then corroborate 
 - [ ] Selecting "Creator" under Group by disables it, with the tooltip explaining that grouping by
       creator never uses the mod's type.
 - [ ] Hovering it shows its own help text.
-- [ ] It appears in the Help tab's Sort section with a body.
+- [ ] It appears in the Help tab's Sort section, with its description text shown. That text is
+      the topic's `short` - control topics carry no separate body, and the Help tab falls back to
+      the short for them, so do not go looking for a longer paragraph.
 
 ## Sorting
 
