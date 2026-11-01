@@ -148,7 +148,7 @@
     {
       "id": "sort.hair-resolution",
       "title": "How a hair mod is filed",
-      "body": "A hair mod goes under a vanilla hair number when all of its files replace the same hair, as Hair/115.\n\nIf its files replace more than one hair number, for example a different hair for Viera than for other races, it stays in the plain Hair folder.\n\nIf the plugin cannot read the numbers from the mod's files, it also stays in Hair."
+      "body": "A hair mod is filed under one hair number when the plugin can tell which hair it replaces.\n\nIf Priority race names a race that has exactly one hair number in the mod, the mod goes under that number, whatever the other races use.\n\nOtherwise, if the whole mod uses one hair number, it goes under that number.\n\nIf the mod uses different numbers across races, the Midlander fallback can settle it. It uses the Midlander number when male and female Midlanders agree, or the only Midlander number when one gender is present. Otherwise the mod stays in the plain Hair folder.\n\nA race with two hair numbers in the same mod never picks one, so that mod stays in Hair."
     },
     {
       "id": "sort.split-hair",

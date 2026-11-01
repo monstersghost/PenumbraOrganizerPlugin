@@ -22,3 +22,14 @@ Build and load the plugin. Use the real mods named below, from the test set.
 ## Button and Help
 - [ ] The Priority race and Midlander fallback controls are disabled when Split hair is off.
 - [ ] Changed Items names: for each mod above, the number in Penumbra's changed-item name matches the number the plugin files under. Record any mismatch.
+
+## Results
+
+Recorded from the maintainer's in-game testing on 2026-11-01:
+
+- Hair sorting by race works, including the Midlander fallback.
+- Zutail Hair with priority Viera female stays in flat `Hair`. This is the expected result: the mod has
+  no Viera folder, and its female Midlander carries two numbers (147 and 169), so the mod stays flat.
+  The Midlander fallback cannot settle a single race with two numbers.
+
+Not yet recorded: the individual boxes above, and the changed-item number check. Tick them as they are run.

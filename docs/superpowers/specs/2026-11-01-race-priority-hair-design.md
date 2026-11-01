@@ -194,8 +194,8 @@ On the Sort tab, in the Hair group (see the layout spec):
 - The map is keyed by race and gender as Penumbra names them, so that `EnrichHairSubCategory` can match
   a priority against it without a code table.
 - The race list covers all eighteen codes in the table above, matched by folder code.
-- `EnrichHairSubCategory` takes the priority and the fallback flag, and applies steps 1-5. It remains the
-  single place that decides the number.
+- Scan: `ScanProcessor` stores each hair row's flat set and per-race sets on `OrganizerModRow`. `EnrichHairSubCategory` still stores the 0.6.1.0 flat number at scan time, unchanged.
+- Sort: `OrganizerState.Sort` applies `HairPriorityResolver` to each hair row when Split hair is on. The priority is chosen at Sort time, so it cannot be applied at scan time.
 - The priority and the fallback travel with the sort selection, as `splitHair` does.
 
 ## Testing
@@ -210,9 +210,6 @@ On the Sort tab, in the Hair group (see the layout spec):
 
 ## Open questions
 
-1. **A tiebreak for two numbers in one race.** The Midlander rule is the only tiebreak in this draft, and it
-   leaves Zutail flat for Midlander ♀. A principled option is the number that appears under the most race
-   folders (169 here, under seven of eight). It is not arbitrary, but it is a new rule. Adopt it, or keep
-   the draft?
+1. **Resolved: no tiebreak.** Two numbers within one race stay flat. Decided with the maintainer after in-game testing: a race with two hair numbers never picks one.
 2. **Timing.** This feature changes filing only when its controls are used. It does not depend on the EST
    question, since Zutail has no manipulations. Should it still wait for the in-game confirmation?
