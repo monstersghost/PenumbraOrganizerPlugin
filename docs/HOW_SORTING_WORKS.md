@@ -246,3 +246,36 @@ Running a second sort strategy without rescanning reuses the same classification
 different path shape. That means installing a new mod, or a mod's changed items changing (for
 instance when a Penumbra update adds new files to an existing mod), requires a fresh Scan before
 its category reflects reality.
+
+## Hair priority worked examples (real mods)
+
+These rows come from the race-priority hair design. Each row names the step of the priority rules
+that decides the result. Step 1 is the priority race with exactly one number, step 2 is a priority
+race with no entry in the mod, step 3 is one number in the whole mod, step 4 is the Midlander
+fallback, and step 5 is the flat `Hair` result. Race folders are matched by their folder code.
+
+### Devilry Hair With Bow
+
+Hair 108 for most races; the Viera female folder (c1801) uses 3.
+
+| Priority | Step that resolves | Result |
+|---|---|---|
+| Midlander female | Step 1: one number, 108 | `Hair/108` |
+| Viera female | Step 1: one number, 3 | `Hair/3` |
+| None | Step 3: two numbers across races, fallback off | `Hair` |
+
+### Zutail
+
+Female folders only, with two numbers: 147 and 169. The mod has no Viera folder.
+
+| Priority | Step that resolves | Result |
+|---|---|---|
+| Miqo'te female | Step 1: one number, 169 | `Hair/169` |
+| Elezen, Roegadyn, Lalafell or Highlander female | Step 1: one number, 169 | `Hair/169` |
+| Au Ra female | Step 1: two numbers (147 and 169), not exactly one; falls to step 3, which gives two numbers, fallback off | `Hair` |
+| Midlander female | Step 1: two numbers; falls to step 3, which gives two; Midlander fallback: only female, two numbers, so step 5 | `Hair` |
+| Viera female | Step 2: no Viera folder, so step 3 gives two numbers, flat | `Hair` |
+| None | Step 3: two numbers, fallback off | `Hair` |
+
+Midlander female with the fallback on still stays flat for this mod, because the fallback needs a
+single number from the Midlander entries, and the female-only Midlander entries carry two.
