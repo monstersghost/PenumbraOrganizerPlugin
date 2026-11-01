@@ -1608,13 +1608,22 @@ And the `Sort` call near line 121 becomes what Task 5 deferred:
         HelpTopics.SortSplitHair,
 ```
 
-Then add the content to the help resource file, matching the surrounding entries' shape exactly (find it with the grep in this task's Files list, and copy the `sort.split-gear` entry's structure):
+Then add the content to the help resource, which is `PenumbraOrganizer.Plugin/Resources/help-content.json` - a `{"topics": [...]}` array. Copy the `sort.split-npc` entry's shape exactly:
 
-- **Title:** `Split hair by hair number`
-- **Short:** `File each hair mod under the vanilla hair number it replaces.`
-- **Body:** `A hair mod that clearly replaces one vanilla hair goes into a numbered subfolder, for example Hair/115. A mod that covers several hair numbers, or whose files could not be read, stays directly in Hair. Penumbra sorts folders as text, so Hair/9 appears after Hair/115.`
+```json
+{
+  "id": "sort.split-hair",
+  "title": "Split hair by hair number",
+  "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
+}
+```
 
-That last sentence is there so nobody files it as a bug. It is the accepted consequence of using the bare number rather than a zero-padded one.
+Two corrections to an earlier draft of this step, both found during implementation (2026-11-01):
+
+- **`id`/`title`/`short` only - no `body`.** Sibling control topics carry no body, and `Help.Body(control) ?? Help.Short(control)` means a control's reference entry falls back to its short text. The "every section topic has a body" assertion in `HelpTabTests` applies to SECTION topics, not controls.
+- **`short` is capped at 200 characters**, enforced by `HelpContentTests.NoShortContainsANewlineOrExceedsTheLengthCap`, which also forbids `\n` and `\r`. The draft wording ran to 247 and failed. The text above is 182. Count it before committing rather than discovering this from a red test.
+
+The last sentence about ordering is there so nobody files it as a bug. It is the accepted consequence of the bare number rather than a zero-padded one.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
