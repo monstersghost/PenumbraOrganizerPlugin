@@ -195,11 +195,15 @@ combination reachable without writing a variant of each strategy:
 | `splitNpc` | **NPC mods get plain `NPC`** | `NPC/NPCs`, `NPC/Bosses`, `NPC/Enemies` |
 | `splitHair` | Hair mods get plain `Hair` | `Hair/115` where exactly one hair number resolved |
 
-`splitNpc: false` is new. NPC subdivision used to be unconditional, so no button ever produced a
-bare `NPC` folder. The selection space is 1 + (3 × 2 × 2) = 13 — `CreatorOnly` ignores both flags
-because it never consults the category — of which the seven buttons offered seven. **The six new
-ones are the whole `splitNpc: false` column**, and the checkbox defaults to on so an upgrading user
-keeps the old shape unless they change it.
+`splitNpc: false` arrived in 0.6.0. NPC subdivision used to be unconditional, so no button ever
+produced a bare `NPC` folder. At that point the selection space became 1 + (3 x 2 x 2) = 13 -
+`CreatorOnly` ignores the flags because it never consults the category - of which the seven
+original buttons offered seven. **The six new ones were the whole `splitNpc: false` column**, and
+that checkbox defaults to on so an upgrading user keeps the old shape unless they change it.
+
+`splitHair` then took the space to 1 + (3 x 2 x 2 x 2) = 25. Unlike `splitNpc` it defaults to
+**off**, so an unchanged install keeps producing flat `Hair/` and nobody's library reorganises
+itself because they updated the plugin.
 
 `{Category}[/{SubCategory}]` comes from `ModTypeFolders.GetFolder`, an explicit
 `(category, subCategory)` to folder-string mapping rather than an open-ended interpolation, so an
