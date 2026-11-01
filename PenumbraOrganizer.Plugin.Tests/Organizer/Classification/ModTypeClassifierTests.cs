@@ -404,6 +404,36 @@ public class ModTypeClassifierTests
         Assert.Throws<ArgumentOutOfRangeException>(() => ModTypeFolders.GetFolder(ModCategory.Gear, "NotARealSlot"));
     }
 
+    [Fact]
+    public void GetFolder_HairWithANumber_NestsUnderHair()
+    {
+        Assert.Equal("Hair/115", ModTypeFolders.GetFolder(ModCategory.Hair, "115"));
+        Assert.Equal("Hair/9", ModTypeFolders.GetFolder(ModCategory.Hair, "9"));
+        Assert.Equal("Hair/9999", ModTypeFolders.GetFolder(ModCategory.Hair, "9999"));
+    }
+
+    [Fact]
+    public void GetFolder_HairWithNoSubCategory_IsStillFlatHair()
+    {
+        // The split-off case, and every hair mod whose number could not be resolved.
+        Assert.Equal("Hair", ModTypeFolders.GetFolder(ModCategory.Hair, null));
+    }
+
+    [Theory]
+    [InlineData("Bosses")]    // a classifier bug crossing NPC vocabulary into Hair
+    [InlineData("0115")]      // zero-padded: EnrichHairSubCategory never produces this, so it is a bug
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("115a")]
+    [InlineData("12345")]     // five digits is not a hair number
+    [InlineData("-1")]
+    public void GetFolder_HairWithANonNumberSubCategory_Throws(string subCategory)
+    {
+        // The fail-fast property the switch's own comment is protecting. An open-ended arm here
+        // would silently create a nonsense folder instead.
+        Assert.Throws<ArgumentOutOfRangeException>(() => ModTypeFolders.GetFolder(ModCategory.Hair, subCategory));
+    }
+
     // --- EnrichGearSubCategory ---
 
     [Fact]
