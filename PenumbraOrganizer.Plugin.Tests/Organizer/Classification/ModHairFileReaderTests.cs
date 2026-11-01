@@ -367,4 +367,3 @@ public class ModHairFileReaderTests
         Assert.Empty(result);
     }
 }
-// marker
