@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.LibraryWork.Pure;
+using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Tests.LibraryWork;
@@ -206,5 +207,44 @@ public class ScanProcessorTests
         {
             dir.Delete(recursive: true);
         }
+    }
+
+    private static OrganizerModRow ScanWithFiles(string name, string changedItem, params string[] gamePaths)
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            var entries = string.Join(",", gamePaths.Select((p, i) => "\"" + p + "\":\"f" + i + ".mdl\""));
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                "{\"DefaultData\":{\"Files\":{" + entries + "}}}");
+            return NewProcessor().Process(Seed(dir.FullName, name, changedItem), CancellationToken.None)!;
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void HairRow_CarriesThePerRaceEvidenceForLaterSorting()
+    {
+        // A hair mod whose Viera female folder has a different number from the rest. The row must
+        // keep both views so Sort can apply a priority without re-reading the disk.
+        var row = ScanWithFiles("Some Hair Pack", "Customization: Midlander Female Hair 157",
+            "chara/human/c0801/obj/hair/h0108/model/a.mdl",
+            "chara/human/c1801/obj/hair/h0003/model/b.mdl");
+
+        Assert.Equal("0801", row.HairByRaceCode!.Keys.Single(k => k == "0801"));
+        Assert.Equal(new HashSet<int> { 3 }, row.HairByRaceCode!["1801"].ToHashSet());
+        Assert.Equal(new HashSet<int> { 3, 108 }, row.HairFlat!.ToHashSet());
+    }
+
+    [Fact]
+    public void NonHairRow_CarriesNoHairEvidence()
+    {
+        var row = ScanWithFiles("Some Mod", "Ala Mhigan Gown", "chara/equipment/e0001/model/c0201e0001_top.mdl");
+        Assert.Null(row.HairFlat);
+        Assert.Null(row.HairByRaceCode);
     }
 }
