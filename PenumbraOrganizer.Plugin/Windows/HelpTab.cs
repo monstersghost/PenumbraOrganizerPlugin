@@ -57,6 +57,25 @@ public static class HelpTab
     public const string DiscordUrl = "https://discord.gg/NHssF8ux6B";
 
     /// <summary>
+    /// The repository root, for the title bar's GitHub button. The front door, deliberately, rather
+    /// than a deep link to /issues - the issues tab is one click from here.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="DiscordUrl"/> and unlike <see cref="GuideUrl"/>, this is NOT version-pinned
+    /// and must not be: an older build reaching the live repository is exactly what you want.
+    /// </remarks>
+    public const string GitHubUrl = "https://github.com/monstersghost/PenumbraOrganizerPlugin";
+
+    /// <summary>
+    /// The tip jar, for the title bar's Ko-fi button.
+    /// </summary>
+    /// <remarks>
+    /// Not version-pinned, for <see cref="DiscordUrl"/>'s reason. A dead link here cannot be fixed
+    /// in a release that has already shipped.
+    /// </remarks>
+    public const string KofiUrl = "https://ko-fi.com/K3K47YKER";
+
+    /// <summary>
     /// Reading order, which is not tab order: what the plugin does and what is safe come first,
     /// because they are what a new user needs before touching anything.
     /// </summary>
@@ -156,12 +175,12 @@ public static class HelpTab
         using (PluginTheme.PrimaryButton())
         {
             if (ImGui.Button("Join the Discord for support"))
-                OpenUrl(DiscordUrl);
+                BrowserLink.Open(DiscordUrl);
         }
 
         ImGui.SameLine();
         if (ImGui.Button("Open the full guide in your browser"))
-            OpenUrl(GuideUrl);
+            BrowserLink.Open(GuideUrl);
 
         if (onShowWalkthrough is not null)
         {
@@ -212,21 +231,5 @@ public static class HelpTab
         }
 
         ImGui.PopTextWrapPos();
-    }
-
-    // Uses the OS handler rather than any in-game browser: Dalamud plugins have no way to open a
-    // page in game, and silently doing nothing would look like a broken button.
-    private static void OpenUrl(string url)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            // A failed browser launch must not take the draw call with it - this runs inside the
-            // frame, and an exception here would tear down the whole window.
-            Plugin.Log.Warning(ex, $"Could not open {url} in a browser.");
-        }
     }
 }

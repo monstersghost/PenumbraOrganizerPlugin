@@ -97,4 +97,29 @@ public class HelpTabTests
         Assert.StartsWith("https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/", HelpTab.GuideUrl);
         Assert.EndsWith("/docs/USER_GUIDE.md", HelpTab.GuideUrl);
     }
+
+    [Fact]
+    public void TheRepositoryLink_PointsAtThisRepoRoot_AndIsNotVersionPinned()
+    {
+        // Repo root, not /issues and not a deep link: the root is the front door and the issues
+        // tab is one click from it. The version check is the inverse of GuideUrl's - pinning this
+        // would be the bug, since an older build should still reach the live repository.
+        Assert.Equal("https://github.com/monstersghost/PenumbraOrganizerPlugin", HelpTab.GitHubUrl);
+        Assert.DoesNotContain("/blob/", HelpTab.GitHubUrl);
+        Assert.DoesNotContain("/issues", HelpTab.GitHubUrl);
+
+        var version = typeof(PenumbraOrganizer.Plugin.Plugin).Assembly.GetName().Version!.ToString(4);
+        Assert.DoesNotContain(version, HelpTab.GitHubUrl);
+    }
+
+    [Fact]
+    public void TheKofiLink_IsAbsoluteHttps_AndNotVersionPinned()
+    {
+        // Baked into every shipped binary, so it must stay valid for releases that can no longer
+        // be changed - the same reasoning as the Discord invite.
+        Assert.StartsWith("https://ko-fi.com/", HelpTab.KofiUrl);
+
+        var version = typeof(PenumbraOrganizer.Plugin.Plugin).Assembly.GetName().Version!.ToString(4);
+        Assert.DoesNotContain(version, HelpTab.KofiUrl);
+    }
 }
