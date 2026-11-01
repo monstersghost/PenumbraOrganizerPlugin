@@ -19,8 +19,9 @@ public static class ModHairFileReader
     private const int MaxHairNumber = 9999;
 
     // Anchored at the start: Files keys are full game paths, and an unanchored match would accept
-    // a path that merely CONTAINS this shape. The c#### race code is matched so the path shape is
-    // actually verified, then discarded - one hair shipped for eight clans is one number, not eight.
+    // a path that merely CONTAINS this shape. Group 1 is the race folder code, kept for the
+    // per-race evidence; group 2 is the hair number. The flat set still collapses across races -
+    // one hair shipped for eight clans is one number, not eight.
     //
     // [0-9], NOT \d: .NET's \d matches every Unicode decimal digit, so a path with fullwidth or
     // Devanagari digits would MATCH here and then throw FormatException inside the parse - an
@@ -28,31 +29,49 @@ public static class ModHairFileReader
     // bitten three times by a non-ASCII codepoint reaching code as something other than what it
     // looked like; this is that same hazard in regex form.
     private static readonly Regex HairPath = new(
-        @"^chara/human/c[0-9]{4}/obj/hair/h([0-9]{4})/",
+        @"^chara/human/c([0-9]{4})/obj/hair/h([0-9]{4})/",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    /// <summary>The flat set and the per-race sets, read in one walk of the mod.</summary>
+    /// <remarks>
+    /// <c>Flat</c> is every supported hair number from file paths and EST entries. <c>ByRaceCode</c>
+    /// holds only file paths, keyed by the four-digit race folder code. An EST entry names a race in the
+    /// metadata, but this reader does not use that race, so an EST SetId never appears under any code.
+    /// </remarks>
+    public sealed record HairEvidence(
+        IReadOnlySet<int> Flat,
+        IReadOnlyDictionary<string, IReadOnlySet<int>> ByRaceCode);
+
     /// <summary>
-    /// Returns every hair number found across the mod's files.
-    /// <list type="bullet">
-    /// <item>null - some file could not be read, parsed, or enumerated. An untrustworthy partial
-    /// result, treated as "no subcategory", never as a confident (possibly wrong) answer.</item>
-    /// <item>non-null, possibly empty - every file read successfully; empty means none carried
-    /// recognized hair path or Est manipulation data.</item>
-    /// </list>
+    /// Reads the mod's hair evidence in one walk. Null means the walk could not be trusted, the same
+    /// meaning <see cref="ReadHairNumbers"/> has always had.
     /// </summary>
-    public static IReadOnlySet<int>? ReadHairNumbers(DirectoryInfo modDirectory)
+    public static HairEvidence? ReadHairEvidence(DirectoryInfo modDirectory)
     {
-        var numbers = new HashSet<int>();
+        var flat = new HashSet<int>();
+        var byRace = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
 
         var ok = ModConfigFileWalker.TryWalk(
             modDirectory,
-            path => CollectFromFileKey(path, numbers),
-            item => CollectFromManipulation(item, numbers));
+            path => CollectFromFileKey(path, flat, byRace),
+            item => CollectFromManipulation(item, flat));
 
-        return ok ? numbers : null;
+        if (!ok)
+            return null;
+
+        var frozen = byRace.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlySet<int>)pair.Value,
+            StringComparer.Ordinal);
+        return new HairEvidence(flat, frozen);
     }
 
-    private static void CollectFromFileKey(string path, HashSet<int> numbers)
+    /// <summary>The flat set only, for callers that do not need the race split.</summary>
+    public static IReadOnlySet<int>? ReadHairNumbers(DirectoryInfo modDirectory) =>
+        ReadHairEvidence(modDirectory)?.Flat;
+
+    private static void CollectFromFileKey(
+        string path, HashSet<int> flat, Dictionary<string, HashSet<int>> byRace)
     {
         // Already '/'-normalised by the walker.
         var match = HairPath.Match(path);
@@ -61,24 +80,31 @@ public static class ModHairFileReader
 
         // TryParse, not Parse: four ASCII digits cannot overflow an int, but a defensive parse
         // costs nothing and survives someone widening the pattern later.
-        if (int.TryParse(match.Groups[1].ValueSpan, System.Globalization.NumberStyles.None,
+        if (!int.TryParse(match.Groups[2].ValueSpan, System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out var number))
-            AddIfSupported(number, numbers);
+            return;
+        if (number is < MinHairNumber or > MaxHairNumber)
+            return;
+
+        flat.Add(number);
+        var raceCode = match.Groups[1].Value;
+        if (!byRace.TryGetValue(raceCode, out var set))
+            byRace[raceCode] = set = [];
+        set.Add(number);
     }
 
-    // The ONE place the supported range is enforced, for both evidence sources. h0000 parses
-    // cleanly to 0 and an Est SetId can be any int; either would format into a subcategory that
-    // ModTypeFolders.IsHairNumber rejects, and GetFolder throws on rejection - a crash inside the
-    // sort rather than a mod quietly staying flat. Out-of-range evidence is DISCARDED, not
-    // promoted to a read failure: a stray h0000 beside a real h0115 should still file the mod
-    // under 115, and treating it as untrustworthy would throw away a good answer.
-    private static void AddIfSupported(int number, HashSet<int> numbers)
+    // The range guard for EST evidence. File-path evidence is bounded in CollectFromFileKey by the
+    // same two constants, so the range is defined once. h0000 parses cleanly to 0 and an Est SetId
+    // can be any int; either would format into a subcategory that ModTypeFolders.IsHairNumber
+    // rejects, and GetFolder throws on rejection. Out-of-range evidence is DISCARDED, not promoted
+    // to a read failure: a stray h0000 beside a real h0115 should still file the mod under 115.
+    private static void AddIfSupported(int number, HashSet<int> flat)
     {
         if (number is >= MinHairNumber and <= MaxHairNumber)
-            numbers.Add(number);
+            flat.Add(number);
     }
 
-    private static void CollectFromManipulation(JsonElement item, HashSet<int> numbers)
+    private static void CollectFromManipulation(JsonElement item, HashSet<int> flat)
     {
         if (item.ValueKind != JsonValueKind.Object)
             return;
@@ -102,6 +128,6 @@ public static class ModHairFileReader
         if (manipulation.TryGetProperty("SetId", out var setId)
             && setId.ValueKind == JsonValueKind.Number
             && setId.TryGetInt32(out var number))
-            AddIfSupported(number, numbers);
+            AddIfSupported(number, flat);
     }
 }
