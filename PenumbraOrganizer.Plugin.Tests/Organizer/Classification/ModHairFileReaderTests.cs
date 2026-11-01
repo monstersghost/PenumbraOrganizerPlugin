@@ -376,4 +376,73 @@ public class ModHairFileReaderTests
         Assert.NotNull(result);   // NOT null: this is a rejected path, not a read failure
         Assert.Empty(result);
     }
+
+    [Fact]
+    public void ReadHairEvidence_KeysEachFileSetByItsRaceCode()
+    {
+        // c0201 has 147 and 169; c1801 has 3.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{
+              "chara/human/c0201/obj/hair/h0147/texture/a.tex":"files/a.tex",
+              "chara/human/c0201/obj/hair/h0169/texture/b.tex":"files/b.tex",
+              "chara/human/c1801/obj/hair/h0003/model/c.mdl":"files/c.mdl"
+            },"Manipulations":[]}
+            """);
+
+        var evidence = ModHairFileReader.ReadHairEvidence(mod);
+
+        Assert.NotNull(evidence);
+        Assert.Equal(new HashSet<int> { 147, 169 }, evidence.ByRaceCode["0201"].ToHashSet());
+        Assert.Equal(new HashSet<int> { 3 }, evidence.ByRaceCode["1801"].ToHashSet());
+        Assert.Equal(new HashSet<int> { 3, 147, 169 }, evidence.Flat.ToHashSet());
+    }
+
+    [Fact]
+    public void ReadHairEvidence_FlatSetIsTheUnionOfTheRaceSets()
+    {
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{
+              "chara/human/c0201/obj/hair/h0115/model/a.mdl":"files/a.mdl",
+              "chara/human/c0801/obj/hair/h0115/model/b.mdl":"files/b.mdl"
+            },"Manipulations":[]}
+            """);
+
+        var evidence = ModHairFileReader.ReadHairEvidence(mod);
+
+        Assert.NotNull(evidence);
+        Assert.Equal(new HashSet<int> { 115 }, evidence.Flat.ToHashSet());
+        Assert.Equal(new HashSet<int> { 115 }, evidence.ByRaceCode["0801"].ToHashSet());
+    }
+
+    [Fact]
+    public void ReadHairEvidence_EstEntriesFeedTheFlatSetOnly()
+    {
+        // The EST entry's SetId is 115. It must reach the flat set and never any race code, because
+        // the reader does not use the race an EST entry names.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/human/c0201/obj/hair/h0147/model/a.mdl":"files/a.mdl"},
+             "Manipulations":[{"Type":"Est","Manipulation":{"Entry":1,"Gender":"Female","Race":"Miqote","SetId":115,"Slot":"Hair"}}]}
+            """);
+
+        var evidence = ModHairFileReader.ReadHairEvidence(mod);
+
+        Assert.NotNull(evidence);
+        Assert.Equal(new HashSet<int> { 115, 147 }, evidence.Flat.ToHashSet());
+        Assert.False(evidence.ByRaceCode.Values.Any(set => set.Contains(115)));
+    }
+
+    [Fact]
+    public void ReadHairNumbers_StillReturnsTheFlatSet()
+    {
+        // The 0.6.1.0 callers keep working: ReadHairNumbers is the flat set, unchanged.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/human/c0201/obj/hair/h0115/model/a.mdl":"files/a.mdl"},"Manipulations":[]}
+            """);
+
+        Assert.Equal(new HashSet<int> { 115 }, ModHairFileReader.ReadHairNumbers(mod)!.ToHashSet());
+    }
 }

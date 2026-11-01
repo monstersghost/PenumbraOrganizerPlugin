@@ -72,10 +72,11 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         // gear gate above - every other category never touches disk for this. No diagnostic
         // counterpart to gearSlotDiagnostic on purpose: both readers share one walker and read the
         // same files, so a library-wide read failure is already visible through the gear one.
+        ModHairFileReader.HairEvidence? hairEvidence = null;
         if (classification.Category == ModCategory.Hair)
         {
-            var hairNumbers = ModHairFileReader.ReadHairNumbers(modPath);
-            classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairNumbers);
+            hairEvidence = ModHairFileReader.ReadHairEvidence(modPath);
+            classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairEvidence?.Flat);
         }
 
         return new OrganizerModRow
@@ -88,6 +89,8 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             HeliosphereManaged = HeliosphereDetector.IsHeliosphereManaged(item.Identifier, modPath),
             Category = classification.Category,
             SubCategory = classification.SubCategory,
+            HairFlat = hairEvidence?.Flat,
+            HairByRaceCode = hairEvidence?.ByRaceCode,
             GearSlotDiagnostic = gearSlotDiagnostic,
         };
     }

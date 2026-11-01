@@ -14,5 +14,11 @@ public sealed class OrganizerModRow
     public bool HeliosphereManaged { get; init; }
     public ModCategory? Category { get; init; }
     public string? SubCategory { get; init; }
+
+    /// <summary>Every supported hair number the mod's files and EST entries carry. Null unless a readable hair mod.</summary>
+    public IReadOnlySet<int>? HairFlat { get; init; }
+
+    /// <summary>Hair numbers keyed by four-digit race folder code, from file paths only. Null unless a readable hair mod.</summary>
+    public IReadOnlyDictionary<string, IReadOnlySet<int>>? HairByRaceCode { get; init; }
     public GearSlotDiagnostic GearSlotDiagnostic { get; init; } = GearSlotDiagnostic.NotApplicable;
 }

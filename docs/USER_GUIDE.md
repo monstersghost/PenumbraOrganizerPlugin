@@ -267,6 +267,10 @@ it and it will not return.
 
 Nothing on this tab changes anything - it reads no mods and writes no files.
 
+## Hair
+
+Hair mods that ship one folder per race can be filed under the hair number that most races use. The controls are on the Sort tab, in the Hair group, next to Split hair by hair number: a priority race and a Midlander fallback. Both apply only while Split hair is on, and both reset each session. The Help tab explains each control and when it changes the result, so read it there rather than relying on this page.
+
 ## Typical workflows
 
 First-time sort: Scan, choose a grouping on the Sort tab and press Sort, review the proposed paths

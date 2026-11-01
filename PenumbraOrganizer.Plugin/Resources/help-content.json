@@ -63,7 +63,7 @@
     {
       "id": "help.tab-sort",
       "title": "Sort",
-      "body": "Chooses the folder layout to propose. Pick a grouping, decide whether gear and NPC mods get subfolders, and press Sort.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand instead of by rule."
+      "body": "Proposes a folder layout for your mods. Pick a grouping, choose which of the Gear, NPC and Hair groups get subfolders, and press Sort.\n\nThe groups are separated by rules on the tab. Each one has its own split option: a split puts that kind of mod into subfolders, and turning it off keeps those mods in one folder.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand instead of by rule. The ? beside the Sort button brings you back here."
     },
     {
       "id": "help.tab-review",
@@ -128,7 +128,7 @@
     {
       "id": "sort.grouping",
       "title": "Group by",
-      "short": "Chooses the folder structure proposed for every unprotected mod. Nothing moves until you press Apply on the Review Changes tab."
+      "short": "Sets the folder structure for every unprotected mod. Creator: Creator/Mod. Mod type: Gear/Mod. Type then creator: Gear/Creator/Mod. Creator then type: Creator/Gear/Mod. Nothing moves until Apply."
     },
     {
       "id": "sort.split-gear",
@@ -141,9 +141,29 @@
       "short": "Puts NPC mods in NPC/NPCs, NPC/Bosses or NPC/Enemies. Turn it off to keep every NPC mod in one NPC folder."
     },
     {
+      "id": "sort.help-button",
+      "title": "How sorting works",
+      "short": "Opens the Help tab at Sort, which explains how sorting works and what each option does."
+    },
+    {
+      "id": "sort.hair-resolution",
+      "title": "How a hair mod is filed",
+      "body": "A hair mod goes under a vanilla hair number when all of its files replace the same hair, as Hair/115.\n\nIf its files replace more than one hair number, for example a different hair for Viera than for other races, it stays in the plain Hair folder.\n\nIf the plugin cannot read the numbers from the mod's files, it also stays in Hair."
+    },
+    {
       "id": "sort.split-hair",
       "title": "Split hair by hair number",
       "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
+    },
+    {
+      "id": "sort.priority-race",
+      "title": "Priority race",
+      "short": "When a hair mod has one hair number for this race, files it under that number. Pick None to turn this off."
+    },
+    {
+      "id": "sort.midlander-fallback",
+      "title": "Midlander fallback",
+      "short": "When a mod uses different hair numbers across races, uses the Midlander number if male and female Midlanders agree. Otherwise the mod stays flat."
     },
     {
       "id": "sort.button",

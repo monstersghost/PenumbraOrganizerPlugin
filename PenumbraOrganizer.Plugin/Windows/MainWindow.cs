@@ -27,6 +27,9 @@ public sealed partial class MainWindow : Window, IDisposable
     // An instance, not a static call: the Group by dropdown and the two split checkboxes are
     // ImGui ref-widgets and need backing storage that survives between frames.
     private readonly SortPanel _sortPanel = new();
+
+    // Set by the Sort tab's ? button, read once by the Help tab on the frame it is drawn, then cleared.
+    private bool _sortHelpRequested;
     private string? _lastError;
     private string _protectFilter = string.Empty;
     private float _protectedFolderListHeight = 220f;
@@ -157,7 +160,8 @@ public sealed partial class MainWindow : Window, IDisposable
                 DrawSearchTab();
                 // A standalone type rather than a MainWindow partial, so its content is reachable
                 // from tests - see HelpTab's own remarks. Tab dispatch stays here regardless.
-                HelpTab.Draw(ShowWalkthrough);
+                HelpTab.Draw(ShowWalkthrough, _sortHelpRequested);
+                _sortHelpRequested = false;
             }
         }
 

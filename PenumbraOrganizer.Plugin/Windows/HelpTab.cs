@@ -84,7 +84,11 @@ public static class HelpTab
             HelpTopics.SortSplitGear,
             HelpTopics.SortSplitNpc,
             HelpTopics.SortSplitHair,
+            HelpTopics.SortPriorityRace,
+            HelpTopics.SortMidlanderFallback,
+            HelpTopics.SortHairResolution,
             HelpTopics.SortButton,
+            HelpTopics.SortHelpButton,
             HelpTopics.SortScrapedNpcList,
             HelpTopics.SortRefreshNpcList,
             HelpTopics.SortImportWorkbook,
@@ -133,9 +137,13 @@ public static class HelpTab
     /// Piece 5's reserved slot. Null until the walkthrough exists, and the button is not drawn at
     /// all rather than drawn disabled - a control that does nothing yet is worse than no control.
     /// </param>
-    public static void Draw(Action? onShowWalkthrough = null)
+    /// <param name="showSort">
+    /// True for the one frame after the Sort tab's ? button is pressed: selects this tab, opens the
+    /// Sort section and scrolls to it.
+    /// </param>
+    public static void Draw(Action? onShowWalkthrough = null, bool showSort = false)
     {
-        using var tab = ImRaii.TabItem("Help");
+        using var tab = ImRaii.TabItem("Help", showSort ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None);
         if (!tab)
             return;
 
@@ -174,8 +182,15 @@ public static class HelpTab
 
         foreach (var section in Sections)
         {
+            var isSortSection = showSort && section.Topic == HelpTopics.HelpTabSort;
+            if (isSortSection)
+                ImGui.SetNextItemOpen(true);
+
             if (!ImGui.CollapsingHeader(Help.Title(section.Topic) ?? section.Topic.Id))
                 continue;
+
+            if (isSortSection)
+                ImGui.SetScrollHereY(0f);
 
             if (Help.Body(section.Topic) is { } body)
                 ImGui.TextUnformatted(body);
