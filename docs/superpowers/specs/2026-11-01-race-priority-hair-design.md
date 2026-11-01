@@ -1,6 +1,6 @@
 # Race-Priority Hair Sorting - Design
 
-**Status:** Revised draft, second revision. Not implemented.
+**Status:** Revised draft, third revision: race table complete. Not implemented.
 **Builds on:** `docs/superpowers/specs/2026-11-01-hair-number-sorting-design.md` (0.6.1.0, testing build).
 **Evidence:** `C:\Mods\[R] Zutail Hair (2)`, read in full (see "Evidence from a real mod").
 
@@ -77,6 +77,21 @@ Worked results for this mod:
 - Priority Viera ♀: c1801 has exactly one number, 3, so `Hair/3`.
 - Priority None: two numbers across races, fallback off, so `Hair`.
 
+## Evidence from the PMP set
+
+Read from the zip archives without extracting them. These fixtures cover the rules:
+
+- **Winter Berry for Lalafell:** Lalafell ♂ and Midlander use 135. Highlander ♂ uses 5. Different numbers
+  across races, so the Midlander rule decides.
+- **Lumi's Hairstyle V2:** Midlander ♀ and Lalafell ♀ use 110. Midlander ♂ and Lalafell ♂ use 111. Male and
+  female Midlanders disagree, so the Midlander rule stays flat.
+- **Sampo Middle Part:** Midlander ♂ uses four numbers (122, 162, 163, 164). Miqo'te ♂ uses two (3 and 164).
+  Multiple numbers within one race, so rule 6 applies.
+- **Viera Male Hair 182:** Viera ♂ uses 182, which confirms c1701.
+- **Imeris - Solar:** hair 115 for every race except Viera ♀, which uses 3. With no priority it stays flat.
+  Priority Viera ♀ gives `Hair/3`. Priority Midlander ♀ gives `Hair/115`.
+- **Devilry Hair With Bow:** hair 108 for most races, Viera ♀ uses 3.
+
 ## Terms
 
 - **Number set for a race/gender:** the distinct hair numbers the mod supplies for that race/gender,
@@ -88,18 +103,29 @@ Worked results for this mod:
 
 ## Race identity
 
-Race and gender come from the `cXXXX` folder code, which maps to a race and gender as Penumbra names
-them. The plugin already parses Penumbra's names through `ChangedItemKeyParser`, which yields Race,
-Gender, BodyPart and Number. Both sources carry the same information.
+Race and gender come from the `cXXXX` folder code. Penumbra's changed-item keys carry the same race and
+gender names, and `ChangedItemKeyParser` already reads them. The dropdown lists the race and gender names
+Penumbra uses, with the symbols written as `\u2642` and `\u2640` escapes, plus None.
 
-No table of codes is needed for the feature. The dropdown lists the race and gender names Penumbra
-uses, with the symbols written as `\u2642` and `\u2640` escapes:
+## Race codes
 
-- Hyur Midlander ♂ / ♀, Hyur Highlander ♂ / ♀, Elezen ♂ / ♀, Miqo'te ♂ / ♀, Roegadyn ♂ / ♀,
-  Lalafell ♂ / ♀, Au Ra ♂ / ♀, Hrothgar ♂ / ♀, Viera ♀ (Viera ♂ waits on Open question 1), plus None.
+Every race and gender has a folder code confirmed by at least one mod in our test set. Names are the
+standard names for each race; the codes are from the mods.
 
-A priority matches a mod's entries by race name and gender. A mod with no entry for the chosen race
-and gender falls through.
+| Race | ♂ code | ♀ code |
+|---|---|---|
+| Hyur Midlander | c0101 | c0201 |
+| Hyur Highlander | c0301 | c0401 |
+| Elezen | c0501 | c0601 |
+| Miqo'te | c0701 | c0801 |
+| Roegadyn | c0901 | c1001 |
+| Lalafell | c1101 | c1201 |
+| Au Ra | c1301 | c1401 |
+| Hrothgar | c1501 | c1601 |
+| Viera | c1701 | c1801 |
+
+The table is pinned by one test per entry. Hrothgar female (c1601) is the weakest: it comes from a mod
+titled "all Females" and not from a mod labelled Hrothgar. Confirm it in game when the in-game check runs.
 
 ## Behaviour
 
@@ -167,7 +193,7 @@ On the Sort tab, in the Hair group (see the layout spec):
   so step 3 is unchanged.
 - The map is keyed by race and gender as Penumbra names them, so that `EnrichHairSubCategory` can match
   a priority against it without a code table.
-- The race list includes Viera ♀ (`c1801`), matched by folder code. Viera ♂ is excluded until confirmed (see Open question 1).
+- The race list covers all eighteen codes in the table above, matched by folder code.
 - `EnrichHairSubCategory` takes the priority and the fallback flag, and applies steps 1-5. It remains the
   single place that decides the number.
 - The priority and the fallback travel with the sort selection, as `splitHair` does.
@@ -184,9 +210,6 @@ On the Sort tab, in the Hair group (see the layout spec):
 
 ## Open questions
 
-1. **Viera male.** Viera female is `c1801`, confirmed by this mod. Viera male is `c1701` in the game's
-   layout, but no mod we have read ships a male Viera hair, so it is unconfirmed. Ship Viera ♀ now, and
-   add Viera ♂ once a mod confirms its code. Confirm this choice.
 2. **A tiebreak for two numbers in one race.** The Midlander rule is the only tiebreak in this draft, and it
    leaves Zutail flat for Midlander ♀. A principled option is the number that appears under the most race
    folders (169 here, under seven of eight). It is not arbitrary, but it is a new rule. Adopt it, or keep
