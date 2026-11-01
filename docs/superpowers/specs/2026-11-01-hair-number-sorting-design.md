@@ -62,12 +62,18 @@ Two evidence sources, mirroring how the equipment reader uses both `Files` and `
    exactly backwards here. Update that comment to point at this reader, so the next person does not
    read it as "Est is never useful."
 
-   **Verification required before this source ships.** The repo's existing manipulation-shape
-   comments record that the `Eqp`/`Eqdp`/`Imc` field names were confirmed against two independent
-   real mod libraries. The `Est` shape used here has not been confirmed the same way.
-   Implementation must dump the `Est` entries from a real library and assert the field names
-   against what is actually there. If `Est` turns out not to carry a usable hair number, drop
-   source 2 and ship source 1 alone - path matching is the load-bearing source either way.
+   The shape is corroborated by a fixture already in this repo.
+   `ModEquipmentFileReaderTests.ReadEquipmentSlots_EstManipulation_ContributesNothing` uses:
+
+       {"Type":"Est","Manipulation":{"Entry":161,"Gender":"Female","Race":"Miqote","SetId":157,"Slot":"Hair"}}
+
+   `SetId` (157) is the hair number; `Entry` (161) is the EST skeleton row the hair maps to, which
+   is why the two differ. Read `SetId`, never `Entry`.
+
+   **Still verify before shipping**, narrowly: that `SetId` on a real library's hair mods agrees
+   with the hair number its `Files` paths name. The two sources overlapping is the check - if they
+   disagree on real mods, drop source 2 and ship source 1 alone. Path matching is the load-bearing
+   source either way.
 
 ### Shared traversal
 
@@ -89,10 +95,33 @@ The walker owns the `IOException or UnauthorizedAccessException or JsonException
 must leave `ModEquipmentFileReaderTests` passing without edits - that is the check that it
 preserved behaviour.
 
+## `ModTypeFolders.GetFolder` must learn about hair
+
+This is not optional plumbing, it is a crash otherwise. `GetFolder` enumerates valid
+`(category, subCategory)` pairs explicitly and its final arm **throws**
+`ArgumentOutOfRangeException`, with the comment: "that would silently accept a nonsense combination
+a classifier bug could produce (e.g. Gear + 'Bosses') instead of failing fast during development."
+
+So `GetFolder(Hair, "115")` throws today, inside the sort. A new arm is required.
+
+Hair numbers are an open set of several hundred values, so they cannot be enumerated the way the
+nine gear slots and three NPC kinds are. Validate the **shape** instead, preserving the fail-fast
+intent for a genuinely nonsense pairing:
+
+    (ModCategory.Hair, _) when IsHairNumber(subCategory) => $"{ModCategory.Hair}/{subCategory}",
+
+where `IsHairNumber` accepts one to four ASCII digits with no leading zero. `Hair` + `"Bosses"`
+still throws, which is the property the existing comment is protecting.
+
+`EnrichHairSubCategory` is the only producer of these subcategories and formats them with
+`ToString(CultureInfo.InvariantCulture)` from an `int`, so the two agree by construction - but the
+guard is what makes a future second producer fail loudly rather than silently.
+
 ## Plumbing
 
 | File | Change |
 |---|---|
+| `Classification/ModTypeClassifier.cs` | the `ModTypeFolders.GetFolder` arm and `IsHairNumber`, above |
 | `Classification/ModHairFileReader.cs` | new, above |
 | `Classification/ModConfigFileWalker.cs` | new, above |
 | `Classification/ModEquipmentFileReader.cs` | consume the walker; fix the `Est` comment |
@@ -146,8 +175,22 @@ Unit tests, in the existing projects, against fixture directories written per te
   non-Hair category, for `null`, for empty, and for two or more numbers.
 - `FlattenHairSubCategory`: clears the subcategory for Hair only, leaving Gear and NPC alone.
 - `SortSelection`: `SplitHair` defaults false; `SplitsApply` is still false only for `CreatorOnly`.
-- `OrganizerStateSortTests`: a hair mod with a number lands in `Hair/115` with the split on and
-  `Hair` with it off, across all three category-consulting strategies.
+- `ModTypeFolders.GetFolder`: `(Hair, "115")` returns `Hair/115`; `(Hair, null)` still returns
+  `Hair`; `(Hair, "Bosses")`, `(Hair, "0115")` and `(Hair, "")` all throw
+  `ArgumentOutOfRangeException`.
+- Hair sorting through `OrganizerState`: a hair mod with a number lands in `Hair/115` with the
+  split on and `Hair` with it off, across all three category-consulting strategies.
+
+  **This goes in its own fixture, not into the existing `OrganizerStateSortTests` theory.** That
+  theory is 16 `[InlineData]` rows over `(strategy, splitGear, splitNpc)` plus three expected
+  paths, and its comment records that the expectations were *captured* from the seven original
+  `SortBy*` methods rather than hand-written, "rather than getting the order wrong and then
+  'fixing' the expectations until green, which destroys the guarantee." Adding a hair row to its
+  shared fixture changes all 16 rows' expected output, and adding a `splitHair` axis doubles it to
+  32 hand-written rows - precisely the failure mode that comment warns about. Instead: pass
+  `splitHair: false` at that theory's single `Sort` call site so its captured expectations stay
+  byte-identical, and put hair coverage in a new `OrganizerStateSortHairTests` with its own
+  two-row fixture.
 - `ModEquipmentFileReaderTests`: unchanged, and passing, after the walker refactor.
 - The existing help-topic coverage test should fail until `SortSplitHair` is registered everywhere.
 
