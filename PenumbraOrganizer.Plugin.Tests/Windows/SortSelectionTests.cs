@@ -61,10 +61,14 @@ public class SortSelectionTests
     [Fact]
     public void SortSelection_ValueEquality_CoversSplitHair()
     {
-        // Toggling the hair checkbox must make the selection UNEQUAL to the one last sorted with,
-        // or the staleness line would say "already sorted" and the Sort button would appear to do
-        // nothing. A positional record gets this for free - but only while SplitHair is actually
-        // one of its positional members, which is what this pins.
+        // Pins exactly one thing: that two selections differing only in SplitHair compare unequal,
+        // i.e. that SplitHair is a positional member the generated equality covers.
+        //
+        // It does NOT pin the staleness behaviour it enables, and should not be counted as
+        // coverage of it. The staleness line lives in SortPanel, which builds the selection and
+        // assigns _lastSorted; a mutation there - a selection built with SplitHair hard-coded, or
+        // from a stale _splitHair - passes this test unchanged. SortPanel.Draw is ImGui-bound with
+        // private fields and no seam, so that path is on the in-game checklist instead.
         Assert.NotEqual(
             new SortSelection(SortStrategy.TypeOnly, false, false, false),
             new SortSelection(SortStrategy.TypeOnly, false, false, true));
