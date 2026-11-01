@@ -54,6 +54,29 @@ What this shows:
 - **169 is the majority number.** It appears under seven of the eight race folders. 147 appears under
   two.
 
+## Evidence from a second mod: Devilry Hair With Bow
+
+`♱ MDM - Devilry Hair With Bow` (meta.json, no manipulations, imported from a TexTools pack). Its files:
+
+| Race folder | Hair numbers |
+|---|---|
+| c0201 (Midlander female) | 108 |
+| c0401 (Highlander female) | 108 |
+| c0801 (Miqo'te female) | 108 |
+| c1401 (Au Ra female) | 108 |
+| c1801 (Viera female) | 3 |
+
+This mod is the case the feature is for. Viera has its own race folder, `c1801`, and its hair is 3. The
+other races use 108. Viera is identifiable here from the folder code alone, so the Zutail conclusion
+does not hold in general: a mod that ships a real Viera hair uses Viera's own code. Zutail's Viera
+variant was built on Midlander and Au Ra codes and cannot be identified that way.
+
+Worked results for this mod:
+
+- Priority Midlander ♀: c0201 has exactly one number, 108, so `Hair/108`.
+- Priority Viera ♀: c1801 has exactly one number, 3, so `Hair/3`.
+- Priority None: two numbers across races, fallback off, so `Hair`.
+
 ## Terms
 
 - **Number set for a race/gender:** the distinct hair numbers the mod supplies for that race/gender,
@@ -73,7 +96,7 @@ No table of codes is needed for the feature. The dropdown lists the race and gen
 uses, with the symbols written as `\u2642` and `\u2640` escapes:
 
 - Hyur Midlander ♂ / ♀, Hyur Highlander ♂ / ♀, Elezen ♂ / ♀, Miqo'te ♂ / ♀, Roegadyn ♂ / ♀,
-  Lalafell ♂ / ♀, Au Ra ♂ / ♀, Hrothgar ♂ / ♀, Viera ♂ / ♀ (see Open question 1), plus None.
+  Lalafell ♂ / ♀, Au Ra ♂ / ♀, Hrothgar ♂ / ♀, Viera ♀ (Viera ♂ waits on Open question 1), plus None.
 
 A priority matches a mod's entries by race name and gender. A mod with no entry for the chosen race
 and gender falls through.
@@ -116,7 +139,7 @@ The Midlander rule works from the Midlander entries in the mod: Hyur Midlander m
 | Elezen ♀, Roegadyn ♀, Lalafell ♀, Highlander ♀ | Step 1: one number, 169 | `Hair/169` |
 | Au Ra ♀ | Step 1: two numbers (147 and 169) | not exactly one, falls to step 3, detection gives two, fallback off: `Hair` |
 | Midlander ♀ | Step 1: two numbers | falls to step 3, detection gives two; Midlander fallback: only female, two numbers, so flat: `Hair` |
-| Viera | Not selectable (see Open question 1) | — |
+| Viera ♀ | Zutail has no `c1801` folder, so step 2: detection gives two numbers, flat | `Hair` |
 | None | Step 3: two numbers, fallback off | `Hair` |
 
 Note that **Midlander ♀ with the fallback on still stays flat** for this mod. The user will likely
@@ -144,6 +167,7 @@ On the Sort tab, in the Hair group (see the layout spec):
   so step 3 is unchanged.
 - The map is keyed by race and gender as Penumbra names them, so that `EnrichHairSubCategory` can match
   a priority against it without a code table.
+- The race list includes Viera ♀ (`c1801`), matched by folder code. Viera ♂ is excluded until confirmed (see Open question 1).
 - `EnrichHairSubCategory` takes the priority and the fallback flag, and applies steps 1-5. It remains the
   single place that decides the number.
 - The priority and the fallback travel with the sort selection, as `splitHair` does.
@@ -160,12 +184,9 @@ On the Sort tab, in the Hair group (see the layout spec):
 
 ## Open questions
 
-1. **Viera.** Viera is the reason for this feature, and this mod shows neither path codes nor Penumbra's
-   names can identify it. Options:
-   - (a) Offer Viera in the dropdown and match it on the option or group folder name containing "Viera".
-     This is a heuristic and will be wrong for mods that name their folders differently.
-   - (b) Leave Viera out until Penumbra exposes it, and say so in the Help text.
-   Recommended: (b) now, with a note in the Help text. Confirm which you want.
+1. **Viera male.** Viera female is `c1801`, confirmed by this mod. Viera male is `c1701` in the game's
+   layout, but no mod we have read ships a male Viera hair, so it is unconfirmed. Ship Viera ♀ now, and
+   add Viera ♂ once a mod confirms its code. Confirm this choice.
 2. **A tiebreak for two numbers in one race.** The Midlander rule is the only tiebreak in this draft, and it
    leaves Zutail flat for Midlander ♀. A principled option is the number that appears under the most race
    folders (169 here, under seven of eight). It is not arbitrary, but it is a new rule. Adopt it, or keep
