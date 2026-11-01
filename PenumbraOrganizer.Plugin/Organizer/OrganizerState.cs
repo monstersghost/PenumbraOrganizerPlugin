@@ -261,7 +261,7 @@ public sealed class OrganizerState
     /// 1 + (3 x 2 x 2 x 2) = 25 selections, of which the seven original buttons offered seven.
     /// </remarks>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
-                    Func<string, string> canonicalizeCreator)
+                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null)
     {
         // Composed, not switched over: the three flatteners are independent decisions about the same
         // subcategory, so applying them in sequence is what makes every combination reachable
@@ -269,6 +269,14 @@ public sealed class OrganizerState
         string? Sub(OrganizerModRow row)
         {
             var sub = row.SubCategory;
+            // A priority only ever changes a hair row's number, and only while hair is split. With no
+            // priority the resolver's step 3 returns the same single number the scan stored, so the
+            // output is unchanged from 0.6.1.0.
+            if (splitHair && hairPriority is { } priority && row.Category == ModCategory.Hair)
+            {
+                var resolved = HairPriorityResolver.Resolve(row.HairFlat, row.HairByRaceCode, priority);
+                sub = resolved?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
             if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
             if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);

@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer;
 
@@ -131,5 +132,81 @@ public class OrganizerStateSortHairTests
         Assert.Equal("Hair/Hair Mod", PathOf(state, "hair"));
         Assert.Equal("Gear/Feet/Gear Mod", PathOf(state, "gear"));
         Assert.Equal("NPC/Bosses/Npc Mod", PathOf(state, "npc"));
+    }
+
+    private static OrganizerState StateWithHairRow(
+        IReadOnlySet<int> flat, IReadOnlyDictionary<string, IReadOnlySet<int>> byRace)
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "hair", Name = "Hair Mod", Author = "Ann",
+                CurrentPath = "Hair Mod", ProposedPath = "Hair Mod",
+                Category = ModCategory.Hair,
+                SubCategory = flat.Count == 1 ? flat.Single().ToString() : null,
+                HairFlat = flat, HairByRaceCode = byRace },
+        ], new HashSet<string>());
+        return state;
+    }
+
+    [Fact]
+    public void Sort_WithPriority_FilesHairUnderThePriorityRaceNumber()
+    {
+        // Devilry shape: Viera female is 3, Midlander female is 108.
+        var state = StateWithHairRow(
+            flat: new HashSet<int> { 3, 108 },
+            byRace: new Dictionary<string, IReadOnlySet<int>>
+            {
+                ["0201"] = new HashSet<int> { 108 },
+                ["1801"] = new HashSet<int> { 3 },
+            });
+
+        state.Sort(SortStrategy.TypeOnly, true, true, true, c => c, new HairPriority("1801", false));
+
+        Assert.Equal("Hair/3/Hair Mod", PathOf(state, "hair"));
+    }
+
+    [Fact]
+    public void Sort_WithNoPriority_IsIdenticalToTheSubCategoryTheScanStored()
+    {
+        // The byte-identical guarantee: with no priority, Sort reads the same SubCategory as 0.6.1.0.
+        var state = StateWithHairRow(
+            flat: new HashSet<int> { 115 },
+            byRace: new Dictionary<string, IReadOnlySet<int>> { ["0801"] = new HashSet<int> { 115 } });
+
+        state.Sort(SortStrategy.TypeOnly, true, true, true, c => c, null);
+        var withoutPriority = PathOf(state, "hair");
+
+        state.Sort(SortStrategy.TypeOnly, true, true, true, c => c);
+        Assert.Equal(withoutPriority, PathOf(state, "hair"));
+        Assert.Equal("Hair/115/Hair Mod", withoutPriority);
+    }
+
+    [Fact]
+    public void Sort_PriorityIsIgnoredWhenSplitHairIsOff()
+    {
+        var state = StateWithHairRow(
+            flat: new HashSet<int> { 3, 108 },
+            byRace: new Dictionary<string, IReadOnlySet<int>> { ["1801"] = new HashSet<int> { 3 } });
+
+        state.Sort(SortStrategy.TypeOnly, true, true, false, c => c, new HairPriority("1801", false));
+
+        Assert.Equal("Hair/Hair Mod", PathOf(state, "hair"));
+    }
+
+    [Fact]
+    public void Sort_PriorityDoesNotTouchNonHairRows()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "gear", Name = "Gear Mod", Author = "Ann",
+                CurrentPath = "Gear Mod", ProposedPath = "Gear Mod",
+                Category = ModCategory.Gear, SubCategory = "Feet" },
+        ], new HashSet<string>());
+
+        state.Sort(SortStrategy.TypeOnly, true, true, true, c => c, new HairPriority("1801", true));
+
+        Assert.Equal("Gear/Feet/Gear Mod", PathOf(state, "gear"));
     }
 }
