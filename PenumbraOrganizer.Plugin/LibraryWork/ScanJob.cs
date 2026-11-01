@@ -14,13 +14,23 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
     private readonly Plugin _plugin;
     private readonly string _configDirectory;
     private readonly bool _useScrapedNpcNameList;
+    private readonly IReadOnlySet<string> _knownHeliosphereIdentifiers;
     private ScanProcessor? _processor;
 
-    public ScanJob(Plugin plugin, string configDirectory, bool useScrapedNpcNameList)
+    /// <param name="knownHeliosphereIdentifiers">
+    /// Read from config on the framework thread and handed to the pure processor, which never reads
+    /// Configuration itself. See HeliosphereDetector for why it is remembered.
+    /// </param>
+    public ScanJob(
+        Plugin plugin,
+        string configDirectory,
+        bool useScrapedNpcNameList,
+        IReadOnlySet<string>? knownHeliosphereIdentifiers = null)
     {
         _plugin = plugin;
         _configDirectory = configDirectory;
         _useScrapedNpcNameList = useScrapedNpcNameList;
+        _knownHeliosphereIdentifiers = knownHeliosphereIdentifiers ?? new HashSet<string>(StringComparer.Ordinal);
     }
 
     public string DisplayName => "Scan";
@@ -43,7 +53,7 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
                 ? changedItems.Keys.ToList()
                 : [])).ToList();
 
-        _processor = new ScanProcessor(_configDirectory, _useScrapedNpcNameList);
+        _processor = new ScanProcessor(_configDirectory, _useScrapedNpcNameList, _knownHeliosphereIdentifiers);
         return new LibraryWorkBatch<ScanSeed, OrganizerModRow>(seeds, _processor);
     }
 

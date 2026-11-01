@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 namespace PenumbraOrganizer.Plugin.Organizer;
 
@@ -31,6 +32,14 @@ public sealed class OrganizerState
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
     public bool HasScanned { get; private set; }
+
+    /// <summary>
+    /// Increments every time a scan is published. A template plan is computed for a preview and
+    /// applied on a later frame; if a rescan lands in between, the plan describes rows that no
+    /// longer exist. Callers hold the generation they planned against and refuse to apply a plan
+    /// whose generation no longer matches, rather than applying it partially.
+    /// </summary>
+    public int ScanGeneration { get; private set; }
 
     public IReadOnlyCollection<string> ProtectedModIdentifiers => _protectedModIdentifiers;
 
@@ -109,6 +118,7 @@ public sealed class OrganizerState
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
         HasScanned = true;
+        ScanGeneration++;
     }
 
     public void SetProtected(string identifier, bool value)
@@ -256,63 +266,55 @@ public sealed class OrganizerState
     /// from those methods while they still existed.
     /// </summary>
     /// <remarks>
-    /// The three splits are independent of each other and all are ignored by
+    /// The two splits are independent of each other and both are ignored by
     /// <see cref="SortStrategy.CreatorOnly"/>, which never consults the category at all. That gives
-    /// 1 + (3 x 2 x 2 x 2) = 25 selections, of which the seven original buttons offered seven.
+    /// 1 + (3 x 2 x 2) = 13 selections, of which the seven buttons offered seven; the six new ones
+    /// are the whole splitNpc: false column, which had no button because NPC subdivision used to be
+    /// unconditional.
+    /// <para>
+    /// The folder-selection expressions live in <see cref="SortFolderSelectors"/> rather than here,
+    /// because the template planner needs the identical computation to place mods a template has no
+    /// entry for. Two copies would let a sorted folder and a planned folder drift apart, which the
+    /// preview promises cannot happen.
+    /// </para>
     /// </remarks>
+    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc,
+                    Func<string, string> canonicalizeCreator) =>
+        Sort(strategy, splitGear, splitNpc, splitHair: false, canonicalizeCreator);
+
+    /// <summary>
+    /// The sort with the hair split and the optional race priority. With no priority and the hair
+    /// split off, this is the same folder selection as the four-argument overload.
+    /// </summary>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
-                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null)
+                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null) =>
+        Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
+                                               splitHair: splitHair, hairPriority: hairPriority));
+
+    /// <summary>
+    /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes
+    /// through the same private Sort tail as every other strategy, so pinning, collision
+    /// disambiguation and protected-row filtering are inherited rather than reimplemented.
+    /// Because the plan was computed from these same rows, preview and result cannot diverge.
+    ///
+    /// A row absent from the plan keeps its current proposal: the plan is authoritative about
+    /// which rows it covers.
+    /// </summary>
+    public TemplateApplyReport ApplyTemplate(TemplateApplicationPlan plan)
     {
-        // Composed, not switched over: the three flatteners are independent decisions about the same
-        // subcategory, so applying them in sequence is what makes every combination reachable
-        // without writing eight variants of each strategy.
-        string? Sub(OrganizerModRow row)
+        var touched = new List<OrganizerModRow>();
+        foreach (var row in _mods.Values.Where(m => !m.Protected))
         {
-            var sub = row.SubCategory;
-            // A priority only ever changes a hair row's number, and only while hair is split. With no
-            // priority the resolver's step 3 returns the same single number the scan stored, so the
-            // output is unchanged from 0.6.1.0.
-            if (splitHair && hairPriority is { } priority && row.Category == ModCategory.Hair)
-            {
-                var resolved = HairPriorityResolver.Resolve(row.HairFlat, row.HairByRaceCode, priority);
-                sub = resolved?.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            }
-            if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
-            if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
-            if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
-            return sub;
+            if (!plan.DestinationFolders.TryGetValue(row.Identifier, out var folder))
+                continue;
+
+            row.ProposedPath = BuildPath(folder, null, row.Name);
+            touched.Add(row);
         }
 
-        return strategy switch
-        {
-            SortStrategy.CreatorOnly =>
-                Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), null)),
-            SortStrategy.TypeOnly =>
-                Sort(row => (TypeFolder(row.Category, Sub(row)), null)),
-            SortStrategy.TypeThenCreator =>
-                Sort(row => (TypeFolder(row.Category, Sub(row)), KnownSegment(canonicalizeCreator(row.Author)))),
-            SortStrategy.CreatorThenType =>
-                Sort(row => (KnownSegment(canonicalizeCreator(row.Author)), TypeFolder(row.Category, Sub(row)))),
-            _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, null),
-        };
+        FinishProposals(touched);
+        return plan.Report;
     }
-
-    // Gear only: always the flat folder, ignoring any resolved slot subcategory. Every other
-    // category keeps its normal subfolder behavior via GetFolder unchanged. Shared by every
-    // "flat" sort variant so Gear/Feet vs Gear stays a single decision point.
-    private static string? FlattenGearSubCategory(ModCategory? category, string? subCategory) =>
-        category == ModCategory.Gear ? null : subCategory;
-
-    // The NPC mirror of the above. Unlike gear, this had no button: NPC mods were always split into
-    // NPC/NPCs, NPC/Bosses and NPC/Enemies. Turning it off yields plain "NPC", which is the shape of
-    // all six newly reachable combinations.
-    private static string? FlattenNpcSubCategory(ModCategory? category, string? subCategory) =>
-        category == ModCategory.NPC ? null : subCategory;
-
-    // The hair mirror of the two above. Like gear and unlike NPC, this has a checkbox and defaults
-    // off, so flat "Hair" is what an unchanged install produces.
-    private static string? FlattenHairSubCategory(ModCategory? category, string? subCategory) =>
-        category == ModCategory.Hair ? null : subCategory;
 
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
@@ -333,19 +335,6 @@ public sealed class OrganizerState
         FinishProposals(touched);
         return count;
     }
-
-    private static string? TypeFolder(ModCategory? category, string? subCategory) =>
-        category is null ? null : KnownFolder(ModTypeFolders.GetFolder(category.Value, subCategory));
-
-    // For multi-level folder constants from ModTypeFolders (may contain a real '/', e.g.
-    // "Gear/Feet") — must NOT be FixName'd, which would turn the separator into '\'.
-    private static string? KnownFolder(string? folder) =>
-        string.IsNullOrWhiteSpace(folder) ? null : folder;
-
-    // For single dynamic segments (creator names): mirror Penumbra's FixName so what we
-    // propose is what Penumbra will actually store (trimmed, '/' escaped).
-    private static string? KnownSegment(string? segment) =>
-        string.IsNullOrWhiteSpace(segment) ? null : PenumbraPathSemantics.FixName(segment);
 
     private static string BuildPath(string? primaryFolder, string? secondaryFolder, string name)
     {

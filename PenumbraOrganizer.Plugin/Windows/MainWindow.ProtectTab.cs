@@ -44,6 +44,25 @@ public sealed partial class MainWindow
             ImGui.TextDisabled($"({heliosphereMods.Count(m => m.Protected)}/{heliosphereMods.Count} Heliosphere mods protected)");
         }
 
+        // A protected mod sitting at the library root is stuck there permanently: protection means
+        // the plugin never proposes a path for it, so no amount of sorting will file it away. That is
+        // invisible otherwise, and it reads as "the plugin dumped my mods at the root and won't fix
+        // them" - which is how it was reported. Heliosphere puts freshly installed mods at the root,
+        // and they are auto-protected on the same scan that first sees them.
+        var strandedAtRoot = _plugin.OrganizerState.Mods
+            .Where(m => m.Protected && !m.CurrentPath.Contains('/'))
+            .ToList();
+        if (strandedAtRoot.Count > 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextColored(
+                ImGuiColors.DalamudYellow,
+                $"{strandedAtRoot.Count} protected mods sit at the top level of your library, outside "
+                + "any folder. Because they are protected, sorting will never move them. Untick one "
+                + "below to let the plugin file it away.");
+            Help.Tooltip(HelpTopics.ProtectStrandedAtRoot);
+        }
+
         ImGui.Spacing();
         ImGui.InputText("Search mods and folders", ref _protectFilter, 256);
         ImGui.Spacing();

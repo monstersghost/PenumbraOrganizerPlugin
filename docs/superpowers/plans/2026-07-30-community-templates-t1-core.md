@@ -18,7 +18,9 @@
 - Hard limits (verbatim from the spec, all enforced during decode): compressed input 1 MB; decompressed size 8 MB enforced *during* inflation; entries 20,000; folders 5,000; `folderLabels` keys 500; any single string 512 chars; path depth 16 segments; segment length 128 chars.
 - The seven fallback strategy names are exactly: `Creator`, `ModType`, `ModTypeDetailed`, `TypeThenCreator`, `TypeThenCreatorFlat`, `CreatorThenType`, `CreatorThenTypeFlat`.
 - Nothing unvalidated may reach `OrganizerState`: only `ValidatedOrganizationTemplate` is accepted by the planner.
-- Existing behavior must not change. `dotnet build` and the full existing test suite must pass after every task.
+- Existing behavior must not change. `dotnet build` and the full existing test suite must pass after
+  every task. Baseline is 886 passing tests and one pre-existing xUnit2017 warning in
+  `ApplyPlannerTests.cs:306` — introduce no new warnings; do not fix that one here.
 - Commit after every task. Never use `--no-verify`.
 
 ## File Structure
@@ -264,9 +266,23 @@ public class TemplateModelsTests
     [Fact]
     public void TemplateEntry_SerializesWithShortFieldNames()
     {
-        var json = JsonSerializer.Serialize(new TemplateEntry("bibo+ medieval", "Gear/Top"));
+        var json = JsonSerializer.Serialize(
+            new TemplateEntry("bibo+ medieval", "Gear/Top"), TemplateJson.SerializerOptions);
 
         Assert.Equal("{\"n\":\"bibo+ medieval\",\"f\":\"Gear/Top\"}", json);
+    }
+
+    // The default encoder escapes '+' as + and every non-ASCII char as \uXXXX -- six bytes
+    // where one belongs. Mod names are full of both ("Bibo+", "Café"), and payload size decides
+    // whether a share code fits in a chat message, so the relaxed encoder is load-bearing rather
+    // than cosmetic.
+    [Fact]
+    public void SerializerOptions_DoNotEscapePlusOrNonAscii()
+    {
+        var json = JsonSerializer.Serialize(
+            new TemplateEntry("café+", "Gear"), TemplateJson.SerializerOptions);
+
+        Assert.DoesNotContain("\\u", json);
     }
 
     [Fact]
@@ -359,9 +375,30 @@ public static class TemplateLimits
 Create `PenumbraOrganizer.Plugin/Organizer/Templates/TemplateModels.cs`:
 
 ```csharp
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Templates;
+
+/// <summary>
+/// The one set of serializer options for template documents, shared by the models' tests and by
+/// TemplateCodec, so a document written by one path is byte-identical to one written by the other.
+///
+/// The relaxed encoder matters for size, not looks: the default encoder escapes '+' as + and
+/// every non-ASCII character as \uXXXX -- six bytes where one belongs. Mod names are full of both
+/// ("Bibo+", "Café"), and payload size is what decides whether a share code fits in a chat
+/// message. "Unsafe" here refers to embedding output directly in HTML, which templates never do:
+/// they go to a .json file and to the clipboard.
+/// </summary>
+public static class TemplateJson
+{
+    public static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = false,
+    };
+}
 
 /// <summary>
 /// Names one of OrganizerState's seven existing sort strategies, used for mods a template has no
@@ -445,7 +482,7 @@ public sealed record ValidatedOrganizationTemplate(
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateModelsTests"
 ```
 
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -697,6 +734,29 @@ public class TemplateDuplicateResolverTests
         Assert.Equal(forward.Warnings, reversed.Warnings);
     }
 
+    // The reversal test above only exercises valid entries. Invalid entries warn from a different
+    // code path, so they need their own reversal coverage -- this is the case that caught a real
+    // ordering defect during review.
+    [Fact]
+    public void Resolve_InvalidEntriesMixedWithDuplicates_IsOrderIndependent()
+    {
+        TemplateEntry[] entries = [
+            new("bad one", "Gear//Top"),
+            new("dup", "Gear/Top"),
+            new("bad two", "Foo//Bar"),
+            new("dup", "Characters"),
+            new("fine", "Hair"),
+        ];
+
+        var forward = TemplateDuplicateResolver.Resolve(entries);
+        var reversed = TemplateDuplicateResolver.Resolve(entries.Reverse());
+
+        Assert.Equal(forward.Warnings, reversed.Warnings);
+        Assert.Equal(
+            forward.EntriesByNormalizedName.OrderBy(p => p.Key, StringComparer.Ordinal),
+            reversed.EntriesByNormalizedName.OrderBy(p => p.Key, StringComparer.Ordinal));
+    }
+
     [Fact]
     public void Resolve_InvalidDestinationPath_SkipsEntryAndWarns()
     {
@@ -813,7 +873,16 @@ public static class TemplateDuplicateResolver
             resolved[key] = distinct[0];
         }
 
-        return new TemplateDuplicateResolution(resolved, warnings);
+        // Order the warnings deterministically before returning. The invalid-entry pass above
+        // runs in input order while the duplicate pass is key-sorted, so without this a template
+        // holding two invalid entries would produce different warning sequences for identical
+        // content in a different array order -- exactly what the order-independence rule forbids.
+        var orderedWarnings = warnings
+            .OrderBy(warning => warning.Subject, StringComparer.Ordinal)
+            .ThenBy(warning => warning.Code)
+            .ToList();
+
+        return new TemplateDuplicateResolution(resolved, orderedWarnings);
     }
 }
 ```
@@ -824,7 +893,7 @@ public static class TemplateDuplicateResolver
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateDuplicateResolverTests"
 ```
 
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1273,10 +1342,23 @@ public static class TemplateCodec
 {
     public const int SupportedFormatVersion = 1;
 
-    private static readonly JsonSerializerOptions SerializerOptions = new()
+    // Task 2's shared options, not a second private copy: a document written here must be
+    // byte-identical to one written anywhere else, and the relaxed encoder keeps '+' and
+    // non-ASCII mod names from inflating to six bytes per character.
+    private static JsonSerializerOptions SerializerOptions => TemplateJson.SerializerOptions;
+
+    // Error details reach UI and logs, so every echoed fragment of an untrusted document is
+    // bounded. Without this a single hostile field can inflate whatever surface displays it.
+    private static string Preview(string? value)
     {
-        WriteIndented = false,
-    };
+        if (string.IsNullOrEmpty(value))
+            return "(empty)";
+
+        return value.Length <= PreviewLength ? value : value[..PreviewLength] + "...";
+    }
+
+    private const int PreviewLength = 64;
+    private const string NullSubject = "(null)";
 
     public static string EncodeJson(OrganizationTemplate template) =>
         JsonSerializer.Serialize(template, SerializerOptions);
@@ -1303,6 +1385,14 @@ public static class TemplateCodec
     // Stages 3-5: schema validation, semantic normalization, validated construction.
     private static TemplateDecodeResult Validate(OrganizationTemplate document)
     {
+        // System.Text.Json overwrites a property's initializer default whenever the JSON supplies
+        // an explicit null, so every collection here can arrive null no matter what the model
+        // declares. This is the untrusted-input boundary: a hostile document must produce a value
+        // describing what is wrong, never an exception.
+        var rawFolders = document.Folders ?? [];
+        var rawLabels = document.FolderLabels ?? new Dictionary<string, string>();
+        var rawEntries = document.Entries ?? [];
+
         if (document.FormatVersion != SupportedFormatVersion)
         {
             return TemplateDecodeResult.Fail(
@@ -1317,21 +1407,27 @@ public static class TemplateCodec
         {
             return TemplateDecodeResult.Fail(
                 TemplateDecodeError.UnknownFallbackStrategy,
-                $"Unknown fallback strategy '{document.FallbackStrategy}'.");
+                $"Unknown fallback strategy '{Preview(document.FallbackStrategy)}'.");
         }
 
-        if (document.Entries.Count > TemplateLimits.MaxEntries)
-            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Entries: {document.Entries.Count}.");
-        if (document.Folders.Count > TemplateLimits.MaxFolders)
-            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folders: {document.Folders.Count}.");
-        if (document.FolderLabels.Count > TemplateLimits.MaxFolderLabels)
-            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folder labels: {document.FolderLabels.Count}.");
+        if (rawEntries.Count > TemplateLimits.MaxEntries)
+            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Entries: {rawEntries.Count}.");
+        if (rawFolders.Count > TemplateLimits.MaxFolders)
+            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folders: {rawFolders.Count}.");
+        if (rawLabels.Count > TemplateLimits.MaxFolderLabels)
+            return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Folder labels: {rawLabels.Count}.");
 
         var warnings = new List<TemplateWarning>();
 
         var folders = new List<string>();
-        foreach (var folder in document.Folders)
+        foreach (var folder in rawFolders)
         {
+            if (folder is null)
+            {
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, NullSubject));
+                continue;
+            }
+
             if (TemplatePathValidator.IsValidFolder(folder))
                 folders.Add(folder);
             else
@@ -1339,15 +1435,28 @@ public static class TemplateCodec
         }
 
         var labels = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (key, replacement) in document.FolderLabels)
+        foreach (var (key, replacement) in rawLabels)
         {
+            if (key is null)
+            {
+                warnings.Add(new TemplateWarning(TemplateWarningCode.UnknownFolderLabelKey, NullSubject));
+                continue;
+            }
+
+            if (replacement is null)
+            {
+                return TemplateDecodeResult.Fail(
+                    TemplateDecodeError.InvalidFolderLabelValue,
+                    $"Folder label '{Preview(key)}' has a null replacement.");
+            }
+
             // A malformed replacement value would inject a broken path into every fallback
             // proposal, so it is fatal; a malformed key only fails to match anything.
             if (!TemplatePathValidator.IsValidFolder(replacement) || replacement.Length == 0)
             {
                 return TemplateDecodeResult.Fail(
                     TemplateDecodeError.InvalidFolderLabelValue,
-                    $"Folder label '{key}' has invalid replacement '{replacement}'.");
+                    $"Folder label '{Preview(key)}' has invalid replacement '{Preview(replacement)}'.");
             }
 
             if (!TemplatePathValidator.IsValidFolder(key) || key.Length == 0)
@@ -1359,7 +1468,21 @@ public static class TemplateCodec
             labels[key] = replacement;
         }
 
-        var resolution = TemplateDuplicateResolver.Resolve(document.Entries);
+        // Dropped here rather than inside TemplateDuplicateResolver: the resolver's contract is
+        // non-null entries, and the boundary is the right place to enforce that.
+        var safeEntries = new List<TemplateEntry>(rawEntries.Count);
+        foreach (var entry in rawEntries)
+        {
+            if (entry is null || entry.N is null || entry.F is null)
+            {
+                warnings.Add(new TemplateWarning(TemplateWarningCode.InvalidEntryPath, entry?.N ?? NullSubject));
+                continue;
+            }
+
+            safeEntries.Add(entry);
+        }
+
+        var resolution = TemplateDuplicateResolver.Resolve(safeEntries);
         warnings.AddRange(resolution.Warnings);
 
         var validated = new ValidatedOrganizationTemplate(
@@ -1382,7 +1505,7 @@ public static class TemplateCodec
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~TemplateCodecJsonTests"
 ```
 
-Expected: PASS, 14 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1666,7 +1789,7 @@ The planner must compute fallback destinations, but the folder-selection express
   public static (string? Primary, string? Secondary) SortFolderSelectors.Select(
       TemplateFallbackStrategy strategy,
       OrganizerModRow row,
-      Func<string, string> canonicalizeCreator,
+      Func<string, string>? canonicalizeCreator = null,
       Func<string, string>? renameFolder = null);
 
   public static string SortFolderSelectors.FlattenToFolder(string? primary, string? secondary);
@@ -1779,6 +1902,18 @@ public class SortFolderSelectorsTests
         Assert.Null(primary);
     }
 
+    // The two type-only strategies have no creator segment, so callers pass no canonicalizer at
+    // all rather than a dummy one whose result is discarded.
+    [Fact]
+    public void Select_TypeOnlyStrategy_NeedsNoCanonicalizer()
+    {
+        var (primary, secondary) = SortFolderSelectors.Select(
+            TemplateFallbackStrategy.ModTypeDetailed, Row(ModCategory.Gear, "Head", "Tsar"));
+
+        Assert.Equal("Gear/Head", primary);
+        Assert.Null(secondary);
+    }
+
     [Theory]
     [InlineData("Gear", "Tsar", "Gear/Tsar")]
     [InlineData("Gear", null, "Gear")]
@@ -1819,25 +1954,34 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 /// </summary>
 public static class SortFolderSelectors
 {
+    /// <param name="canonicalizeCreator">
+    /// Null for the strategies that do not use a creator segment (ModType, ModTypeDetailed), so
+    /// those callers neither supply nor compute one. The local functions below keep every segment
+    /// lazy, so an unused segment is never built.
+    /// </param>
     public static (string? Primary, string? Secondary) Select(
         TemplateFallbackStrategy strategy,
         OrganizerModRow row,
-        Func<string, string> canonicalizeCreator,
+        Func<string, string>? canonicalizeCreator = null,
         Func<string, string>? renameFolder = null)
     {
-        var creator = KnownSegment(canonicalizeCreator(row.Author));
-        var detailed = TypeFolder(row.Category, row.SubCategory, renameFolder);
-        var flat = TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory), renameFolder);
+        string? Creator() =>
+            canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
+
+        string? Detailed() => TypeFolder(row.Category, row.SubCategory, renameFolder);
+
+        string? Flat() =>
+            TypeFolder(row.Category, FlattenGearSubCategory(row.Category, row.SubCategory), renameFolder);
 
         return strategy switch
         {
-            TemplateFallbackStrategy.Creator => (creator, null),
-            TemplateFallbackStrategy.ModType => (flat, null),
-            TemplateFallbackStrategy.ModTypeDetailed => (detailed, null),
-            TemplateFallbackStrategy.TypeThenCreator => (detailed, creator),
-            TemplateFallbackStrategy.TypeThenCreatorFlat => (flat, creator),
-            TemplateFallbackStrategy.CreatorThenType => (creator, detailed),
-            TemplateFallbackStrategy.CreatorThenTypeFlat => (creator, flat),
+            TemplateFallbackStrategy.Creator => (Creator(), null),
+            TemplateFallbackStrategy.ModType => (Flat(), null),
+            TemplateFallbackStrategy.ModTypeDetailed => (Detailed(), null),
+            TemplateFallbackStrategy.TypeThenCreator => (Detailed(), Creator()),
+            TemplateFallbackStrategy.TypeThenCreatorFlat => (Flat(), Creator()),
+            TemplateFallbackStrategy.CreatorThenType => (Creator(), Detailed()),
+            TemplateFallbackStrategy.CreatorThenTypeFlat => (Creator(), Flat()),
             _ => throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown fallback strategy."),
         };
     }
@@ -1891,11 +2035,12 @@ Now replace `OrganizerState.cs` lines 170-195 (the seven `SortBy*` methods plus 
     public int SortByCreator(Func<string, string> canonicalizeCreator) =>
         SortBy(TemplateFallbackStrategy.Creator, canonicalizeCreator);
 
+    // No canonicalizer: these two strategies have no creator segment, so none is computed.
     public int SortByModType() =>
-        SortBy(TemplateFallbackStrategy.ModType, static _ => string.Empty);
+        SortBy(TemplateFallbackStrategy.ModType, null);
 
     public int SortByModTypeDetailed() =>
-        SortBy(TemplateFallbackStrategy.ModTypeDetailed, static _ => string.Empty);
+        SortBy(TemplateFallbackStrategy.ModTypeDetailed, null);
 
     public int SortByTypeThenCreator(Func<string, string> canonicalizeCreator) =>
         SortBy(TemplateFallbackStrategy.TypeThenCreator, canonicalizeCreator);
@@ -1909,7 +2054,7 @@ Now replace `OrganizerState.cs` lines 170-195 (the seven `SortBy*` methods plus 
     public int SortByCreatorThenTypeFlat(Func<string, string> canonicalizeCreator) =>
         SortBy(TemplateFallbackStrategy.CreatorThenTypeFlat, canonicalizeCreator);
 
-    private int SortBy(TemplateFallbackStrategy strategy, Func<string, string> canonicalizeCreator) =>
+    private int SortBy(TemplateFallbackStrategy strategy, Func<string, string>? canonicalizeCreator) =>
         Sort(row => SortFolderSelectors.Select(strategy, row, canonicalizeCreator));
 ```
 
@@ -1921,7 +2066,7 @@ Delete the now-unused private `TypeFolder`, `KnownFolder`, `KnownSegment`, and `
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~SortFolderSelectorsTests"
 ```
 
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 ```bash
 dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj
@@ -2523,7 +2668,8 @@ Expected: PASS, entire suite.
 dotnet build
 ```
 
-Expected: Build succeeded, 0 errors, 0 warnings.
+Expected: Build succeeded, 0 errors, and no warnings beyond the pre-existing xUnit2017 warning
+in `ApplyPlannerTests.cs:306`, which predates this branch and is out of scope here.
 
 - [ ] **Step 5: Commit**
 
@@ -2688,7 +2834,8 @@ Expected: PASS, entire suite.
 dotnet build
 ```
 
-Expected: Build succeeded, 0 errors, 0 warnings.
+Expected: Build succeeded, 0 errors, and no warnings beyond the pre-existing xUnit2017 warning
+in `ApplyPlannerTests.cs:306`, which predates this branch and is out of scope here.
 
 - [ ] **Step 4: Commit**
 
@@ -2745,7 +2892,8 @@ git commit -m "docs: record community templates T1 in the roadmap"
 
 ## Phase T1 Completion Criteria
 
-- [ ] `dotnet build` succeeds with 0 warnings.
+- [ ] `dotnet build` succeeds and introduces no NEW warnings (one xUnit2017 warning in
+  `ApplyPlannerTests.cs:306` pre-dates this branch and stays).
 - [ ] `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj` passes in full, including every pre-existing test unchanged.
 - [ ] `TemplateInteropTests` passes — a template authored against one synthetic library places mods correctly in a different one, through both transports.
 - [ ] No UI, no file I/O, no clipboard, and no Penumbra IPC was added (T2/T3 scope).

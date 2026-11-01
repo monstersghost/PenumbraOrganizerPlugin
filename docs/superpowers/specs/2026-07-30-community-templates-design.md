@@ -73,17 +73,32 @@ One JSON document. Both transports carry the identical bytes.
   "createdWithVersion": "0.5.2.0",
   "createdAtUtc": "2026-07-30T07:00:00Z",
   "fallbackStrategy": "TypeThenCreator",
+  "fallbackSplitGear": true,
+  "fallbackSplitNpc": false,
   "folderLabels": { "Others": "_Unsorted", "NPC/Bosses": "NPC/Raid bosses" },
   "folders": ["Characters", "Gear/Head", "Gear/Top", "_Unsorted"],
   "entries": [ { "n": "bibo+ medieval", "f": "Gear/Top" } ]
 }
 ```
 
-- **`fallbackStrategy`** names one of the seven strategies `OrganizerState` already exposes:
-  `Creator`, `ModType`, `ModTypeDetailed`, `TypeThenCreator`, `TypeThenCreatorFlat`,
-  `CreatorThenType`, `CreatorThenTypeFlat`. An earlier draft carried a separate `useGearSubCategories`
-  boolean; dropped as redundant — the flat/detailed distinction is already the difference between the
-  `Flat` and non-`Flat` variants (`FlattenGearSubCategory`).
+- **`fallbackStrategy`** names one of the four members of `SortStrategy`: `CreatorOnly`, `TypeOnly`,
+  `TypeThenCreator`, `CreatorThenType`. **`fallbackSplitGear`** and **`fallbackSplitNpc`** are the two
+  orthogonal subdivision flags. Together they are exactly the Sort tab's own selection, so a fallback
+  can express anything a user could have sorted by and nothing they could not. Both flags are inert
+  for `CreatorOnly`, which never consults the category. Absent flags default to the Sort tab's own
+  defaults: gear off, NPC on — the latter matching the unconditional NPC subdivision that predates the
+  split checkboxes.
+
+  > **Reversal, recorded deliberately.** An earlier draft of this spec used a single seven-member
+  > enum (`Creator`, `ModType`, `ModTypeDetailed`, `TypeThenCreator`, `TypeThenCreatorFlat`,
+  > `CreatorThenType`, `CreatorThenTypeFlat`) and explicitly rejected a separate split boolean as
+  > "redundant — the flat/detailed distinction is already the difference between the `Flat` and
+  > non-`Flat` variants". That was wrong in a way worth naming: flattening the two axes into one
+  > enum made them look like one decision. It covered only seven of the thirteen reachable
+  > selections, and it had no representation at all for "do not split NPC mods" — so every imported
+  > template would have re-split NPC mods regardless of the importer's choice. The redundancy the
+  > draft saw was real for gear alone and disappeared the moment a second, independent split
+  > existed. Two orthogonal axes belong in two fields.
 - **`createdWithVersion`/`createdAtUtc`** are informational provenance only. They are never validated
   beyond being strings and never block import; they exist to make bug reports and future format
   migrations tractable.

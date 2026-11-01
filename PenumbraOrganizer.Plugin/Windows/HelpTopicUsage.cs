@@ -23,6 +23,7 @@ public static class HelpTopicUsage
         HelpTopics.ProtectFolders,
         HelpTopics.ProtectMods,
         HelpTopics.ProtectHeliosphereNote,
+        HelpTopics.ProtectStrandedAtRoot,
 
         // Sort - SortPanel.cs and MainWindow.SortTab.cs
         HelpTopics.SortGrouping,
@@ -37,6 +38,22 @@ public static class HelpTopicUsage
         HelpTopics.SortImportWorkbook,
         HelpTopics.SortManualAssign,
         HelpTopics.SortRefreshNpcList,
+
+        // Templates - MainWindow.TemplatesTab.cs
+        HelpTopics.TemplatesRefreshList,
+        HelpTopics.TemplatesOpenFolder,
+        HelpTopics.TemplatesImportFile,
+        HelpTopics.TemplatesPreview,
+        HelpTopics.TemplatesApply,
+
+        // Templates - MainWindow.TemplatesExport.cs
+        HelpTopics.TemplatesExport,
+        HelpTopics.TemplatesExportName,
+        HelpTopics.TemplatesExportFallback,
+        HelpTopics.TemplatesExportFolders,
+        HelpTopics.TemplatesExportSearch,
+        HelpTopics.TemplatesExportSave,
+        HelpTopics.TemplatesExportShareCode,
 
         // Review Changes - MainWindow.ReviewTab.cs
         HelpTopics.ReviewApply,

@@ -66,8 +66,11 @@ checkbox (a folder, or Heliosphere) shows a note next to it explaining why.
 
 Toggle protect all is a true toggle: it protects everything if anything is currently unprotected,
 and unprotects everything otherwise. Toggle Heliosphere protection does the same, scoped to
-[Heliosphere](https://heliosphere.app/)-managed mods (detected by the `hs-` directory prefix, or
-by a `heliosphere.json` file in the mod folder; see [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)).
+[Heliosphere](https://heliosphere.app/)-managed mods (detected by the `hs-` directory prefix, by
+Heliosphere's `[HS] ` name prefix, by a `heliosphere.json` file in the mod folder, or by having been
+recognised as Heliosphere's on any earlier scan; see [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)). That
+last one matters during a Heliosphere update, which briefly removes the mod's folder and writes a new
+one — without it, a scan landing in that moment would see an ordinary mod and offer to move it.
 Heliosphere mods are re-protected on every scan no matter how that toggle was last left, because
 Heliosphere owns their location and the plugin never proposes moving them during Sort or Apply.
 Manually unprotecting a non-Heliosphere mod does persist across scans; that choice, along with your
@@ -75,6 +78,13 @@ protected folders, is saved to the plugin's own config.
 
 Protection governs Sort and Apply only. Restoring a snapshot from the History tab reproduces its
 recorded paths regardless of current protection. See History below.
+
+If any protected mods are sitting at the very top level of your library, outside every folder, the
+tab says so. That combination is a dead end worth knowing about: protection means the plugin never
+proposes a path for a mod, so sorting will never file those away and they stay at the top level
+indefinitely. Heliosphere installs new mods there and they are protected by the same scan that first
+notices them, so this can happen without you doing anything. Untick one and it sorts like any other
+mod.
 
 ### Sort
 
@@ -240,6 +250,72 @@ Results show in two panes. The left pane lists the matching mods as `Name (Autho
 select it. The right pane lists that mod's changed items. If a mod matched only because of the "Mod
 name contains" box and not because of any item, a red "Matched by mod name, not by item" note
 appears above its item list, so you can tell a name hit from an item hit.
+
+### Templates
+
+A template is an organization layout someone else shared as a `.json` file. Importing one
+proposes where your mods would go: mods you and the template's author both have land in the
+folder they chose, and everything else is placed by the fallback sort strategy they picked, using
+their folder names.
+
+1. Get a template file from whoever shared it and click **Import template file...**, or drop the
+   file into the templates folder yourself (**Open templates folder** shows you where) and click
+   **Refresh list**.
+2. Select it in the list to see who made it and what it is for.
+3. Click **Preview against my library**. You get a count of how many of your mods the template
+   matched, how many its fallback strategy placed, and a browsable tree of the resulting folders
+   with the number of mods in each.
+4. If it looks right, click **Apply this template to my proposals**, then open **Review Changes**
+   to check the result and apply it like any other sort.
+
+Nothing is written to Penumbra until you apply from Review Changes, exactly as when you sort from
+the Sort tab.
+
+A few things worth knowing:
+
+- **A template never sees your mod list.** It matches on mod names, so it only affects mods you
+  already have. Mods its author never had are placed by the fallback strategy, not left behind.
+- **Matching is on the mod's name**, ignoring case, install suffixes like `_1_1_0`, and bracketed
+  tags. A mod you renamed will not match, and will be placed by the fallback strategy instead.
+- **Protected mods are never moved**, the same as with any sort.
+- If you rescan your library after previewing, the preview is discarded — preview again before
+  applying.
+
+#### Sharing your own layout
+
+**Export my layout as a template...** builds a template from your library.
+
+Read this part before you use it: **a template contains a list of your mod names, and anyone you
+send it to can read that list.** That is the whole point of the format — it is how an importer knows
+which of their mods you have an opinion about — but it means exporting is publishing. If any of your
+mods are things you would not want a stranger, or a friend, reading off a list, take them out first.
+
+That is what the review screen is for, and there is no way to export without going through it:
+
+1. Click **Export my layout as a template...**. The screen opens with **everything included**, so
+   what you see is your actual library.
+2. Give it a name, and optionally your name and a description.
+3. Pick the **fallback grouping** — where an importer's mods go when your template says nothing
+   about them. These are the same choices the Sort tab offers.
+4. Go through the folder and mod lists and untick anything you would rather not share. Unticking a
+   folder also unticks the mods in it. The search box narrows what you are looking at; **Include
+   all** and **Exclude all** always apply to every mod, not only the ones showing.
+5. Then either **Save to templates folder**, which writes a `.json` you can send to anyone, or
+   **Copy share code**, which puts the whole template on your clipboard as one line of text.
+
+Some things worth knowing:
+
+- **Export uses where your mods are now**, not any proposals sitting on Review Changes. If you have
+  sorted but not applied, the template describes your *old* layout, because that is the one your
+  library actually has. The screen says so.
+- **Share codes only work for small templates.** A chat message holds about 2000 characters, which
+  is roughly a hundred mods. Past that the button is disabled and the screen tells you the length —
+  send the file instead.
+- **Mods sitting loose at the top level are left out.** A template only carries folders, so a mod
+  that is not in one has nothing to record. The screen tells you how many.
+- If two of your mods have names that match once suffixes and tags are stripped, and they are in
+  *different* folders, that name is left out and the screen says so — a template cannot say two
+  things about one name. Exclude one of them to include the other.
 
 ### Help
 

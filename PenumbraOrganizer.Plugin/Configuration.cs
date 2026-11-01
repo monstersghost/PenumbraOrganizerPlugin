@@ -10,6 +10,17 @@ public sealed class Configuration : IPluginConfiguration
 
     public HashSet<string> ProtectedFolderPaths { get; set; } = [];
 
+    /// <summary>
+    /// Every mod identifier any scan has ever resolved as Heliosphere-managed.
+    /// </summary>
+    /// <remarks>
+    /// Persisted so a mod is not silently unprotected during the window where its
+    /// <c>heliosphere.json</c> is absent - which is what a Heliosphere update looks like on disk.
+    /// Only ever grows: an entry that is no longer managed costs one unnecessary protection the user
+    /// can untick, whereas dropping one costs a mod being moved out from under Heliosphere.
+    /// </remarks>
+    public HashSet<string> KnownHeliosphereIdentifiers { get; set; } = [];
+
     public Organizer.ApplyOperationSummary? LastApply { get; set; }
 
     public Organizer.RestoreOperationSummary? LastRestore { get; set; }

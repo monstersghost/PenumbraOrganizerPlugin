@@ -304,6 +304,76 @@
       "id": "recovery.close-all",
       "title": "Accept Current State and Close All Interrupted Operations",
       "short": "Permanently abandons every interrupted operation at once. None can be continued or rolled back. No mod moves - it only stops the plugin blocking further actions."
+    },
+    {
+      "id": "templates.export",
+      "title": "Export my layout as a template",
+      "short": "Builds a shareable template from the folders your mods are in now, not from pending proposals. A review screen opens first, because a template lists your mod names."
+    },
+    {
+      "id": "templates.export-name",
+      "title": "Template name",
+      "short": "How your template appears in someone else's list. Required. The file on disk gets a tidied version of it, but this is the name other people see."
+    },
+    {
+      "id": "templates.export-fallback",
+      "title": "Fallback grouping",
+      "short": "Where an importer's mods go when your template does not mention them. Same groupings the Sort tab offers, so a template can only ask for a layout this plugin can produce."
+    },
+    {
+      "id": "templates.export-folders",
+      "title": "Folders",
+      "short": "Every folder that goes into the template, empty ones included, so an importer gets your whole structure. Unticking a folder also leaves out the mods inside it."
+    },
+    {
+      "id": "templates.export-search",
+      "title": "Search mods",
+      "short": "Narrows the list you are looking at. It never changes what is included - Include all and Exclude all always apply to every mod, not just the ones shown."
+    },
+    {
+      "id": "templates.export-save",
+      "title": "Save to templates folder",
+      "short": "Writes the template as a .json file you can send to anyone. Use this for a real library: it works at any size, unlike a share code."
+    },
+    {
+      "id": "templates.export-share-code",
+      "title": "Copy share code",
+      "short": "Copies the template as one line of text to paste into chat. Small templates only - a chat message holds about 2000 characters and a big library will not fit."
+    },
+    {
+      "id": "help.tab-templates",
+      "title": "Templates",
+      "body": "A template is a folder layout someone shared. Importing one proposes where your mods would go; mods you both have land where they put them, and the rest follow the fallback grouping they chose.\n\nNothing is applied until you review it on Review Changes.\n\nExport builds a template from your own library. It shows you every mod name that would be included first, because whoever you send it to can read that list."
+    },
+    {
+      "id": "templates.refresh-list",
+      "title": "Refresh list",
+      "short": "Re-reads the templates folder. Use it after dropping a .json in there yourself. Files that are not readable templates are listed as skipped rather than hidden."
+    },
+    {
+      "id": "templates.open-folder",
+      "title": "Open templates folder",
+      "short": "Opens the folder templates are kept in, creating it if it does not exist yet. Handy for putting a file there by hand, or for finding one you saved to send to someone."
+    },
+    {
+      "id": "templates.import-file",
+      "title": "Import template file",
+      "short": "Copies a .json someone shared into your templates folder. It is checked before it is stored, and it never overwrites a template you already have - a name clash gets a numbered filename."
+    },
+    {
+      "id": "templates.preview",
+      "title": "Preview against my library",
+      "short": "Works out where this template would put your mods and shows the folder tree with counts, plus how many of your mods it matched. Nothing is staged or moved yet."
+    },
+    {
+      "id": "templates.apply",
+      "title": "Apply this template to my proposals",
+      "short": "Fills in proposed paths from the preview. Still nothing moves - open Review Changes to check them and apply from there, exactly as with any sort."
+    },
+    {
+      "id": "protect.stranded-at-root",
+      "title": "Protected mods at the top level",
+      "short": "Protected mods outside any folder. Sorting never moves a protected mod, so these stay at the top level until you untick one. Heliosphere installs new mods here and they are protected on sight."
     }
   ]
 }

@@ -69,6 +69,13 @@ public sealed partial class MainWindow : Window, IDisposable
     private Organizer.NpcNames.NpcNameRefreshResult? _npcRefreshResult;
     private readonly FileDialogManager _fileDialogManager = new();
 
+    private Organizer.Templates.TemplateStoreListing? _templateListing;
+    private Organizer.Templates.StoredTemplate? _selectedTemplate;
+    private Organizer.Templates.TemplateApplicationPlan? _templatePlan;
+    private Organizer.Templates.ValidatedOrganizationTemplate? _templatePlanTemplate;
+    private int _templatePlanScanGeneration = -1;
+    private string? _templateStatus;
+
     private string _librarySearchNameQuery = string.Empty;
     private string _librarySearchItemQuery = string.Empty;
     private readonly HashSet<ModCategory> _librarySearchCategories = new(SearchableCategories);
@@ -193,6 +200,8 @@ public sealed partial class MainWindow : Window, IDisposable
                 DrawReviewTab();
                 DrawHistoryTab();
                 DrawSearchTab();
+                DrawTemplatesTab();
+
                 // A standalone type rather than a MainWindow partial, so its content is reachable
                 // from tests - see HelpTab's own remarks. Tab dispatch stays here regardless.
                 HelpTab.Draw(ShowWalkthrough, _sortHelpRequested);

@@ -216,6 +216,15 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
+            RememberHeliosphereIdentifiers();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Remembering Heliosphere-managed mods after a scan failed; the scan itself succeeded.");
+        }
+
+        try
+        {
             SaveProtectionState();
         }
         catch (Exception ex)
@@ -240,6 +249,21 @@ public sealed class Plugin : IDalamudPlugin
     private void OnFrameworkUpdate(IFramework framework)
     {
         OperationController.Update(); // has its own internal exception boundary
+
+        try
+        {
+            RecordOperationCompletionIfNew();
+        }
+        catch (Exception ex)
+        {
+            // Recording an outcome must never be able to break the operation that produced it, or
+            // the diagnostics become a new failure mode for the thing they exist to explain.
+            if (!_operationRecordFaulted)
+            {
+                _operationRecordFaulted = true;
+                Log.Error(ex, "Recording an operation's outcome failed; the operation itself is unaffected.");
+            }
+        }
 
         // Each of these three gets its own try/catch and its own never-reset latch: they are
         // independent of one another, so one throwing must not skip or starve the others. A
@@ -302,7 +326,9 @@ public sealed class Plugin : IDalamudPlugin
         // AdmissionRejectionReason, which covers an active operation, a pending recovery, a
         // starting operation, AND (via the Task 8 gate) the other library coordinator.
         EnsureAdmitted();
-        ScanWork.Start(new ScanJob(this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList));
+        ScanWork.Start(new ScanJob(
+            this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList,
+            Config.KnownHeliosphereIdentifiers));
     }
 
     /// <summary>
@@ -500,6 +526,13 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string OperationsRoot => Path.Combine(PluginInterface.ConfigDirectory.FullName, "operations");
 
+    internal string TemplatesDirectory => Path.Combine(PluginInterface.ConfigDirectory.FullName, "templates");
+
+    private Organizer.Templates.TemplateStore? _templateStore;
+
+    internal Organizer.Templates.TemplateStore TemplateStore =>
+        _templateStore ??= new Organizer.Templates.TemplateStore(TemplatesDirectory);
+
     // Penumbra's config dir is a sibling of this plugin's own under Dalamud's pluginConfigs
     // folder — no IPC exposes it (confirmed against the full Penumbra.Api 5.15.1 surface; see
     // the folder-cleanup design spec's Ground truth section).
@@ -508,6 +541,79 @@ public sealed class Plugin : IDalamudPlugin
 
     private static string OrganizationJsonPath =>
         Path.Combine(PenumbraConfigDirectory, "mod_filesystem", "organization.json");
+
+    /// <summary>
+    /// Penumbra's folder list, for seeding the template export screen. Null when the file cannot be
+    /// read at all — export degrades to the folders derivable from mods and says so, because a
+    /// folder holding no mods is invisible in the scan yet is exactly what an author wants to share.
+    /// </summary>
+    /// <summary>
+    /// Adds this scan's Heliosphere-managed mods to the remembered set, so a later scan that cannot
+    /// see their heliosphere.json still protects them. Saves only when something was actually added.
+    /// </summary>
+    private void RememberHeliosphereIdentifiers()
+    {
+        var added = false;
+        foreach (var row in OrganizerState.Mods.Where(m => m.HeliosphereManaged))
+            added |= Config.KnownHeliosphereIdentifiers.Add(row.Identifier);
+
+        if (added)
+            PluginInterface.SavePluginConfig(Config);
+    }
+
+    private bool _operationRecordFaulted;
+    private long _lastRecordedCompletionGeneration;
+
+    /// <summary>
+    /// Writes a concluded operation's outcome to the Dalamud log and, for Apply, to the persisted
+    /// summary the diagnostic dump reads.
+    /// </summary>
+    /// <remarks>
+    /// Driven off <c>CompletionGeneration</c>, which the controller increments exactly once per
+    /// operation reaching a terminal stage, so this fires once per operation rather than every frame
+    /// a terminal stage stays visible.
+    /// <para>
+    /// Restore deliberately does NOT get a persisted summary here. Its summary carries a per-outcome
+    /// breakdown (moved / unchanged / skipped uninstalled / relocated to root) that the state
+    /// snapshot does not expose, and writing zeros into those fields would make the dump confidently
+    /// wrong rather than merely silent. The lifecycle line below still covers Restore.
+    /// </para>
+    /// </remarks>
+    private void RecordOperationCompletionIfNew()
+    {
+        var state = OperationController.State;
+        if (state.CompletionGeneration == _lastRecordedCompletionGeneration)
+            return;
+
+        _lastRecordedCompletionGeneration = state.CompletionGeneration;
+
+        if (state.Stage is not { } stage || state.Kind is not { } kind)
+            return;
+
+        Log.Information(Organizer.OperationOutcomeSummarizer.DescribeCompletion(
+            kind, state.OperationId, stage,
+            state.SuccessfulTargets, state.ProcessedTargets, state.TotalTargets, state.LastError));
+
+        if (kind != Organizer.Operations.OperationType.Apply)
+            return;
+
+        Config.LastApply = Organizer.OperationOutcomeSummarizer.ToApplySummary(
+            stage, state.SuccessfulTargets, state.ProcessedTargets, DateTimeOffset.Now);
+        PluginInterface.SavePluginConfig(Config);
+    }
+
+    internal string? ReadOrganizationJsonOrNull()
+    {
+        try
+        {
+            return File.Exists(OrganizationJsonPath) ? File.ReadAllText(OrganizationJsonPath) : null;
+        }
+        catch (Exception exception)
+        {
+            Log.Warning($"Could not read organization.json for template export: {exception.Message}");
+            return null;
+        }
+    }
 
     private string FolderBackupFilePath =>
         Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-folder-backup.json");
@@ -540,6 +646,15 @@ public sealed class Plugin : IDalamudPlugin
             var currentMods = ReadCurrentMods();
             var snapshot = Organizer.RollbackHistory.CaptureSnapshot(currentMods, label: null, $"{touchedRows.Count} mods moved");
             Organizer.RollbackHistory.AppendSnapshot(HistoryFilePath, snapshot);
+
+            // Logged at the point the snapshot lands, so a log and a rollback history can be lined
+            // up against each other. Protected rows are already excluded from touchedRows above; the
+            // count is recorded here because "how many did it intend to move" is the first question
+            // asked when a tester reports something moved that should not have.
+            Log.Information(
+                $"[Apply] starting: {touchedRows.Count} mods to move, "
+                + $"{OrganizerState.Mods.Count(m => m.Protected)} protected and excluded, "
+                + $"snapshot={snapshot.Id:N}");
 
             var plan = Organizer.Operations.OperationPlanBuilder.BuildApplyPlan(touchedRows);
             var bundleDirectory = Organizer.Operations.OperationBundlePaths.BundleDirectory(OperationsRoot, active: true, plan.OperationId);
