@@ -1,7 +1,7 @@
 # Split hair by hair number
 
 Date: 2026-11-01
-Status: approved, not yet implemented
+Status: implemented. Testing build 0.6.1.0; stable in 0.6.1.1.
 
 ## What this adds
 

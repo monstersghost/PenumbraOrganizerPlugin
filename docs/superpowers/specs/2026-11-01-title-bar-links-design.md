@@ -1,7 +1,7 @@
 # Title-bar link buttons
 
 Date: 2026-11-01
-Status: approved, not yet implemented
+Status: implemented in 0.6.1.1. In-game check pending.
 
 ## What this adds
 

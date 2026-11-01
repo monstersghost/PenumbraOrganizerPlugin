@@ -11,6 +11,17 @@ Most users should install through the self-hosted plugin repository described in
 building from source or loading a local dev build instead, see
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
+## Title bar
+
+Three icon buttons sit in the title bar, to the left of Dalamud's own icons. Each opens a page in
+your browser:
+
+- **Code icon:** the plugin's GitHub repository.
+- **Chat icon:** the Discord server, for help.
+- **Mug icon:** the Ko-fi page, if you want to support the project.
+
+Hover over each one to see what it opens.
+
 ## Requirements
 
 Dalamud, via XIVLauncher. Penumbra installed and enabled: every tab depends on Penumbra's IPC
@@ -91,6 +102,9 @@ mod.
 Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
 path for every unprotected mod without moving anything yet. Only Apply, on the Review Changes tab,
 actually calls Penumbra.
+
+The controls are grouped into Gear, NPC and Hair, with a rule between each group. Each group has its
+own split checkbox. The **?** button beside Sort opens the Help tab at its Sort section.
 
 **Group by** picks the shape of the path:
 
@@ -328,7 +342,7 @@ them, so the Help tab doubles as a reference for anything you saw a tooltip on a
 again.
 
 "Join the Discord for support" opens the project's Discord in your browser. That is the fastest
-place to get help, and where testing builds are announced.
+place to get help, and where releases and testing builds are announced.
 
 "Open the full guide in your browser" opens this document, pinned to the release you're running
 rather than to the latest one, so it always describes the version you actually have.
@@ -388,3 +402,7 @@ See [ROADMAP.md](ROADMAP.md) for the current status. The child-race-variant NPC 
 is implemented but not yet confirmed against a real, in-game mod library. The NPC wiki-refresh path
 has no automated test coverage. Folder Cleanup detection can appear stale immediately after a large
 Sort or Restore. See the Review Changes section above for why, and for how to force a re-check.
+
+Hair numbers are read from the mod's files, and also from the EST entries in its metadata. The EST
+value has not yet been confirmed in game to be the hair number. If a mod is filed under a number that
+is not the hair it replaces, turn Split hair off and report the mod name and both numbers on Discord.

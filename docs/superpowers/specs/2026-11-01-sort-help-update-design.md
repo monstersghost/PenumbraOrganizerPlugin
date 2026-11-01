@@ -1,6 +1,6 @@
 # Sort Help Update - Design
 
-**Status:** Draft for review. Not implemented.
+**Status:** Implemented in 0.6.1.1 (stable).
 **Related:** `2026-11-01-sort-panel-layout-design.md` (the layout this text describes),
 `2026-11-01-race-priority-hair-design.md` (the two new Hair controls).
 

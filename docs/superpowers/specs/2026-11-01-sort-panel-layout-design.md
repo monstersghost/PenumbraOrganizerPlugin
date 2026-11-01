@@ -1,6 +1,6 @@
 # Sort Tab Layout - Design
 
-**Status:** Draft for review. Not implemented.
+**Status:** Implemented in 0.6.1.1 (stable).
 **Related:** `2026-11-01-race-priority-hair-design.md` (adds two controls to the Hair group),
 `2026-11-01-sort-help-update-design.md` (the Help tab text for the same controls).
 

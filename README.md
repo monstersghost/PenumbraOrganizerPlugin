@@ -50,7 +50,7 @@ Once it's installed, see [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to use
 Found a bug, hit unexpected behavior, or have a feature idea?
 
 * **[Join the Discord](https://discord.gg/NHssF8ux6B)** - the fastest way to get help, and where
-  testing builds are announced.
+  releases and testing builds are announced.
 * Or [open a GitHub issue](https://github.com/monstersghost/PenumbraOrganizerPlugin/issues).
 
 The same Discord link is on the plugin's own **Help** tab, alongside the full guide and the

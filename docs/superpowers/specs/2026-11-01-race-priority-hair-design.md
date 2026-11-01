@@ -1,6 +1,6 @@
 # Race-Priority Hair Sorting - Design
 
-**Status:** Revised draft, third revision: race table complete. Not implemented.
+**Status:** Implemented in 0.6.1.1 (stable). Priority and Midlander fallback confirmed in game.
 **Builds on:** `docs/superpowers/specs/2026-11-01-hair-number-sorting-design.md` (0.6.1.0, testing build).
 **Evidence:** `C:\Mods\[R] Zutail Hair (2)`, read in full (see "Evidence from a real mod").
 
