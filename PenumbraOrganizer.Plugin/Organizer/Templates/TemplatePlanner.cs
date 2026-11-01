@@ -14,7 +14,10 @@ public sealed record TemplateApplyReport(
     int TemplateEntriesMatched,
     int TemplateEntriesUnmatched,
     int AmbiguousLocalMatchGroups,
-    int InvalidEntriesSkipped);
+    int InvalidEntriesSkipped,
+    // Last and defaulted, so positional callers that predate it still compile. Entries whose only
+    // matches are protected mods: they are skipped, not missing, and are not counted as unmatched.
+    int TemplateEntriesProtected = 0);
 
 public sealed record TemplateApplicationPlan(
     IReadOnlyDictionary<string, string> DestinationFolders,
@@ -62,6 +65,8 @@ public static class TemplatePlanner
         var destinations = new Dictionary<string, string>(StringComparer.Ordinal);
         var matchedEntryKeys = new HashSet<string>(StringComparer.Ordinal);
         var rowsPerNormalizedName = new Dictionary<string, int>(StringComparer.Ordinal);
+        // Names of protected rows, kept so an entry that only matches protected mods can say so.
+        var protectedKeys = new HashSet<string>(StringComparer.Ordinal);
 
         var protectedRows = 0;
         var matchedRows = 0;
@@ -74,6 +79,9 @@ public static class TemplatePlanner
             if (row.Protected)
             {
                 protectedRows++;
+                var protectedKey = ModNameNormalizer.Normalize(row.Name);
+                if (protectedKey.Length > 0)
+                    protectedKeys.Add(protectedKey);
                 continue;
             }
 
@@ -109,10 +117,18 @@ public static class TemplatePlanner
         }
 
         var unmatchedEntries = 0;
+        var protectedEntries = 0;
         foreach (var key in template.EntriesByNormalizedName.Keys.OrderBy(k => k, StringComparer.Ordinal))
         {
             if (matchedEntryKeys.Contains(key))
                 continue;
+
+            if (protectedKeys.Contains(key))
+            {
+                protectedEntries++;
+                warnings.Add(new TemplateWarning(TemplateWarningCode.ProtectedTemplateEntry, key));
+                continue;
+            }
 
             unmatchedEntries++;
             warnings.Add(new TemplateWarning(TemplateWarningCode.UnmatchedTemplateEntry, key));
@@ -130,7 +146,8 @@ public static class TemplatePlanner
             TemplateEntriesMatched: matchedEntryKeys.Count,
             TemplateEntriesUnmatched: unmatchedEntries,
             AmbiguousLocalMatchGroups: ambiguousGroups,
-            InvalidEntriesSkipped: decodeWarnings?.Count(w => w.Code == TemplateWarningCode.InvalidEntryPath) ?? 0);
+            InvalidEntriesSkipped: decodeWarnings?.Count(w => w.Code == TemplateWarningCode.InvalidEntryPath) ?? 0,
+            TemplateEntriesProtected: protectedEntries);
 
         return new TemplateApplicationPlan(destinations, folderCounts, report, warnings);
     }

@@ -50,6 +50,8 @@ public enum TemplateWarningCode
     ConflictingDuplicateEntry,
     ExportNameCollision,
     UnmatchedTemplateEntry,
+    /// <summary>The entry's only matching mods are protected, so the planner skipped them.</summary>
+    ProtectedTemplateEntry,
     AmbiguousLocalMatch,
 }
 

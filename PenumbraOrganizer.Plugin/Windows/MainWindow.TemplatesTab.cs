@@ -152,6 +152,14 @@ public sealed partial class MainWindow
             + $"{report.ProtectedRows} skipped as protected. "
             + $"{report.TemplateEntriesUnmatched} of the template's entries matched nothing you own.");
 
+        if (report.TemplateEntriesProtected > 0)
+        {
+            ImGui.TextColored(
+                ImGuiColors.DalamudYellow,
+                $"{report.TemplateEntriesProtected} template entries match only protected mods in your library. "
+                + "They are skipped, not missing.");
+        }
+
         if (report.AmbiguousLocalMatchGroups > 0)
         {
             ImGui.TextColored(
@@ -217,6 +225,8 @@ public sealed partial class MainWindow
         {
             Organizer.Templates.TemplateWarningCode.UnmatchedTemplateEntry =>
                 $"You do not have \"{warning.Subject}\".",
+            Organizer.Templates.TemplateWarningCode.ProtectedTemplateEntry =>
+                $"Skipped, protected in your library: \"{warning.Subject}\".",
             Organizer.Templates.TemplateWarningCode.AmbiguousLocalMatch =>
                 $"More than one of your mods is named \"{warning.Subject}\".",
             Organizer.Templates.TemplateWarningCode.InvalidEntryPath =>

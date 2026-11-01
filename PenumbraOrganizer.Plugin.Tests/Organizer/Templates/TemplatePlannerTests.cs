@@ -106,6 +106,24 @@ public class TemplatePlannerTests
     }
 
     [Fact]
+    public void Plan_EntryOnlyMatchingProtectedRow_IsSkippedNotMissing()
+    {
+        var plan = TemplatePlanner.Plan(
+            Template(entries: new() { ["locked mod"] = "Gear/Top" }),
+            [Row("id1", "Locked Mod", isProtected: true)],
+            Same);
+
+        Assert.Equal(0, plan.Report.TemplateEntriesUnmatched);
+        Assert.Equal(1, plan.Report.TemplateEntriesProtected);
+        Assert.Contains(
+            new TemplateWarning(TemplateWarningCode.ProtectedTemplateEntry, "locked mod"),
+            plan.Warnings);
+        Assert.DoesNotContain(
+            plan.Warnings,
+            w => w.Code == TemplateWarningCode.UnmatchedTemplateEntry);
+    }
+
+    [Fact]
     public void Plan_EntryMatchingNothing_IsCountedAndWarned()
     {
         var plan = TemplatePlanner.Plan(
