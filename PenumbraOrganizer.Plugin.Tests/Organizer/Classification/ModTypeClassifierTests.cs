@@ -593,4 +593,68 @@ public class ModTypeClassifierTests
         var key = ChangedItemKeyParser.Parse("Icon: Something");
         Assert.Null(ModTypeClassifier.ClassifyKeyFacet(key));
     }
+
+    [Fact]
+    public void EnrichHairSubCategory_ExactlyOneNumber_AssignsIt()
+    {
+        var baseResult = new ClassificationResult(ModCategory.Hair, null, ClassificationSource.Structural);
+
+        var result = ModTypeClassifier.EnrichHairSubCategory(baseResult, new HashSet<int> { 115 });
+
+        Assert.Equal("115", result.SubCategory);
+        Assert.Equal(ModCategory.Hair, result.Category);
+        Assert.Equal(ClassificationSource.Structural, result.Source);
+    }
+
+    [Fact]
+    public void EnrichHairSubCategory_ProducesAFolderNameGetFolderAccepts()
+    {
+        // The two halves of this feature agreeing is the property that matters: a format change on
+        // one side without the other would throw inside the sort rather than fail here.
+        var baseResult = new ClassificationResult(ModCategory.Hair, null, ClassificationSource.Structural);
+
+        var result = ModTypeClassifier.EnrichHairSubCategory(baseResult, new HashSet<int> { 9 });
+
+        Assert.Equal("Hair/9", ModTypeFolders.GetFolder(ModCategory.Hair, result.SubCategory));
+    }
+
+    [Theory]
+    [InlineData(ModCategory.Gear)]
+    [InlineData(ModCategory.Body)]
+    [InlineData(ModCategory.NPC)]
+    public void EnrichHairSubCategory_NonHairCategory_IsUntouched(ModCategory category)
+    {
+        var baseResult = new ClassificationResult(category, null, ClassificationSource.Structural);
+
+        var result = ModTypeClassifier.EnrichHairSubCategory(baseResult, new HashSet<int> { 115 });
+
+        Assert.Same(baseResult, result);
+    }
+
+    [Fact]
+    public void EnrichHairSubCategory_ReadFailure_IsUntouched()
+    {
+        // null means the read could not be trusted. Filing on it would be a confident wrong answer.
+        var baseResult = new ClassificationResult(ModCategory.Hair, null, ClassificationSource.Structural);
+
+        Assert.Same(baseResult, ModTypeClassifier.EnrichHairSubCategory(baseResult, null));
+    }
+
+    [Fact]
+    public void EnrichHairSubCategory_NoEvidence_IsUntouched()
+    {
+        var baseResult = new ClassificationResult(ModCategory.Hair, null, ClassificationSource.Structural);
+
+        Assert.Same(baseResult, ModTypeClassifier.EnrichHairSubCategory(baseResult, new HashSet<int>()));
+    }
+
+    [Fact]
+    public void EnrichHairSubCategory_TwoOrMoreNumbers_IsUntouched()
+    {
+        // The maintainer's decision (2026-11-01): ambiguous mods stay directly in Hair/. No Mixed
+        // bucket, and no lowest-number-wins.
+        var baseResult = new ClassificationResult(ModCategory.Hair, null, ClassificationSource.Structural);
+
+        Assert.Same(baseResult, ModTypeClassifier.EnrichHairSubCategory(baseResult, new HashSet<int> { 9, 115 }));
+    }
 }
