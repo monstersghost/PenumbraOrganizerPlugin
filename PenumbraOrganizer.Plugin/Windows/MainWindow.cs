@@ -1,5 +1,6 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Interface.Utility.Raii;
@@ -102,6 +103,40 @@ public sealed partial class MainWindow : Window, IDisposable
             MinimumSize = new Vector2(900, 480),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
+
+        // Dalamud's FontAwesomeIcon enum carries no brand glyphs (no GitHub or Discord), so these are
+        // the solid stand-ins: Code for the repository, Comments for the support chat.
+        //
+        // Left to right, so the two support links lead and the tip jar sits closest to Dalamud's
+        // own pin and gear icons. Every click hands off to the system browser - nothing here
+        // renders a page in game.
+        //
+        // Each Click takes the clicked mouse button, hence `_ =>` rather than `() =>`. The URLs
+        // live on HelpTab beside the guide link, which is the one place outbound links belong.
+        TitleBarButtons =
+        [
+            new()
+            {
+                Icon = FontAwesomeIcon.Code,
+                IconOffset = new Vector2(2, 1),
+                Click = _ => BrowserLink.Open(HelpTab.GitHubUrl),
+                ShowTooltip = () => ImGui.SetTooltip("Open the plugin's GitHub repository"),
+            },
+            new()
+            {
+                Icon = FontAwesomeIcon.Comments,
+                IconOffset = new Vector2(2, 1),
+                Click = _ => BrowserLink.Open(HelpTab.DiscordUrl),
+                ShowTooltip = () => ImGui.SetTooltip("Join the Discord for support"),
+            },
+            new()
+            {
+                Icon = FontAwesomeIcon.MugHot,
+                IconOffset = new Vector2(2, 1),
+                Click = _ => BrowserLink.Open(HelpTab.KofiUrl),
+                ShowTooltip = () => ImGui.SetTooltip("Support the plugin on Ko-fi"),
+            },
+        ];
 
         _plugin = plugin;
     }
