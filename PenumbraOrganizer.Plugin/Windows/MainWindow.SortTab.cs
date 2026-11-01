@@ -22,7 +22,8 @@ public sealed partial class MainWindow
 
         _sortPanel.Draw(
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
-            _creatorCanonicalizer.Canonicalize);
+            _creatorCanonicalizer.Canonicalize,
+            () => _sortHelpRequested = true);
 
         ImGui.Spacing();
 

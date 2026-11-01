@@ -30,6 +30,7 @@ public static class HelpTopicUsage
         HelpTopics.SortSplitNpc,
         HelpTopics.SortSplitHair,
         HelpTopics.SortButton,
+        HelpTopics.SortHelpButton,
         HelpTopics.SortScrapedNpcList,
         HelpTopics.SortImportWorkbook,
         HelpTopics.SortManualAssign,

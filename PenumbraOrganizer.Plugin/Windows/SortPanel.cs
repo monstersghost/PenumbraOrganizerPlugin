@@ -66,12 +66,22 @@ public sealed class SortPanel
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
     private SortSelection? _lastSorted;
 
+    // A rule and a coloured heading above each mod-type group. The rule is ImGui's own separator,
+    // so the groups read as separate without a new widget.
+    private static void GroupHeading(string title)
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(PluginTheme.ChangedGood, title);
+    }
+
     public void Draw(
         OrganizerState state,
         ActivityGates gates,
         Configuration config,             // the scraped-list opt-in is persistent, not session
         Action saveConfig,
-        Func<string, string> canonicalizeCreator)
+        Func<string, string> canonicalizeCreator,
+        Action? onShowSortHelp = null)
     {
         ImGui.BeginDisabled(!gates.CanStageProposals);
 
@@ -87,20 +97,17 @@ public sealed class SortPanel
 
         // Each checkbox closes its own disabled scope before its tooltip: ImGui is positional, so
         // Help.Tooltip binds to whichever widget was submitted last, and EndDisabled submits none.
+        GroupHeading("Gear");
         ImGui.BeginDisabled(!splitsApply);
         ImGui.Checkbox("Split gear by equipment slot", ref _splitGear);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortSplitGear, splitsApply ? null : SplitsInapplicableReason);
 
+        GroupHeading("NPC");
         ImGui.BeginDisabled(!splitsApply);
         ImGui.Checkbox("Split NPC mods by kind", ref _splitNpc);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortSplitNpc, splitsApply ? null : SplitsInapplicableReason);
-
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Split hair by hair number", ref _splitHair);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitHair, splitsApply ? null : SplitsInapplicableReason);
 
         // Piece 1's opt-in. Bound directly to config, saved on change, and force-disabled for 0.6.0
         // through the SAME gate the backend consults - so a config value left true cannot quietly
@@ -115,6 +122,16 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortScrapedNpcList,
             Configuration.ScrapedNpcListFeatureEnabled ? null : "Not available in this version.");
+
+        GroupHeading("Hair");
+        ImGui.BeginDisabled(!splitsApply);
+        ImGui.Checkbox("Split hair by hair number", ref _splitHair);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortSplitHair, splitsApply ? null : SplitsInapplicableReason);
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
 
         // Every control above has now been submitted, so this is the selection as the user has it
         // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
@@ -137,6 +154,12 @@ public sealed class SortPanel
             gates.CanStageProposals ? null : ActivityGateReason);
 
         ImGui.EndDisabled();
+
+        // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.
+        ImGui.SameLine();
+        if (ImGui.Button("?##sort-help"))
+            onShowSortHelp?.Invoke();
+        Help.Tooltip(HelpTopics.SortHelpButton);
 
         if (_lastSorted is { } last && last != selection)
             ImGui.TextDisabled("Selection changed since the last sort.");
