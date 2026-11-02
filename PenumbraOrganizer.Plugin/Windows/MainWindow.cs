@@ -34,6 +34,9 @@ public sealed partial class MainWindow : Window, IDisposable
     private string? _lastError;
     private string _protectFilter = string.Empty;
     private float _protectedFolderListHeight = 220f;
+    // Set by a folder row's "Unprotect N inside" button; also gates that row's confirm modal.
+    private string? _pendingUnprotectFolder;
+    private bool _unprotectFolderPopupOpened;
     private string _manualFolderInput = string.Empty;
     private readonly HashSet<string> _selectedManualModIdentifiers = new(StringComparer.Ordinal);
     private string _manualAssignFilter = string.Empty;

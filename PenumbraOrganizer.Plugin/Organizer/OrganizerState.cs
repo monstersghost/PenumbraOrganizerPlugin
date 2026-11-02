@@ -197,6 +197,80 @@ public sealed class OrganizerState
             row.Protected = IsEffectivelyProtectedFull(row);
     }
 
+    /// <summary>
+    /// Clears protection from every source for the mods currently inside <paramref name="folderPath"/>
+    /// (recursively), and drops the folder's own protection rule. Returns how many rows it freed.
+    /// </summary>
+    /// <remarks>
+    /// The folder checkbox stays a pure folder-rule toggle: unticking it withdraws only the folder's
+    /// own contribution, so an explicit per-mod tick or a protected ancestor still holds. That is
+    /// correct and composable, but it left "protect everything except this one folder" impossible -
+    /// "Toggle protect all" writes an explicit entry for every mod and ticks no folder at all, so
+    /// there was no folder to untick and every row stayed protected, which is how it was reported
+    /// ("hit sort and it goes apply to 0 mods"). This is the affirmative bulk action for that:
+    /// explicit entries under the folder go, Heliosphere rows under it get the same transient
+    /// override the Heliosphere toggle sets, and the folder rule itself is withdrawn.
+    /// <para>
+    /// A still-protected ANCESTOR folder is a separate instruction this action does not touch, so
+    /// rows under one stay protected - the returned count says how many actually came free.
+    /// </para>
+    /// </remarks>
+    public int UnprotectFolderContents(string folderPath)
+    {
+        var normalized = OrganizationCleanupPlanner.NormalizeFolderPath(folderPath);
+        if (normalized is null)
+            return 0;
+
+        var scope = new HashSet<string>([normalized], StringComparer.Ordinal);
+        var contents = _mods.Values
+            .Where(row => OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, scope))
+            .ToList();
+
+        _protectedFolders.Remove(normalized);
+        foreach (var row in contents)
+        {
+            _protectedModIdentifiers.Remove(row.Identifier);
+            if (row.HeliosphereManaged)
+                SetHeliosphereOverride(row.Identifier, unprotected: true);
+        }
+
+        // Full recompute for the same reason SetFolderProtected does one: withdrawing this folder's
+        // rule can change rows outside the folder's contents (a descendant folder's, say).
+        foreach (var row in _mods.Values)
+            row.Protected = IsEffectivelyProtectedFull(row);
+
+        return contents.Count(row => !row.Protected);
+    }
+
+    /// <summary>
+    /// Protected-mod counts keyed by folder: every folder containing at least one protected mod,
+    /// mapped to how many it holds at any depth. Folders with none are absent.
+    /// </summary>
+    /// <remarks>
+    /// One pass over the rows, walking each protected row's ancestors, rather than a per-folder
+    /// query. The Protect tab needs this for every folder row it draws, every frame, so the
+    /// obvious shape - ask per folder - is O(folders x mods) on the render thread and gets slow
+    /// exactly on the large libraries this plugin exists for.
+    /// </remarks>
+    public Dictionary<string, int> BuildProtectedModCountsByFolder()
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var row in _mods.Values)
+        {
+            if (!row.Protected)
+                continue;
+
+            var folder = OrganizationCleanupPlanner.GetVirtualParent(row.CurrentPath);
+            while (folder is not null)
+            {
+                counts[folder] = counts.GetValueOrDefault(folder) + 1;
+                folder = OrganizationCleanupPlanner.GetVirtualParent(folder);
+            }
+        }
+
+        return counts;
+    }
+
     private bool IsEffectivelyProtectedFull(OrganizerModRow row) =>
         IsEffectivelyProtected(row, _protectedModIdentifiers, _protectedFolders, _heliosphereUnprotectOverrides);
 

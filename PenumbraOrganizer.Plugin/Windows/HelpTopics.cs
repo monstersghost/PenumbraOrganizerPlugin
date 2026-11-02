@@ -40,6 +40,7 @@ public static class HelpTopics
     public static readonly HelpTopic ProtectToggleAll = new("protect.toggle-all");
     public static readonly HelpTopic ProtectToggleHeliosphere = new("protect.toggle-heliosphere");
     public static readonly HelpTopic ProtectFolders = new("protect.folders");
+    public static readonly HelpTopic ProtectFolderUnprotectContents = new("protect.folder-unprotect-contents");
     public static readonly HelpTopic ProtectMods = new("protect.mods");
     public static readonly HelpTopic ProtectHeliosphereNote = new("protect.heliosphere-note");
     public static readonly HelpTopic ProtectStrandedAtRoot = new("protect.stranded-at-root");

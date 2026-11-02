@@ -116,6 +116,11 @@
       "short": "Protecting a folder protects everything under it at any depth, including mods that land there later. Checking Gear also covers Gear/Feet and everything below it."
     },
     {
+      "id": "protect.folder-unprotect-contents",
+      "title": "Unprotect everything inside a folder",
+      "short": "Clears protection from every mod in this folder - the mod's own tick, Protect all, this folder or Heliosphere alike. Use it to sort one folder and leave the rest protected."
+    },
+    {
       "id": "protect.mods",
       "title": "Protected mods",
       "short": "Protects one mod wherever it sits. A mod can also be protected by its folder or by Heliosphere - the note beside it says which, and those have no checkbox here."

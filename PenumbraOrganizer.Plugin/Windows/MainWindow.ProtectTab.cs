@@ -12,6 +12,8 @@ namespace PenumbraOrganizer.Plugin.Windows;
 
 public sealed partial class MainWindow
 {
+    private const string UnprotectFolderPopupTitle = "Unprotect everything inside this folder?";
+
     private void DrawProtectTab()
     {
         using var tab = ImRaii.TabItem("Protect");
@@ -76,6 +78,8 @@ public sealed partial class MainWindow
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToList();
 
+        var protectedCountsByFolder = _plugin.OrganizerState.BuildProtectedModCountsByFolder();
+
         ImGui.TextUnformatted("Folders");
         Help.Tooltip(HelpTopics.ProtectFolders);
         using (var folderChild = ImRaii.Child("ProtectedFolderList", new Vector2(0, _protectedFolderListHeight), border: true))
@@ -104,6 +108,21 @@ public sealed partial class MainWindow
                             ImGui.TextDisabled($"(covered by protected folder \"{ancestor}\")");
                         }
                     }
+
+                    // Unticking the checkbox above withdraws only this folder's own rule - a mod
+                    // ticked individually, or caught by "Toggle protect all" (which writes an
+                    // explicit entry for every mod and ticks no folder at all), stays protected.
+                    // That left "protect everything except this one folder" impossible, which is
+                    // how it was reported: Sort then says "apply to 0 mods". This is the explicit
+                    // way to clear a folder's contents, whichever source protected them.
+                    if (protectedCountsByFolder.GetValueOrDefault(folder) is var protectedInside and > 0)
+                    {
+                        ImGui.SameLine();
+                        if (ImGui.SmallButton($"Unprotect {protectedInside} inside##protect-folder-clear-{folder}"))
+                            _pendingUnprotectFolder = folder;
+                        Help.Tooltip(HelpTopics.ProtectFolderUnprotectContents);
+                    }
+
                 }
             }
         }
@@ -116,6 +135,46 @@ public sealed partial class MainWindow
             _protectedFolderListHeight = Math.Clamp(_protectedFolderListHeight + ImGui.GetIO().MouseDelta.Y, 80f, 600f);
         if (ImGui.IsItemHovered() || ImGui.IsItemActive())
             ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeNs);
+
+        // Opened and drawn here, not on the folder row that requested it: the folder list is a
+        // scrolling child, so a clipped row submits nothing that frame and a popup owned by it
+        // would blink out from under the user mid-click. The row only records the request.
+        if (_pendingUnprotectFolder is { } requestedFolder)
+        {
+            if (!_unprotectFolderPopupOpened)
+            {
+                ImGui.OpenPopup(UnprotectFolderPopupTitle);
+                _unprotectFolderPopupOpened = true;
+            }
+
+            if (ImGui.BeginPopupModal(UnprotectFolderPopupTitle))
+            {
+                var affected = protectedCountsByFolder.GetValueOrDefault(requestedFolder);
+                ImGui.TextWrapped($"Unprotect all {affected} mod(s) inside \"{requestedFolder}\", at any depth?");
+                ImGui.TextWrapped(
+                    "Their individual ticks are cleared too, so Sort and Apply will be free to move them.");
+                TextColoredWrapped(
+                    ImGuiColors.DalamudYellow,
+                    "Heliosphere-managed mods inside this folder are unprotected as well. As with the "
+                    + "Heliosphere toggle, that lasts this session only - the next Scan re-protects them.");
+
+                if (ImGui.Button("Yes, unprotect them"))
+                {
+                    _plugin.OrganizerState.UnprotectFolderContents(requestedFolder);
+                    SaveProtectionStateSafely();
+                    ClosePendingUnprotectFolder();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel"))
+                    ClosePendingUnprotectFolder();
+                ImGui.EndPopup();
+            }
+            else
+            {
+                // Dismissed by Escape or a click outside, which never runs the buttons above.
+                ClosePendingUnprotectFolder();
+            }
+        }
 
         ImGui.Spacing();
         ImGui.TextUnformatted("Mods");
@@ -171,5 +230,13 @@ public sealed partial class MainWindow
                 }
             }
         }
+    }
+
+    private void ClosePendingUnprotectFolder()
+    {
+        _pendingUnprotectFolder = null;
+        _unprotectFolderPopupOpened = false;
+        if (ImGui.IsPopupOpen(UnprotectFolderPopupTitle))
+            ImGui.CloseCurrentPopup();
     }
 }

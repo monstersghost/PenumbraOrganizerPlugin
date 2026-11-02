@@ -778,6 +778,132 @@ public class OrganizerStateTests
 
     // --- Three-source protection model: individual / folder / Heliosphere ---
 
+    // --- Folder-scoped bulk unprotect ---
+    // Reported in-game: "Toggle protect all", then try to exclude one folder so its mods sort.
+    // Protect All writes an explicit per-mod entry for every mod and never ticks a folder, so the
+    // folder checkbox is already clear - there is nothing to untick - and every row under it stays
+    // protected through the explicit-identifier clause. Sort then offers "apply to 0 mods". The
+    // folder checkbox stays a pure folder-rule toggle (the two tests above depend on that); this
+    // is the affirmative action that clears protection from every source for one folder's contents.
+
+    [Fact]
+    public void UnprotectFolderContents_ClearsExplicitModProtectionUnderFolder()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Boots", currentPath: "NewMods/Boots"), MakeRow("b", "Hat", currentPath: "Gear/Hat")],
+            new HashSet<string>());
+
+        state.SetAllProtection(true);
+        state.UnprotectFolderContents("NewMods");
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "a").Protected);
+        Assert.DoesNotContain("a", state.ProtectedModIdentifiers);
+        Assert.True(state.Mods.Single(m => m.Identifier == "b").Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_ClearsNestedSubfolderMods()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Boots", currentPath: "NewMods/Sub/Deeper/Boots")], new HashSet<string>());
+
+        state.SetAllProtection(true);
+        state.UnprotectFolderContents("NewMods");
+
+        Assert.False(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_RemovesTheFolderRuleToo()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Boots", currentPath: "NewMods/Boots")], new HashSet<string>());
+
+        state.SetFolderProtected("NewMods", true);
+        state.UnprotectFolderContents("NewMods");
+
+        Assert.False(state.Mods.Single().Protected);
+        Assert.DoesNotContain("NewMods", state.ProtectedFolders);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_UnprotectsHeliosphereModsInsideTheFolder()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Boots", heliosphere: true, currentPath: "NewMods/Boots"),
+             MakeRow("b", "Hat", heliosphere: true, currentPath: "Gear/Hat")],
+            new HashSet<string>());
+
+        state.UnprotectFolderContents("NewMods");
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "a").Protected);
+        Assert.True(state.Mods.Single(m => m.Identifier == "b").Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_LeavesModsProtectedByAStillProtectedAncestorFolder()
+    {
+        // The ancestor is a separate, untouched instruction - clearing "Gear/Feet" must not quietly
+        // escape a protected "Gear". The row stays protected, and the count reflects that.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Boots", currentPath: "Gear/Feet/Boots")], new HashSet<string>());
+
+        state.SetFolderProtected("Gear", true);
+        state.UnprotectFolderContents("Gear/Feet");
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_ReturnsTheNumberOfModsItFreed()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Boots", currentPath: "NewMods/Boots"),
+             MakeRow("b", "Hat", currentPath: "NewMods/Hat"),
+             MakeRow("c", "Belt", currentPath: "Gear/Belt")],
+            new HashSet<string>());
+
+        state.SetAllProtection(true);
+
+        Assert.Equal(2, state.UnprotectFolderContents("NewMods"));
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_UnknownFolder_DoesNothing()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Boots", currentPath: "NewMods/Boots")], new HashSet<string>());
+
+        state.SetAllProtection(true);
+
+        Assert.Equal(0, state.UnprotectFolderContents("   "));
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void BuildProtectedModCountsByFolder_CountsEverySourceAtEveryDepth()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Boots", currentPath: "NewMods/Boots"),
+             MakeRow("b", "Hat", heliosphere: true, currentPath: "NewMods/Sub/Hat"),
+             MakeRow("c", "Belt", currentPath: "NewMods/Belt"),
+             MakeRow("d", "Ring", currentPath: "Gear/Ring")],
+            new HashSet<string>());
+
+        state.SetProtected("a", true);
+
+        var counts = state.BuildProtectedModCountsByFolder();
+
+        Assert.Equal(2, counts["NewMods"]);
+        Assert.Equal(1, counts["NewMods/Sub"]);
+        Assert.DoesNotContain("Gear", counts.Keys);
+    }
+
+
     [Fact]
     public void SetFolderProtected_ProtectsCurrentlyScannedModsUnderFolder()
     {
