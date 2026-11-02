@@ -166,10 +166,17 @@ anything that didn't match "Expected" even if it's minor.
       disappears for that folder. Now go to Sort and sort. **Expected:** it
       proposes moves for that folder's mods instead of reporting "0 mods" —
       this is the reported bug this build fixes.
-- [ ] Repeat with a protected *ancestor* folder in play (check `Gear`, then
-      use the button on `Gear/Feet`). **Expected:** the mods stay protected
-      via `Gear` and the button stays visible — the ancestor is a separate
-      instruction and is not withdrawn.
+- [ ] Repeat with a protected *ancestor* folder in play: check `Gear`, then
+      look at `Gear/Feet`. **Expected:** no button on `Gear/Feet` at all —
+      the ancestor is a separate instruction that this action never
+      withdraws, so there is nothing it could free. `Gear/Feet` shows the
+      "(covered by protected folder ...)" note, or "(also covered by ...)"
+      if it is ticked itself. Untick `Gear`.
+      **Expected:** the button appears on `Gear/Feet`.
+- [ ] Protect one mod inside `Gear/Feet` by its own checkbox while `Gear` is
+      checked, then untick `Gear`. **Expected:** that mod is still protected
+      — its own tick survived, because nothing was clearable while `Gear`
+      covered it.
 - [ ] Scroll the Folders list while the confirm prompt is open. **Expected:**
       the prompt stays put and still works, even though the row that opened it
       has scrolled out of view. Press Escape instead of answering. **Expected:**

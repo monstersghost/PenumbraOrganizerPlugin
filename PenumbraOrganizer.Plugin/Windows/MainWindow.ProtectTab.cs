@@ -97,16 +97,21 @@ public sealed partial class MainWindow
                         SaveProtectionStateSafely();
                     }
 
-                    if (!isExactlyProtected)
+                    // Computed whether or not this folder is ticked itself: a ticked folder can
+                    // also sit under a protected ancestor, and that ancestor is what decides
+                    // whether the unprotect button below can do anything.
+                    var ancestor = protectedFolders.FirstOrDefault(f =>
+                        !f.Equals(folder, StringComparison.Ordinal)
+                        && folder.StartsWith(f + "/", StringComparison.Ordinal));
+                    // Shown for a ticked folder too, where it reads as "also": a protected
+                    // ancestor is why the unprotect button below is absent, and without the note
+                    // such a row would offer nothing with no reason given.
+                    if (ancestor is not null)
                     {
-                        var ancestor = protectedFolders.FirstOrDefault(f =>
-                            !f.Equals(folder, StringComparison.Ordinal)
-                            && folder.StartsWith(f + "/", StringComparison.Ordinal));
-                        if (ancestor is not null)
-                        {
-                            ImGui.SameLine();
-                            ImGui.TextDisabled($"(covered by protected folder \"{ancestor}\")");
-                        }
+                        ImGui.SameLine();
+                        ImGui.TextDisabled(isExactlyProtected
+                            ? $"(also covered by protected folder \"{ancestor}\")"
+                            : $"(covered by protected folder \"{ancestor}\")");
                     }
 
                     // Unticking the checkbox above withdraws only this folder's own rule - a mod
@@ -115,14 +120,14 @@ public sealed partial class MainWindow
                     // That left "protect everything except this one folder" impossible, which is
                     // how it was reported: Sort then says "apply to 0 mods". This is the explicit
                     // way to clear a folder's contents, whichever source protected them.
-                    if (protectedCountsByFolder.GetValueOrDefault(folder) is var protectedInside and > 0)
+                    var counts = protectedCountsByFolder.GetValueOrDefault(folder);
+                    if (counts.Freeable > 0)
                     {
                         ImGui.SameLine();
-                        if (ImGui.SmallButton($"Unprotect {protectedInside} inside##protect-folder-clear-{folder}"))
+                        if (ImGui.SmallButton($"Unprotect {counts.Freeable} inside##protect-folder-clear-{folder}"))
                             _pendingUnprotectFolder = folder;
                         Help.Tooltip(HelpTopics.ProtectFolderUnprotectContents);
                     }
-
                 }
             }
         }
@@ -149,7 +154,7 @@ public sealed partial class MainWindow
 
             if (ImGui.BeginPopupModal(UnprotectFolderPopupTitle))
             {
-                var affected = protectedCountsByFolder.GetValueOrDefault(requestedFolder);
+                var affected = protectedCountsByFolder.GetValueOrDefault(requestedFolder).Freeable;
                 ImGui.TextWrapped($"Unprotect all {affected} mod(s) inside \"{requestedFolder}\", at any depth?");
                 ImGui.TextWrapped(
                     "Their individual ticks are cleared too, so Sort and Apply will be free to move them.");
@@ -162,17 +167,24 @@ public sealed partial class MainWindow
                 {
                     _plugin.OrganizerState.UnprotectFolderContents(requestedFolder);
                     SaveProtectionStateSafely();
-                    ClosePendingUnprotectFolder();
+                    // Closed here, inside the popup, where CloseCurrentPopup is meaningful - the
+                    // field reset alone would only stop the block being submitted next frame.
+                    ImGui.CloseCurrentPopup();
+                    ClearPendingUnprotectFolder();
                 }
                 ImGui.SameLine();
                 if (ImGui.Button("Cancel"))
-                    ClosePendingUnprotectFolder();
+                {
+                    ImGui.CloseCurrentPopup();
+                    ClearPendingUnprotectFolder();
+                }
                 ImGui.EndPopup();
             }
             else
             {
                 // Dismissed by Escape or a click outside, which never runs the buttons above.
-                ClosePendingUnprotectFolder();
+                // ImGui has already closed it, so there is nothing here but the state to clear.
+                ClearPendingUnprotectFolder();
             }
         }
 
@@ -232,11 +244,12 @@ public sealed partial class MainWindow
         }
     }
 
-    private void ClosePendingUnprotectFolder()
+    // State only. Closing the popup is the caller's job and is only valid from inside it:
+    // IsPopupOpen resolves its id against the current window, which inside the popup is the popup
+    // itself, so a guard here would never match the id OpenPopup registered in the parent window.
+    private void ClearPendingUnprotectFolder()
     {
         _pendingUnprotectFolder = null;
         _unprotectFolderPopupOpened = false;
-        if (ImGui.IsPopupOpen(UnprotectFolderPopupTitle))
-            ImGui.CloseCurrentPopup();
     }
 }
