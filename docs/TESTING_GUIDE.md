@@ -157,6 +157,30 @@ anything that didn't match "Expected" even if it's minor.
       depth, becomes protected — this is new in this build; a top-level
       folder should now be enough to protect an entire directory tree
       without checking every subfolder individually.
+- [ ] **Unprotect everything inside one folder.** Click "Toggle protect all"
+      so every mod is protected. **Expected:** an "Unprotect N inside" button
+      appears next to every folder that holds mods (the folder checkboxes stay
+      unchecked — Protect all protects mods, not folders). Click it on one
+      folder and confirm the prompt. **Expected:** only that folder's mods
+      untick, at any depth; everything else stays protected; the button
+      disappears for that folder. Now go to Sort and sort. **Expected:** it
+      proposes moves for that folder's mods instead of reporting "0 mods" —
+      this is the reported bug this build fixes.
+- [ ] Repeat with a protected *ancestor* folder in play: check `Gear`, then
+      look at `Gear/Feet`. **Expected:** no button on `Gear/Feet` at all —
+      the ancestor is a separate instruction that this action never
+      withdraws, so there is nothing it could free. `Gear/Feet` shows the
+      "(covered by protected folder ...)" note, or "(also covered by ...)"
+      if it is ticked itself. Untick `Gear`.
+      **Expected:** the button appears on `Gear/Feet`.
+- [ ] Protect one mod inside `Gear/Feet` by its own checkbox while `Gear` is
+      checked, then untick `Gear`. **Expected:** that mod is still protected
+      — its own tick survived, because nothing was clearable while `Gear`
+      covered it.
+- [ ] Scroll the Folders list while the confirm prompt is open. **Expected:**
+      the prompt stays put and still works, even though the row that opened it
+      has scrolled out of view. Press Escape instead of answering. **Expected:**
+      the prompt closes and nothing is unprotected.
 
 ### 2.3 Sort
 

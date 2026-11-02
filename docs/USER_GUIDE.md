@@ -69,6 +69,16 @@ Folders already covered by a protected ancestor show a note explaining which anc
 instead of their own checkbox state being meaningful. This list is resizable: drag the thin bar
 just below it up or down.
 
+Unchecking a folder withdraws only that folder's own protection: a mod you ticked individually, or
+one caught by Toggle protect all, stays protected. When a folder holds protected mods, an
+**Unprotect N inside** button appears next to it, which clears protection from every mod under it
+whatever the source - its own tick, Toggle protect all, this folder, or Heliosphere. That is how
+you protect your whole library and then free a single folder for sorting: Toggle protect all, then
+Unprotect N inside on the one folder you want filed away. The count is what the button can actually
+free. A protected ancestor folder is a separate instruction that this never withdraws, so where one
+covers a folder there is nothing to free and no button: untick the ancestor instead. As with Toggle
+Heliosphere protection, unprotecting Heliosphere mods this way lasts the session only.
+
 **Mods** lists every scanned mod with a checkbox, in its own scrollable area below the Folders
 list. A protected mod is excluded from every grouping and from Apply: its proposed path
 always stays equal to its current path, and if anything does touch a protected mod, Review Changes

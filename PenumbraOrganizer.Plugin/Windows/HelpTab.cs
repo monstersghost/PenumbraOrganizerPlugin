@@ -94,6 +94,7 @@ public static class HelpTab
             HelpTopics.ProtectToggleAll,
             HelpTopics.ProtectToggleHeliosphere,
             HelpTopics.ProtectFolders,
+            HelpTopics.ProtectFolderUnprotectContents,
             HelpTopics.ProtectMods,
             HelpTopics.ProtectHeliosphereNote,
             HelpTopics.ProtectStrandedAtRoot,
