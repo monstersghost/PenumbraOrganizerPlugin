@@ -69,9 +69,17 @@ folder, then optionally clear what remains.
 - `FolderProtectionRules` — `Dictionary<string, bool>`, replacing `ProtectedFolderPaths`.
 - `ExpandedProtectFolders` — `HashSet<string>`, the Protect tree's open nodes.
 
-`Version` goes to 2. On load, a v1 config migrates every entry of `ProtectedFolderPaths` into
+`Version` goes to 2. On load, every entry of `ProtectedFolderPaths` is copied into
 `FolderProtectionRules` with value `true`: identical behaviour after upgrade, nothing to re-tick.
-The old field stays readable for that migration and stops being written.
+
+The old field is **kept and still written**, as a protect-only mirror of the rules, and the copy
+is driven by the data rather than guarded on `Version`. This project ships testing builds that
+users opt into and roll back from, and the round trip has to survive: a pre-v2 build reads the
+mirror, keeps protecting those folders, and re-saves `Version` as 2 — so a version-guarded
+migration would skip on the way back up and silently drop every folder the user protected while
+on the old build. Excludes are absent from the mirror, which is the correct degradation, since a
+pre-v2 build cannot express one; and because `SaveProtectionState` rewrites the mirror from the
+live protect rules on every save, it can never resurrect a rule the user has since changed.
 
 `ReplaceScanAtomically`'s `previouslyProtectedFolders` parameter carries the rule map through a
 rescan unchanged, so excludes survive a scan exactly as ticks do.

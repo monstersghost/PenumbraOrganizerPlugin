@@ -1515,6 +1515,49 @@ The hair subfolders are collapsed on open; opening some, closing the window and 
 
 A config written by 0.6.1.2 with protected folders loads with those folders still protected and no re-ticking needed.
 
+- [ ] **Step 5: Confirm the plugin loads and the window opens**
+
+Trivial, and it is the step that would have caught the load-time crash this branch shipped with
+until the final review: the Protect tab's new state is read in the window's constructor, which
+ran before the config existed. Open the plugin; the window must appear with no error in
+`/xllog`.
+
+- [ ] **Step 6: Note a frame-rate number with the real hair library**
+
+This is the decision point for the one deferred performance item: the folder tree is rebuilt
+every frame, which is the hundreds-of-subfolders case the feature exists for. Record the frame
+rate with the Protect tab open and visible, twice — in the steady state, and while typing in the
+search box, which is the only time the filter recursion runs. If it is fine, the caching stays
+unbuilt; if it is not, cache the tree keyed on `ScanGeneration` plus a rule-mutation counter.
+
+- [ ] **Step 7: Check the two-click path to an exclude**
+
+On a folder that is only inheriting protection from its parent, the first click gives that folder
+its own protect rule (the glyph goes from dim to solid, nothing else changes) and the second makes
+it an exclude. That is deliberate, but it is the exact gesture from the bug report — confirm the
+dim-to-solid change reads as feedback rather than as a dead button.
+
+- [ ] **Step 8: Confirm a node cannot be collapsed while a search is active**
+
+Deliberate: the search decides what is visible. Confirm it does not read as a bug.
+
+- [ ] **Step 9: Check a rule on a folder that is now empty**
+
+Exclude a subfolder, Apply until it empties, then rescan. The row must still appear, marked
+`(currently empty)`, with its exclude visible and clearable — nothing tests this live.
+
+- [ ] **Step 10: Confirm expansion survives a rescan, not just a window reopen**
+
+The expansion set lives on the window, so a rescan that changes the known folders is a separate
+case from closing and reopening.
+
+- [ ] **Step 11: Verify the rollback round trip, if you plan to ship this as a testing build**
+
+Install it, protect a folder, go back to the current stable build, and confirm that folder is
+still protected there. Then update again and confirm it is still protected, along with anything
+you protected while on stable. The config keeps a protect-only mirror of the rules for exactly
+this path; excludes are expected to be lost on the way down, and nothing else should be.
+
 - [ ] **Step 5: Record the result**
 
 Note the outcome in the session's memory file for this work, then decide on a release separately.
