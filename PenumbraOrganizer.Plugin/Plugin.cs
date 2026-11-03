@@ -403,7 +403,8 @@ public sealed class Plugin : IDalamudPlugin
     internal void SaveProtectionState()
     {
         Config.ProtectedModIdentifiers = OrganizerState.ProtectedModIdentifiers.ToHashSet();
-        Config.ProtectedFolderPaths = OrganizerState.ProtectedFolders.ToHashSet();
+        Config.FolderProtectionRules = OrganizerState.FolderProtectionRules
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         PluginInterface.SavePluginConfig(Config);
     }
 

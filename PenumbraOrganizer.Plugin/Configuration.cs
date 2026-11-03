@@ -10,6 +10,9 @@ public sealed class Configuration : IPluginConfiguration
 
     public HashSet<string> ProtectedFolderPaths { get; set; } = [];
 
+    /// <summary>Folder path -> true (protect) / false (exclude). Replaces ProtectedFolderPaths.</summary>
+    public Dictionary<string, bool> FolderProtectionRules { get; set; } = [];
+
     /// <summary>
     /// Every mod identifier any scan has ever resolved as Heliosphere-managed.
     /// </summary>

@@ -11,7 +11,10 @@ public sealed class OrganizerState
     // half-replaced. Nothing else reassigns them.
     private Dictionary<string, OrganizerModRow> _mods = new();
     private HashSet<string> _protectedModIdentifiers = new(StringComparer.Ordinal);
-    private HashSet<string> _protectedFolders = new(StringComparer.Ordinal);
+    // Folder path -> true (protect) / false (exclude). An exclude is what makes "protect haloween,
+    // except haloween/animation" expressible: resolution takes the DEEPEST rule on a path, so a
+    // rule here is a local override of whatever an ancestor said, not an addition to it.
+    private Dictionary<string, bool> _folderProtectionRules = new(StringComparer.Ordinal);
     private List<string> _knownFolders = [];
 
     // Heliosphere-managed mods the user has explicitly unprotected this session.
@@ -43,7 +46,15 @@ public sealed class OrganizerState
 
     public IReadOnlyCollection<string> ProtectedModIdentifiers => _protectedModIdentifiers;
 
-    public IReadOnlyCollection<string> ProtectedFolders => _protectedFolders;
+    /// <summary>Every folder carrying a rule, mapped to true (protect) or false (exclude).</summary>
+    public IReadOnlyDictionary<string, bool> FolderProtectionRules => _folderProtectionRules;
+
+    /// <summary>
+    /// Folders whose own rule protects. Kept for callers that only ever meant "which folders are
+    /// ticked" - notably the config writer - and deliberately excludes exclude-rule folders.
+    /// </summary>
+    public IReadOnlyCollection<string> ProtectedFolders =>
+        _folderProtectionRules.Where(pair => pair.Value).Select(pair => pair.Key).ToList();
 
     // Every ancestor prefix of every scanned mod's virtual-parent folder — not just each mod's
     // immediate parent — so the Protect tab can offer a checkbox for any level of the tree a user
@@ -65,13 +76,13 @@ public sealed class OrganizerState
             yield return string.Join('/', segments.Take(i + 1));
     }
 
-    // previouslyProtectedFolders defaults to null (treated as empty) so every existing call
+    // previouslyProtectedFolderRules defaults to null (treated as empty) so every existing call
     // site across this test project that predates folder protection keeps compiling unchanged.
     public void LoadScan(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
-        IReadOnlySet<string>? previouslyProtectedFolders = null) =>
-        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolders);
+        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null) =>
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules);
 
     /// <summary>
     /// Whole-state replacement that either fully happens or does not happen at all. Every
@@ -82,11 +93,12 @@ public sealed class OrganizerState
     public void ReplaceScanAtomically(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
-        IReadOnlySet<string>? previouslyProtectedFolders = null)
+        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null)
     {
         var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
-        var replacementProtectedFolders = new HashSet<string>(
-            previouslyProtectedFolders ?? new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal);
+        var replacementFolderRules = previouslyProtectedFolderRules is null
+            ? new Dictionary<string, bool>(StringComparer.Ordinal)
+            : new Dictionary<string, bool>(previouslyProtectedFolderRules, StringComparer.Ordinal);
         // A scan re-asserts Heliosphere protection unconditionally, so this session's overrides end
         // here. Built as a replacement like everything else so a throw below leaves them untouched.
         var replacementHeliosphereOverrides = new HashSet<string>(StringComparer.Ordinal);
@@ -97,7 +109,7 @@ public sealed class OrganizerState
             // Protection is derived against the REPLACEMENT sets, not the live fields, so this loop
             // reads nothing it is about to overwrite.
             row.Protected = IsEffectivelyProtected(
-                row, replacementProtectedIdentifiers, replacementProtectedFolders, replacementHeliosphereOverrides);
+                row, replacementProtectedIdentifiers, replacementFolderRules, replacementHeliosphereOverrides);
             row.ProposedPath = row.CurrentPath;
             replacementMods[row.Identifier] = row;
         }
@@ -113,7 +125,7 @@ public sealed class OrganizerState
 
         // COMMIT. Nothing above this point has touched published state.
         _protectedModIdentifiers = replacementProtectedIdentifiers;
-        _protectedFolders = replacementProtectedFolders;
+        _folderProtectionRules = replacementFolderRules;
         _heliosphereUnprotectOverrides = replacementHeliosphereOverrides;
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
@@ -182,19 +194,55 @@ public sealed class OrganizerState
     // always runs the full recompute (including HeliosphereManaged) over every row - not just
     // rows under this folder, because unprotecting one folder must correctly leave a still-
     // protected descendant or ancestor folder's rows alone.
-    public void SetFolderProtected(string folderPath, bool value)
+    public void SetFolderProtected(string folderPath, bool value) =>
+        SetFolderProtectionRule(folderPath, value ? FolderProtectionRule.Protected : FolderProtectionRule.None);
+
+    /// <summary>
+    /// Writes (or withdraws) this folder's own rule. <see cref="FolderProtectionRule.None"/>
+    /// removes the rule, so the folder inherits from its nearest ruled ancestor again.
+    /// </summary>
+    public void SetFolderProtectionRule(string folderPath, FolderProtectionRule rule)
     {
         var normalized = OrganizationCleanupPlanner.NormalizeFolderPath(folderPath);
         if (normalized is null)
             return;
 
-        if (value)
-            _protectedFolders.Add(normalized);
+        if (rule == FolderProtectionRule.None)
+            _folderProtectionRules.Remove(normalized);
         else
-            _protectedFolders.Remove(normalized);
+            _folderProtectionRules[normalized] = rule == FolderProtectionRule.Protected;
 
         foreach (var row in _mods.Values)
             row.Protected = IsEffectivelyProtectedFull(row);
+    }
+
+    /// <summary>A folder's effective rule and the folder that supplied it.</summary>
+    /// <param name="Source">
+    /// The folder whose rule decided this - the folder itself when it carries its own rule, an
+    /// ancestor when inherited, null when no rule applies. The Protect tab shows an inherited
+    /// state dimmed and names this in the tooltip.
+    /// </param>
+    public readonly record struct FolderRuleResolution(FolderProtectionRule Rule, string? Source);
+
+    /// <summary>
+    /// Resolves the rule for a FOLDER node, where the folder's own rule counts - unlike the mod
+    /// path resolver, which starts at the mod's virtual parent.
+    /// </summary>
+    /// <param name="folderPath">
+    /// Nullable, so a caller holding a mod's virtual parent (null for a mod at the library root)
+    /// can pass it straight through and get None back.
+    /// </param>
+    public FolderRuleResolution ResolveFolderRule(string? folderPath)
+    {
+        var normalized = OrganizationCleanupPlanner.NormalizeFolderPath(folderPath);
+        for (var folder = normalized; folder is not null; folder = OrganizationCleanupPlanner.GetVirtualParent(folder))
+        {
+            if (_folderProtectionRules.TryGetValue(folder, out var isProtected))
+                return new FolderRuleResolution(
+                    isProtected ? FolderProtectionRule.Protected : FolderProtectionRule.Excluded, folder);
+        }
+
+        return new FolderRuleResolution(FolderProtectionRule.None, null);
     }
 
     /// <summary>
@@ -243,12 +291,16 @@ public sealed class OrganizerState
             .ToList();
         var wereProtected = contents.Where(row => row.Protected).ToList();
 
-        // Removed first, so the check below reads the folder set this action leaves behind: what
-        // remains there is exactly the protection it is not withdrawing.
-        _protectedFolders.Remove(normalized);
+        // Removed first, so the check below reads the rules this action leaves behind: what
+        // remains there is exactly the protection it is not withdrawing. Only a protect rule is
+        // withdrawn; an exclude on this folder is kept, since dropping it would let an ancestor's
+        // protection flow back in.
+        if (_folderProtectionRules.TryGetValue(normalized, out var ownRule) && ownRule)
+            _folderProtectionRules.Remove(normalized);
         foreach (var row in contents)
         {
-            if (OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, _protectedFolders))
+            if (OrganizationCleanupPlanner.ResolveFolderProtection(row.CurrentPath, _folderProtectionRules)
+                == FolderProtectionRule.Protected)
                 continue;
 
             _protectedModIdentifiers.Remove(row.Identifier);
@@ -299,7 +351,10 @@ public sealed class OrganizerState
 
             // The protected folders covering this row. Withdrawing one of them frees the row only
             // if it is the only one; any other covering folder keeps it protected on its own.
-            var covering = ancestors.Where(f => _protectedFolders.Contains(f)).ToList();
+            var covering = OrganizationCleanupPlanner.ResolveFolderProtection(row.CurrentPath, _folderProtectionRules)
+                    == FolderProtectionRule.Protected
+                ? ancestors.Where(f => _folderProtectionRules.TryGetValue(f, out var v) && v).ToList()
+                : [];
             foreach (var folder in ancestors)
             {
                 var freeable = covering.Count == 0
@@ -314,7 +369,7 @@ public sealed class OrganizerState
     }
 
     private bool IsEffectivelyProtectedFull(OrganizerModRow row) =>
-        IsEffectivelyProtected(row, _protectedModIdentifiers, _protectedFolders, _heliosphereUnprotectOverrides);
+        IsEffectivelyProtected(row, _protectedModIdentifiers, _folderProtectionRules, _heliosphereUnprotectOverrides);
 
     /// <summary>
     /// The single protection rule. Every path recomputes through this one.
@@ -331,15 +386,21 @@ public sealed class OrganizerState
     /// one - the newer, more specific instruction - while leaving every Heliosphere mod outside that
     /// folder alone.
     /// </para>
+    /// <para>
+    /// The folder clause is the only one an exclude rule can cancel. A mod inside an excluded
+    /// folder that is Heliosphere-managed or ticked by hand stays protected, because those are
+    /// per-mod instructions the folder tree has no business reversing.
+    /// </para>
     /// </remarks>
     private static bool IsEffectivelyProtected(
         OrganizerModRow row,
         IReadOnlySet<string> protectedModIdentifiers,
-        IReadOnlySet<string> protectedFolders,
+        IReadOnlyDictionary<string, bool> folderRules,
         IReadOnlySet<string> heliosphereUnprotectOverrides) =>
         (row.HeliosphereManaged && !heliosphereUnprotectOverrides.Contains(row.Identifier))
         || protectedModIdentifiers.Contains(row.Identifier)
-        || OrganizationCleanupPlanner.IsUnderAnyProtectedFolder(row.CurrentPath, protectedFolders);
+        || OrganizationCleanupPlanner.ResolveFolderProtection(row.CurrentPath, folderRules)
+            == FolderProtectionRule.Protected;
 
     public bool AssignManual(string identifier, string proposedPath)
     {

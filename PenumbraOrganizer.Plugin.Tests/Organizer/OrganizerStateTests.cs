@@ -1261,7 +1261,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         var row = MakeRow("a", "Boots", currentPath: "Gear/Feet/Boots");
 
-        state.LoadScan([row], new HashSet<string>(), new HashSet<string> { "Gear/Feet" });
+        state.LoadScan([row], new HashSet<string>(), new Dictionary<string, bool> { ["Gear/Feet"] = true });
 
         Assert.True(state.Mods.Single().Protected);
     }
@@ -1381,5 +1381,138 @@ public class OrganizerStateTests
         Assert.Equal(viaLoadScan.Mods[0].ProposedPath, viaReplace.Mods[0].ProposedPath);
         Assert.Equal(viaLoadScan.KnownFolders, viaReplace.KnownFolders);
         Assert.True(viaReplace.HasScanned);
+    }
+
+    // --- Folder exclude rules: "protect haloween, except haloween/animation" ---
+
+    [Fact]
+    public void SetFolderProtectionRule_ExcludeUnderProtectedAncestor_FreesOnlyThatSubtree()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("root", "Mask", currentPath: "haloween/Mask"),
+             MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance"),
+             MakeRow("deep", "Wave", currentPath: "haloween/animation/sub/Wave")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "root").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "deep").Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_ProtectNestedUnderAnExclude_ReprotectsThatBranch()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance"),
+             MakeRow("keep", "Keep", currentPath: "haloween/animation/keep/Keep")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+        state.SetFolderProtectionRule("haloween/animation/keep", FolderProtectionRule.Protected);
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
+        Assert.True(state.Mods.Single(m => m.Identifier == "keep").Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_None_WithdrawsTheRuleAndInheritsAgain()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.None);
+
+        Assert.True(state.Mods.Single().Protected);
+        Assert.DoesNotContain("haloween/animation", state.FolderProtectionRules.Keys);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_Exclude_DoesNotFreeAHandTickedMod()
+    {
+        // An exclude cancels the FOLDER layer only. A tick is a per-mod choice the user made.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetProtected("anim", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_Exclude_DoesNotFreeAHeliosphereMod()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("anim", "Dance", heliosphere: true, currentPath: "haloween/animation/Dance")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void ProtectedFolders_ReportsOnlyProtectRules_NotExcludes()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.Contains("haloween", state.ProtectedFolders);
+        Assert.DoesNotContain("haloween/animation", state.ProtectedFolders);
+    }
+
+    [Fact]
+    public void ResolveFolderRule_ReportsOwnRuleAndItsSource()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+
+        Assert.Equal(
+            new OrganizerState.FolderRuleResolution(FolderProtectionRule.Protected, "haloween"),
+            state.ResolveFolderRule("haloween"));
+        // Inherited: the rule applies, and the source names the ancestor it came from.
+        Assert.Equal(
+            new OrganizerState.FolderRuleResolution(FolderProtectionRule.Protected, "haloween"),
+            state.ResolveFolderRule("haloween/animation"));
+        Assert.Equal(
+            new OrganizerState.FolderRuleResolution(FolderProtectionRule.None, null),
+            state.ResolveFolderRule("Gear"));
+    }
+
+    [Fact]
+    public void ReplaceScanAtomically_CarriesExcludeRulesThroughARescan()
+    {
+        var state = new OrganizerState();
+        var rules = new Dictionary<string, bool>(StringComparer.Ordinal)
+        {
+            ["haloween"] = true,
+            ["haloween/animation"] = false,
+        };
+
+        state.LoadScan(
+            [MakeRow("root", "Mask", currentPath: "haloween/Mask"),
+             MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")],
+            new HashSet<string>(),
+            rules);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "root").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
+        Assert.False(state.FolderProtectionRules["haloween/animation"]);
     }
 }

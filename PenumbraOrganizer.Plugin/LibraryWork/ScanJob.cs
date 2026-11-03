@@ -65,7 +65,7 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
         // THE COMMIT. Build-then-swap: either the whole new state is installed or none of it is.
         // Anything above this line that throws leaves the previous scan completely intact.
         _plugin.OrganizerState.ReplaceScanAtomically(
-            results, _plugin.Config.ProtectedModIdentifiers, _plugin.Config.ProtectedFolderPaths);
+            results, _plugin.Config.ProtectedModIdentifiers, _plugin.Config.FolderProtectionRules);
 
         // POST-COMMIT. The new data is already live, so a failure here is a warning, never a failed
         // run - reporting Failed would tell the UI to say nothing was published when it was.
