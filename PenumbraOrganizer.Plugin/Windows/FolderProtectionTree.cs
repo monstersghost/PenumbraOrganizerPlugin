@@ -178,12 +178,14 @@ public static class FolderProtectionTree
         var searching = filter.Length > 0;
         var flags = ImGuiTreeNodeFlags.SpanAvailWidth
             | (node.Children.Count == 0 ? ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen : ImGuiTreeNodeFlags.None);
-        // DefaultOpen only applies the first time ImGui sees an ID, so it can neither force a node
-        // already seen closed open nor avoid leaking a search-forced state; SetNextItemOpen can.
-        if (searching)
-            ImGui.SetNextItemOpen(true, ImGuiCond.Always);
-        else
-            ImGui.SetNextItemOpen(expanded.Contains(node.Path), ImGuiCond.Once);
+        // Always, every frame, in both branches - this set is the single source of truth for which
+        // nodes are open, the way a controlled input works. A once-only condition cannot do the
+        // job: forcing a node open during a search writes that state into ImGui's own tree
+        // storage, so a later Once sees a value already there, declines to reapply, and the node
+        // stays open after the search clears - at which point the sync below would write it into
+        // `expanded` and save it. A click still toggles correctly, because TreeNodeEx returns the
+        // post-click state, the sync records it, and the next frame forces what was recorded.
+        ImGui.SetNextItemOpen(searching || expanded.Contains(node.Path), ImGuiCond.Always);
 
         // "###" discards the label (which embeds live counts) from the ID hash, so the ID is stable.
         var open = ImGui.TreeNodeEx($"{label}###protect-folder-node-{node.Path}", flags);
