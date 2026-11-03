@@ -58,8 +58,8 @@ public sealed class OrganizerState
 
     // Every ancestor prefix of every scanned mod's virtual-parent folder — not just each mod's
     // immediate parent — so the Protect tab can offer a checkbox for any level of the tree a user
-    // might want to protect (e.g. "Gear" when mods only live at "Gear/Feet/..."). The recursive
-    // matching in IsUnderAnyProtectedFolder already protects an entire subtree correctly once a
+    // might want to protect (e.g. "Gear" when mods only live at "Gear/Feet/..."). The upward walk
+    // in ResolveFolderProtection already protects an entire subtree correctly once a
     // folder is checked; this property only controls which folders are offered as checkboxes.
     // Recomputed once per LoadScan() (below), not on every access - this is read every ImGui
     // frame the Protect tab is open, and CurrentPath (which it depends on) is fixed for the

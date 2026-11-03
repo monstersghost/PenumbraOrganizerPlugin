@@ -1392,7 +1392,11 @@ public class OrganizerStateTests
         state.LoadScan(
             [MakeRow("root", "Mask", currentPath: "haloween/Mask"),
              MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance"),
-             MakeRow("deep", "Wave", currentPath: "haloween/animation/sub/Wave")],
+             MakeRow("deep", "Wave", currentPath: "haloween/animation/sub/Wave"),
+             // Under no rule at all. Without it, every row here sits under SOME rule, where
+             // "the folder layer protects" and "the folder layer does not exclude" agree - and
+             // a protection clause weakened from one to the other would pass this test.
+             MakeRow("outside", "Boots", currentPath: "Gear/Boots")],
             new HashSet<string>());
 
         state.SetFolderProtected("haloween", true);
@@ -1401,6 +1405,7 @@ public class OrganizerStateTests
         Assert.True(state.Mods.Single(m => m.Identifier == "root").Protected);
         Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
         Assert.False(state.Mods.Single(m => m.Identifier == "deep").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "outside").Protected);
     }
 
     [Fact]
