@@ -261,7 +261,9 @@ public class OrganizationCleanupPlannerTests
     public void ResolveFolderProtection_ProtectUnderExclude_DeepestWins()
         => Assert.Equal(FolderProtectionRule.Protected, OrganizationCleanupPlanner.ResolveFolderProtection(
             "haloween/animation/keep/Dance",
-            Rules(("haloween", true), ("haloween/animation", false), ("haloween/animation/keep", true))));
+            // No rule on "haloween" deliberately: with one, the outermost and deepest rules would
+            // both be Protected and this test would pass under a walk in either direction.
+            Rules(("haloween/animation", false), ("haloween/animation/keep", true))));
 
     [Fact]
     public void ResolveFolderProtection_ExcludeInheritsToDeeperDescendants()

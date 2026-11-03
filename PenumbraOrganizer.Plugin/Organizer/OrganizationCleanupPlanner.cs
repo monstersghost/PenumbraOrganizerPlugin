@@ -60,6 +60,11 @@ public static class OrganizationCleanupPlanner
     /// parent and returning the first rule found gives deepest-rule-wins for free, and keeps the
     /// boundary-safe parent chain (GetVirtualParent), never a bare StartsWith.
     /// </remarks>
+    /// <param name="folderRules">
+    /// Must be keyed with <see cref="StringComparer.Ordinal"/> and with normalized paths: the
+    /// lookup here inherits whatever comparer the caller built, so a case-insensitive one would
+    /// quietly widen every rule.
+    /// </param>
     public static FolderProtectionRule ResolveFolderProtection(
         string currentPath, IReadOnlyDictionary<string, bool> folderRules)
     {
