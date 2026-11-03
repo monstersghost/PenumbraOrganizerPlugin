@@ -444,7 +444,11 @@ Replace `SetFolderProtected`'s body (keeping its doc comment above) with:
     /// Resolves the rule for a FOLDER node, where the folder's own rule counts - unlike the mod
     /// path resolver, which starts at the mod's virtual parent.
     /// </summary>
-    public FolderRuleResolution ResolveFolderRule(string folderPath)
+    /// <param name="folderPath">
+    /// Nullable, so a caller holding a mod's virtual parent (null for a mod at the library root)
+    /// can pass it straight through and get None back.
+    /// </param>
+    public FolderRuleResolution ResolveFolderRule(string? folderPath)
     {
         var normalized = OrganizationCleanupPlanner.NormalizeFolderPath(folderPath);
         for (var folder = normalized; folder is not null; folder = OrganizationCleanupPlanner.GetVirtualParent(folder))
@@ -614,11 +618,11 @@ Append to `OrganizerStateTests.cs`:
     }
 
     [Fact]
-    public void UnprotectFolderContents_WithdrawsAnExcludeRuleToo_SoTheFolderInheritsAgain()
+    public void UnprotectFolderContents_KeepsAnExcludeRule_SoItDoesNotReprotectWhatItJustFreed()
     {
-        // The action's contract is "this folder's own rule goes". For an exclude that means the
-        // branch inherits the protected ancestor again - and with ticks cleared, that is what the
-        // user sees: a folder back to plain inherited protection.
+        // The action withdraws a PROTECT rule. Withdrawing an exclude would hand the branch back
+        // to the protected ancestor - it would re-protect every row the action is being asked to
+        // free, which is the exact opposite of the button's promise.
         var state = new OrganizerState();
         state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
 
@@ -626,8 +630,24 @@ Append to `OrganizerStateTests.cs`:
         state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
         state.UnprotectFolderContents("haloween/animation");
 
-        Assert.DoesNotContain("haloween/animation", state.FolderProtectionRules.Keys);
+        Assert.False(state.FolderProtectionRules["haloween/animation"]);
+        Assert.False(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_WithNoOwnRule_StillDoesNotEscapeAProtectedAncestor()
+    {
+        // The pinned rule from 0.6.1.2, restated against the new model: the button never overrides
+        // an ancestor on its own. Escaping an ancestor is what the tri-state exclude is for, and
+        // that takes a deliberate click on this folder's own box.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Boots", currentPath: "Gear/Feet/Boots")], new HashSet<string>());
+
+        state.SetFolderProtected("Gear", true);
+        state.UnprotectFolderContents("Gear/Feet");
+
         Assert.True(state.Mods.Single().Protected);
+        Assert.DoesNotContain("Gear/Feet", state.FolderProtectionRules.Keys);
     }
 ```
 
@@ -664,7 +684,7 @@ Replace the body of `BuildProtectedModCountsByFolder` with:
             // Nearest-first, so the first ruled ancestor is the one deciding this row today and
             // the next one is what the row would fall back to if that rule were withdrawn. This
             // is why no dictionary copy is needed per folder: the only rule whose removal can
-            // change the outcome is the deepest one.
+            // change the outcome is the deepest one - and an exclude is never removed at all.
             var deepestRuledIndex = ancestors.FindIndex(f => _folderProtectionRules.ContainsKey(f));
             var fallbackRuled = deepestRuledIndex < 0
                 ? null
@@ -682,10 +702,14 @@ Replace the body of `BuildProtectedModCountsByFolder` with:
                     continue;
                 }
 
-                // Withdrawing this folder's rule frees the row unless something else still
-                // protects it: the fallback rule when this folder is the deepest ruled one, or
-                // the deepest rule itself when it is some other folder's.
-                var freeable = i == deepestRuledIndex ? !protectedByFallback : !protectedByDeepest;
+                // What the action would leave: it clears per-mod sources inside, withdraws this
+                // folder's PROTECT rule, and keeps an exclude. So the row is freeable unless some
+                // rule still protects it afterwards - the fallback when this folder's own protect
+                // rule is the one deciding, the deciding rule itself otherwise. An exclude on this
+                // folder survives the action, so it still decides and the row is free.
+                var ownRuleIsExclude = i == deepestRuledIndex && !protectedByDeepest;
+                var freeable = ownRuleIsExclude
+                    || (i == deepestRuledIndex ? !protectedByFallback : !protectedByDeepest);
                 counts[folder] = new FolderProtectionCounts(
                     current.Protected + 1, current.Freeable + (freeable ? 1 : 0), current.Total + 1);
             }
@@ -710,9 +734,12 @@ Update the method's existing `<summary>` to say what it now returns:
 In `UnprotectFolderContents`, replace the rule-withdrawal line and the skip check:
 
 ```csharp
-        // Removed first, so the check below reads the rules this action leaves behind: what
-        // remains there is exactly the protection it is not withdrawing.
-        _folderProtectionRules.Remove(normalized);
+        // A PROTECT rule here is withdrawn first, so the check below reads the rules this action
+        // leaves behind: what remains is exactly the protection it is not withdrawing. An EXCLUDE
+        // is kept - withdrawing it would hand the branch back to a protected ancestor and
+        // re-protect the very rows this action exists to free.
+        if (_folderProtectionRules.TryGetValue(normalized, out var ownRule) && ownRule)
+            _folderProtectionRules.Remove(normalized);
         foreach (var row in contents)
         {
             if (OrganizationCleanupPlanner.ResolveFolderProtection(row.CurrentPath, _folderProtectionRules)
@@ -721,6 +748,17 @@ In `UnprotectFolderContents`, replace the rule-withdrawal line and the skip chec
 ```
 
 The `contents` query above it keeps using `IsUnderAnyProtectedFolder` with the single-folder `scope` set — that call is a containment test, not a protection test, and must not change.
+
+Add to the method's existing `<remarks>`:
+
+```csharp
+    /// <para>
+    /// It withdraws a protect rule on this folder and keeps an exclude. It never writes a rule, so
+    /// it still cannot escape a protected ancestor on its own - that remains a deliberate click on
+    /// the folder's own tri-state box. On an already-excluded folder its job is just the stragglers
+    /// an exclude cannot touch: hand-ticked rows and Heliosphere-managed ones.
+    /// </para>
+```
 
 - [ ] **Step 6: Run the full suite**
 
@@ -784,15 +822,23 @@ Then append:
     }
 
     [Fact]
-    public void MigrateToCurrentVersion_IsIdempotent_AndDoesNotRevivePostMigrationEdits()
+    public void MigrateToCurrentVersion_DoesNotOverwriteARuleWrittenByThisVersion()
     {
-        var config = new Configuration { FolderProtectionRules = { ["haloween/animation"] = false } };
+        // The legacy field is older than any rule map entry, so an exclude the user has since set
+        // must survive a migration that still sees that folder listed as protected.
+        const string json =
+            """
+            {"Version":1,"ProtectedFolderPaths":["haloween","haloween/animation"],
+             "FolderProtectionRules":{"haloween/animation":false}}
+            """;
 
+        var config = System.Text.Json.JsonSerializer.Deserialize<Configuration>(json)!;
         config.MigrateToCurrentVersion();
         config.MigrateToCurrentVersion();
 
+        Assert.True(config.FolderProtectionRules["haloween"]);
         Assert.False(config.FolderProtectionRules["haloween/animation"]);
-        Assert.Single(config.FolderProtectionRules);
+        Assert.Equal(2, config.FolderProtectionRules.Count);
     }
 
     [Fact]
@@ -1240,11 +1286,17 @@ Append to `FolderProtectionTree.cs`, inside the `FolderProtectionTree` class:
             FolderProtectionRule.Excluded => "[-]",
             _ => "[ ]",
         };
-        using (ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.DalamudGrey, !ownsRule && resolution.Rule != FolderProtectionRule.None))
-        {
-            if (ImGui.SmallButton($"{glyph}##protect-folder-cycle-{node.Path}"))
-                onCycle(node.Path, NextRule(ownsRule ? resolution.Rule : FolderProtectionRule.None));
-        }
+        // Push/Pop rather than ImRaii.PushColor: PushStyleColor paired by hand is this codebase's
+        // only colour idiom (see MainWindow.TextColoredWrapped), and ImRaii.PushColor is not used
+        // anywhere here, so its availability in this Dalamud version is unverified.
+        var dim = !ownsRule && resolution.Rule != FolderProtectionRule.None;
+        if (dim)
+            ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+        var cycled = ImGui.SmallButton($"{glyph}##protect-folder-cycle-{node.Path}");
+        if (dim)
+            ImGui.PopStyleColor();
+        if (cycled)
+            onCycle(node.Path, NextRule(ownsRule ? resolution.Rule : FolderProtectionRule.None));
 
         if (ImGui.IsItemHovered())
         {
@@ -1321,8 +1373,6 @@ Add the usings this needs at the top of the file:
 
 ```csharp
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Colors;
-using Dalamud.Interface.Utility.Raii;
 using PenumbraOrganizer.Plugin.Organizer;
 ```
 
@@ -1377,7 +1427,7 @@ Delete the now-unused `protectedFolders` local and the `folderRows` query at the
                         else
                         {
                             var resolution = _plugin.OrganizerState.ResolveFolderRule(
-                                Organizer.OrganizationCleanupPlanner.GetVirtualParent(mod.CurrentPath) ?? string.Empty);
+                                Organizer.OrganizationCleanupPlanner.GetVirtualParent(mod.CurrentPath));
                             ImGui.TextDisabled(resolution.Rule == FolderProtectionRule.Protected
                                 ? $"(via folder: {resolution.Source})"
                                 : "(protected)");
@@ -1400,7 +1450,7 @@ In `MainWindow.cs`, after `_unprotectFolderPopupOpened` (line 39), add:
     private readonly HashSet<string> _expandedProtectFolders;
 ```
 
-Initialise it in the constructor, from the config (find the constructor that already takes `Plugin`; add after the existing assignments):
+Initialise it in the constructor, immediately after the existing final `_plugin = plugin;` line (the field is readonly, so it must be assigned in the constructor):
 
 ```csharp
         _expandedProtectFolders = new HashSet<string>(plugin.Config.ExpandedProtectFolders, StringComparer.Ordinal);
@@ -1419,13 +1469,13 @@ Next to `SaveProtectionStateSafely` (line 409), add the same try/catch shape:
         catch (Exception ex)
         {
             // Same stance as SaveProtectionStateSafely: a failed save of a UI preference must never
-            // take the window down mid-frame.
-            _plugin.Log.Error(ex, "Failed to save Protect tab folder expansion.");
+            // take the window down mid-frame. Plugin.Log is static, and _lastError is the field
+            // that surfaces a failure in the window.
+            _lastError = $"Failed to save folder expansion: {ex.Message}";
+            Plugin.Log.Error(ex, "Failed to save Protect tab folder expansion.");
         }
     }
 ```
-
-Match the exact logging call and field name `SaveProtectionStateSafely` uses — read lines 409-420 and mirror them rather than assuming `_plugin.Log`.
 
 - [ ] **Step 6: Build and run the full suite**
 
