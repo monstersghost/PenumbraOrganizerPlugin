@@ -4,11 +4,29 @@ namespace PenumbraOrganizer.Plugin;
 
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    /// <summary>
+    /// 2: folder protection is a rule map (protect/exclude) rather than a set of protected
+    /// folders. <see cref="MigrateToCurrentVersion"/> carries a v1 file across.
+    /// </summary>
+    public const int CurrentVersion = 2;
+
+    public int Version { get; set; } = CurrentVersion;
 
     public HashSet<string> ProtectedModIdentifiers { get; set; } = [];
 
+    /// <summary>
+    /// Pre-v2 protected folders. Read only by <see cref="MigrateToCurrentVersion"/>, which empties
+    /// it; nothing writes it again. Still declared so a v1 file on disk deserialises into it.
+    /// </summary>
     public HashSet<string> ProtectedFolderPaths { get; set; } = [];
+
+    /// <summary>Folders whose node is open in the Protect tab's tree.</summary>
+    /// <remarks>
+    /// Persisted because the tree defaults to collapsed, and re-digging to the same hair subfolder
+    /// every session is the complaint the tree exists to answer. Holds paths that no longer exist
+    /// harmlessly: a path with no node is simply never consulted.
+    /// </remarks>
+    public HashSet<string> ExpandedProtectFolders { get; set; } = [];
 
     /// <summary>Folder path -> true (protect) / false (exclude). Replaces ProtectedFolderPaths.</summary>
     public Dictionary<string, bool> FolderProtectionRules { get; set; } = [];
@@ -67,4 +85,26 @@ public sealed class Configuration : IPluginConfiguration
     /// not compile.
     /// </remarks>
     public const bool ScrapedNpcListFeatureEnabled = false;
+
+    /// <summary>
+    /// Brings a config loaded from disk up to <see cref="CurrentVersion"/>. Idempotent, and safe to
+    /// call on a fresh config (which is already current).
+    /// </summary>
+    /// <remarks>
+    /// v1 -> v2: every entry of <see cref="ProtectedFolderPaths"/> becomes a protect rule, which is
+    /// exactly what it meant, so behaviour after upgrade is identical and nothing needs re-ticking.
+    /// TryAdd, not an assignment: if a rule for that folder already exists it was written by this
+    /// version and is newer than the legacy field.
+    /// </remarks>
+    public void MigrateToCurrentVersion()
+    {
+        if (Version >= CurrentVersion)
+            return;
+
+        foreach (var folder in ProtectedFolderPaths)
+            FolderProtectionRules.TryAdd(folder, true);
+
+        ProtectedFolderPaths.Clear();
+        Version = CurrentVersion;
+    }
 }

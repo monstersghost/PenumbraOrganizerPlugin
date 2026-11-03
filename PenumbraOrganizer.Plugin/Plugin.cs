@@ -67,6 +67,9 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(_mainWindow);
 
         Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        // Before anything reads the folder rules: a v1 file carries its protected folders in the
+        // legacy field, and a scan that ran first would see no rules at all and unprotect them.
+        Config.MigrateToCurrentVersion();
 
         // A config written before 0.6.0 has no FirstRunTutorialSeen, so it reads false and an
         // upgrading user gets the walkthrough once. That is intended - see Configuration's remarks.
