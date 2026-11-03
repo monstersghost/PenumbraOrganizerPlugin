@@ -160,6 +160,25 @@ public class ConfigurationTests
     }
 
     [Fact]
+    public void LegacyProtectedFolderPaths_CarriesProtectRulesOnly_SoARollbackKeepsThem()
+    {
+        var config = new Configuration
+        {
+            FolderProtectionRules = new Dictionary<string, bool>(StringComparer.Ordinal)
+            {
+                ["Gear"] = true,
+                ["Hats"] = false,
+            },
+        };
+
+        config.ProtectedFolderPaths = config.FolderProtectionRules
+            .Where(pair => pair.Value).Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(["Gear"], config.ProtectedFolderPaths);
+        Assert.DoesNotContain("Hats", config.ProtectedFolderPaths);
+    }
+
+    [Fact]
     public void DefaultConfiguration_HasNoExpandedProtectFolders()
         => Assert.Empty(new Configuration().ExpandedProtectFolders);
 

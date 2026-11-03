@@ -70,7 +70,7 @@ public static class FolderProtectionTree
     /// </summary>
     public static bool MatchesFilter(FolderTreeNode node, string filter)
     {
-        if (filter.Length == 0)
+        if (string.IsNullOrEmpty(filter))
             return true;
         return node.Path.Contains(filter, StringComparison.OrdinalIgnoreCase)
             || node.Children.Any(child => MatchesFilter(child, filter));
@@ -204,7 +204,7 @@ public static class FolderProtectionTree
         if (folderCounts.Freeable > 0)
         {
             ImGui.SameLine();
-            if (ImGui.SmallButton($"Unprotect {folderCounts.Freeable} inside##protect-folder-clear-{node.Path}"))
+            if (ImGui.SmallButton($"Unprotect {folderCounts.Freeable} inside###protect-folder-clear-{node.Path}"))
                 onUnprotectContents(node.Path);
             Help.Tooltip(HelpTopics.ProtectFolderUnprotectContents);
         }

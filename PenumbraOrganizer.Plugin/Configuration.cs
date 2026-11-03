@@ -15,8 +15,10 @@ public sealed class Configuration : IPluginConfiguration
     public HashSet<string> ProtectedModIdentifiers { get; set; } = [];
 
     /// <summary>
-    /// Pre-v2 protected folders. Read only by <see cref="MigrateToCurrentVersion"/>, which empties
-    /// it; nothing writes it again. Still declared so a v1 file on disk deserialises into it.
+    /// Pre-v2 protected folders. <see cref="MigrateToCurrentVersion"/> reads it once and empties it.
+    /// It is then maintained as a write-only compatibility projection of the protect rules (excludes
+    /// are not representable), so a rollback to a pre-v2 build keeps its folder protection. The
+    /// version guard stops a v2 build ever reading it back.
     /// </summary>
     public HashSet<string> ProtectedFolderPaths { get; set; } = [];
 
