@@ -1,4 +1,4 @@
-using Dalamud.Configuration;
+﻿using Dalamud.Configuration;
 
 namespace PenumbraOrganizer.Plugin;
 
@@ -87,8 +87,9 @@ public sealed class Configuration : IPluginConfiguration
     public const bool ScrapedNpcListFeatureEnabled = false;
 
     /// <summary>
-    /// Brings a config loaded from disk up to <see cref="CurrentVersion"/>. Idempotent, and safe to
-    /// call on a fresh config (which is already current).
+    /// Brings a config loaded from disk up to <see cref="CurrentVersion"/>. Safe to call on a
+    /// fresh config (which is already current), and idempotent by way of the version guard
+    /// below rather than of the data: a second call returns before reading anything.
     /// </summary>
     /// <remarks>
     /// v1 -> v2: every entry of <see cref="ProtectedFolderPaths"/> becomes a protect rule, which is

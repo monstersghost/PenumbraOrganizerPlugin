@@ -5,7 +5,7 @@ namespace PenumbraOrganizer.Plugin.Tests;
 public class ConfigurationTests
 {
     [Fact]
-    public void DefaultConfiguration_HasVersionOneAndEmptyProtectedSet()
+    public void DefaultConfiguration_IsAtTheCurrentVersionWithAnEmptyProtectedSet()
     {
         var config = new Configuration();
 
