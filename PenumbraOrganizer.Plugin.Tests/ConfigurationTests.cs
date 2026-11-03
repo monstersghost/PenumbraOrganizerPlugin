@@ -119,7 +119,9 @@ public class ConfigurationTests
         Assert.Equal(Configuration.CurrentVersion, config.Version);
         Assert.True(config.FolderProtectionRules["Gear"]);
         Assert.True(config.FolderProtectionRules["haloween"]);
-        Assert.Empty(config.ProtectedFolderPaths);
+        // Deliberately still there. It is the mirror a pre-v2 build reads if the user rolls back,
+        // and SaveProtectionState keeps rewriting it from the live protect rules.
+        Assert.Equal(["Gear", "haloween"], config.ProtectedFolderPaths.OrderBy(f => f, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -160,22 +162,40 @@ public class ConfigurationTests
     }
 
     [Fact]
-    public void LegacyProtectedFolderPaths_CarriesProtectRulesOnly_SoARollbackKeepsThem()
+    public void UpgradeRollbackReupgrade_KeepsEveryFolderProtectedOnEitherBuild()
     {
-        var config = new Configuration
-        {
-            FolderProtectionRules = new Dictionary<string, bool>(StringComparer.Ordinal)
-            {
-                ["Gear"] = true,
-                ["Hats"] = false,
-            },
-        };
+        // The round trip this plugin's release process actually produces: a tester opts into a
+        // testing build, goes back to stable, protects another folder there, and later updates
+        // again. A version-guarded migration dropped that last folder, because a pre-v2 build
+        // re-saves Version as 2 and the migration would then skip.
+        const string v1Json =
+            """{"Version":1,"ProtectedModIdentifiers":[],"ProtectedFolderPaths":["Gear"]}""";
 
-        config.ProtectedFolderPaths = config.FolderProtectionRules
-            .Where(pair => pair.Value).Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal);
+        // Upgrade.
+        var upgraded = System.Text.Json.JsonSerializer.Deserialize<Configuration>(v1Json)!;
+        upgraded.MigrateToCurrentVersion();
+        upgraded.FolderProtectionRules["Gear/Feet"] = false;
+        // What SaveProtectionState writes: the legacy mirror is the protect rules only.
+        upgraded.ProtectedFolderPaths = ["Gear"];
 
-        Assert.Equal(["Gear"], config.ProtectedFolderPaths);
-        Assert.DoesNotContain("Hats", config.ProtectedFolderPaths);
+        // Rolled back. The old build cannot read FolderProtectionRules, reads the mirror, and
+        // protects one more folder - then saves, carrying Version 2 and its own rules forward.
+        var rolledBack = System.Text.Json.JsonSerializer
+            .Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(upgraded))!;
+        Assert.Equal(["Gear"], rolledBack.ProtectedFolderPaths);
+        rolledBack.ProtectedFolderPaths.Add("Hats");
+
+        // Updated again.
+        var reupgraded = System.Text.Json.JsonSerializer
+            .Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(rolledBack))!;
+        reupgraded.MigrateToCurrentVersion();
+
+        Assert.True(reupgraded.FolderProtectionRules["Gear"]);
+        // Protected while on the old build, and not lost on the way back up.
+        Assert.True(reupgraded.FolderProtectionRules["Hats"]);
+        // The exclude set on the new build survives: the mirror never listed it, so TryAdd
+        // cannot overwrite it with a protect.
+        Assert.False(reupgraded.FolderProtectionRules["Gear/Feet"]);
     }
 
     [Fact]

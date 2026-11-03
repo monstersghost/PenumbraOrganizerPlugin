@@ -90,24 +90,31 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>
     /// Brings a config loaded from disk up to <see cref="CurrentVersion"/>. Safe to call on a
-    /// fresh config (which is already current), and idempotent by way of the version guard
-    /// below rather than of the data: a second call returns before reading anything.
+    /// fresh config (which is already current), and idempotent by way of the DATA rather than of
+    /// a version check.
     /// </summary>
     /// <remarks>
-    /// v1 -> v2: every entry of <see cref="ProtectedFolderPaths"/> becomes a protect rule, which is
-    /// exactly what it meant, so behaviour after upgrade is identical and nothing needs re-ticking.
-    /// TryAdd, not an assignment: if a rule for that folder already exists it was written by this
-    /// version and is newer than the legacy field.
+    /// Every entry of <see cref="ProtectedFolderPaths"/> becomes a protect rule, which is exactly
+    /// what it meant, so behaviour after an upgrade is identical and nothing needs re-ticking.
+    /// TryAdd, not an assignment: a rule already in the map was written by this version and is
+    /// newer than the legacy field - notably an exclude, which the legacy field cannot express.
+    /// <para>
+    /// Deliberately NOT guarded on <see cref="Version"/>, and the legacy field is deliberately NOT
+    /// cleared. This plugin ships testing builds that users opt into and can roll back from, so
+    /// the round trip has to survive: a pre-v2 build keeps protecting folders because the legacy
+    /// field is still there, keeps writing that field itself, and re-saves Version as 2 - so a
+    /// version-guarded migration would skip on the way back up and drop every folder the user
+    /// protected while on the old build. Reading the field every time costs nothing, because
+    /// <c>SaveProtectionState</c> rewrites it from the live protect rules on every save, which
+    /// makes it a mirror rather than a second source of truth: a folder the user unprotects here
+    /// leaves both, and TryAdd can only ever re-add what the mirror still lists.
+    /// </para>
     /// </remarks>
     public void MigrateToCurrentVersion()
     {
-        if (Version >= CurrentVersion)
-            return;
-
         foreach (var folder in ProtectedFolderPaths)
             FolderProtectionRules.TryAdd(folder, true);
 
-        ProtectedFolderPaths.Clear();
         Version = CurrentVersion;
     }
 }
