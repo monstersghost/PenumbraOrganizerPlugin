@@ -123,7 +123,7 @@
     {
       "id": "protect.folder-rule-cycle",
       "title": "Protect, exclude, or inherit",
-      "short": "Click a folder's box to cycle protected, excluded, or inherit. A dim mark is inherited from a parent; a solid one is set here. Excluding frees a folder inside a protected parent, bar hand-ticked mods."
+      "short": "Click a box to cycle protect, exclude, inherit. Dim = inherited from a parent; solid = set here. Exclude frees mods under a protected parent, except hand-ticked and Heliosphere mods."
     },
     {
       "id": "protect.mods",

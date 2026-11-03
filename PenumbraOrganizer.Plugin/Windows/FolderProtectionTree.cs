@@ -145,7 +145,7 @@ public static class FolderProtectionTree
         var dim = !ownsRule && resolution.Rule != FolderProtectionRule.None;
         if (dim)
             ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-        var cycled = ImGui.SmallButton($"{glyph}##protect-folder-cycle-{node.Path}");
+        var cycled = ImGui.SmallButton($"{glyph}###protect-folder-cycle-{node.Path}");
         if (dim)
             ImGui.PopStyleColor();
         if (cycled)
@@ -169,7 +169,7 @@ public static class FolderProtectionTree
         var folderCounts = counts.GetValueOrDefault(node.Path);
         var label = knownFolders.Contains(node.Path)
             ? $"{node.Name}  ({folderCounts.Protected}/{folderCounts.Total} protected"
-                + (node.DescendantFolderCount > 0 ? $", {node.DescendantFolderCount} subfolders)" : ")")
+                + (node.DescendantFolderCount > 0 ? $", {node.DescendantFolderCount} {(node.DescendantFolderCount == 1 ? "subfolder" : "subfolders")})" : ")")
             : $"{node.Name}  (currently empty)";
 
         // Forced open while a search is running so a match deeper in the branch is visible without
@@ -178,10 +178,15 @@ public static class FolderProtectionTree
         var searching = filter.Length > 0;
         var flags = ImGuiTreeNodeFlags.SpanAvailWidth
             | (node.Children.Count == 0 ? ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen : ImGuiTreeNodeFlags.None);
-        if (searching || expanded.Contains(node.Path))
-            flags |= ImGuiTreeNodeFlags.DefaultOpen;
+        // DefaultOpen only applies the first time ImGui sees an ID, so it can neither force a node
+        // already seen closed open nor avoid leaking a search-forced state; SetNextItemOpen can.
+        if (searching)
+            ImGui.SetNextItemOpen(true, ImGuiCond.Always);
+        else
+            ImGui.SetNextItemOpen(expanded.Contains(node.Path), ImGuiCond.Once);
 
-        var open = ImGui.TreeNodeEx($"{label}##protect-folder-node-{node.Path}", flags);
+        // "###" discards the label (which embeds live counts) from the ID hash, so the ID is stable.
+        var open = ImGui.TreeNodeEx($"{label}###protect-folder-node-{node.Path}", flags);
         // On the label, not the cycle button: that button already shows a tooltip naming the rule's
         // source, and ImGui binds a tooltip to the last submitted item, so two on one item fight.
         Help.Tooltip(HelpTopics.ProtectFolderRuleCycle);
