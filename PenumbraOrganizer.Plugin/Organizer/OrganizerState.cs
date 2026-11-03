@@ -255,7 +255,8 @@ public sealed class OrganizerState
     /// <paramref name="Protected"/> when a protected ANCESTOR folder also covers a row, because this
     /// action withdraws only this folder's own rule.
     /// </param>
-    public readonly record struct FolderProtectionCounts(int Protected, int Freeable);
+    /// <param name="Total">Every mod inside the folder at any depth, protected or not.</param>
+    public readonly record struct FolderProtectionCounts(int Protected, int Freeable, int Total);
 
     /// <summary>
     /// Clears protection for the mods currently inside <paramref name="folderPath"/> (recursively)
@@ -277,6 +278,12 @@ public sealed class OrganizerState
     /// protected anyway; clearing its tick or recording a Heliosphere override for it would do
     /// nothing visible now and then surface later, when that other folder is unticked, as
     /// protection the user never knowingly dropped.
+    /// </para>
+    /// <para>
+    /// It withdraws a protect rule on this folder and keeps an exclude. It never writes a rule, so
+    /// it still cannot escape a protected ancestor on its own - that remains a deliberate click on
+    /// the folder's own tri-state box. On an already-excluded folder its job is just the stragglers
+    /// an exclude cannot touch: hand-ticked rows and Heliosphere-managed ones.
     /// </para>
     /// </remarks>
     public int UnprotectFolderContents(string folderPath)
@@ -319,20 +326,18 @@ public sealed class OrganizerState
     }
 
     /// <summary>
-    /// Protected-mod counts keyed by folder: every folder containing at least one protected mod,
-    /// mapped to how many it holds at any depth and how many its own unprotect action could free.
-    /// Folders with none are absent.
+    /// Mod counts keyed by folder: every folder holding at least one mod at any depth, mapped to
+    /// how many it holds, how many of those are protected, and how many its own unprotect action
+    /// could free. Folders holding no mods are absent.
     /// </summary>
     /// <remarks>
-    /// One pass over the rows, walking each protected row's ancestors, rather than a per-folder
-    /// query. The Protect tab needs this for every folder row it draws, every frame, so the
-    /// obvious shape - ask per folder - is O(folders x mods) on the render thread and gets slow
-    /// exactly on the large libraries this plugin exists for.
+    /// One pass over the rows, walking each row's ancestors, rather than a per-folder query. The
+    /// Protect tab needs this for every folder row it draws, every frame, so asking per folder is
+    /// O(folders x mods) on the render thread.
     /// <para>
-    /// Freeable is what stops the tab offering an action that cannot do anything: a row also
-    /// covered by a protected folder other than F stays protected when F's rule is withdrawn, so it
-    /// counts towards F's Protected and not its Freeable. A row no folder rule reaches (protected by
-    /// its own tick or by Heliosphere) is freeable under every folder above it.
+    /// Freeable is what stops the tab offering an action that cannot do anything. The action
+    /// withdraws this folder's protect rule and keeps an exclude, so a row is freeable unless some
+    /// rule still protects it afterwards.
     /// </para>
     /// </remarks>
     public Dictionary<string, FolderProtectionCounts> BuildProtectedModCountsByFolder()
@@ -340,28 +345,43 @@ public sealed class OrganizerState
         var counts = new Dictionary<string, FolderProtectionCounts>(StringComparer.Ordinal);
         foreach (var row in _mods.Values)
         {
-            if (!row.Protected)
-                continue;
-
             var ancestors = new List<string>();
             for (var folder = OrganizationCleanupPlanner.GetVirtualParent(row.CurrentPath);
                  folder is not null;
                  folder = OrganizationCleanupPlanner.GetVirtualParent(folder))
                 ancestors.Add(folder);
 
-            // The protected folders covering this row. Withdrawing one of them frees the row only
-            // if it is the only one; any other covering folder keeps it protected on its own.
-            var covering = OrganizationCleanupPlanner.ResolveFolderProtection(row.CurrentPath, _folderProtectionRules)
-                    == FolderProtectionRule.Protected
-                ? ancestors.Where(f => _folderProtectionRules.TryGetValue(f, out var v) && v).ToList()
-                : [];
-            foreach (var folder in ancestors)
+            // Nearest-first, so the first ruled ancestor is the one deciding this row today and
+            // the next one is what the row would fall back to if that rule were withdrawn. This
+            // is why no dictionary copy is needed per folder: the only rule whose removal can
+            // change the outcome is the deepest one - and an exclude is never removed at all.
+            var deepestRuledIndex = ancestors.FindIndex(f => _folderProtectionRules.ContainsKey(f));
+            var fallbackRuled = deepestRuledIndex < 0
+                ? null
+                : ancestors.Skip(deepestRuledIndex + 1).FirstOrDefault(f => _folderProtectionRules.ContainsKey(f));
+            var protectedByDeepest = deepestRuledIndex >= 0 && _folderProtectionRules[ancestors[deepestRuledIndex]];
+            var protectedByFallback = fallbackRuled is not null && _folderProtectionRules[fallbackRuled];
+
+            for (var i = 0; i < ancestors.Count; i++)
             {
-                var freeable = covering.Count == 0
-                    || (covering.Count == 1 && covering[0].Equals(folder, StringComparison.Ordinal));
+                var folder = ancestors[i];
                 var current = counts.GetValueOrDefault(folder);
+                if (!row.Protected)
+                {
+                    counts[folder] = current with { Total = current.Total + 1 };
+                    continue;
+                }
+
+                // What the action would leave: it clears per-mod sources inside, withdraws this
+                // folder's PROTECT rule, and keeps an exclude. So the row is freeable unless some
+                // rule still protects it afterwards - the fallback when this folder's own protect
+                // rule is the one deciding, the deciding rule itself otherwise. An exclude on this
+                // folder survives the action, so it still decides and the row is free.
+                var ownRuleIsExclude = i == deepestRuledIndex && !protectedByDeepest;
+                var freeable = ownRuleIsExclude
+                    || (i == deepestRuledIndex ? !protectedByFallback : !protectedByDeepest);
                 counts[folder] = new FolderProtectionCounts(
-                    current.Protected + 1, current.Freeable + (freeable ? 1 : 0));
+                    current.Protected + 1, current.Freeable + (freeable ? 1 : 0), current.Total + 1);
             }
         }
 
