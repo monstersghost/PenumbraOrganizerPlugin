@@ -343,9 +343,26 @@ public sealed class OrganizerState
     public Dictionary<string, FolderProtectionCounts> BuildProtectedModCountsByFolder()
     {
         var counts = new Dictionary<string, FolderProtectionCounts>(StringComparer.Ordinal);
+        // One buffer for the whole pass, cleared per row, rather than a list per row: this runs
+        // every frame over every mod.
+        var ancestors = new List<string>();
         foreach (var row in _mods.Values)
         {
-            var ancestors = new List<string>();
+            if (!row.Protected)
+            {
+                // Unprotected rows only add to Total, so they need no rule resolution at all.
+                for (var folder = OrganizationCleanupPlanner.GetVirtualParent(row.CurrentPath);
+                     folder is not null;
+                     folder = OrganizationCleanupPlanner.GetVirtualParent(folder))
+                {
+                    var existing = counts.GetValueOrDefault(folder);
+                    counts[folder] = existing with { Total = existing.Total + 1 };
+                }
+
+                continue;
+            }
+
+            ancestors.Clear();
             for (var folder = OrganizationCleanupPlanner.GetVirtualParent(row.CurrentPath);
                  folder is not null;
                  folder = OrganizationCleanupPlanner.GetVirtualParent(folder))
@@ -355,10 +372,29 @@ public sealed class OrganizerState
             // the next one is what the row would fall back to if that rule were withdrawn. This
             // is why no dictionary copy is needed per folder: the only rule whose removal can
             // change the outcome is the deepest one - and an exclude is never removed at all.
-            var deepestRuledIndex = ancestors.FindIndex(f => _folderProtectionRules.ContainsKey(f));
-            var fallbackRuled = deepestRuledIndex < 0
-                ? null
-                : ancestors.Skip(deepestRuledIndex + 1).FirstOrDefault(f => _folderProtectionRules.ContainsKey(f));
+            var deepestRuledIndex = -1;
+            for (var i = 0; i < ancestors.Count; i++)
+            {
+                if (_folderProtectionRules.ContainsKey(ancestors[i]))
+                {
+                    deepestRuledIndex = i;
+                    break;
+                }
+            }
+
+            string? fallbackRuled = null;
+            if (deepestRuledIndex >= 0)
+            {
+                for (var i = deepestRuledIndex + 1; i < ancestors.Count; i++)
+                {
+                    if (_folderProtectionRules.ContainsKey(ancestors[i]))
+                    {
+                        fallbackRuled = ancestors[i];
+                        break;
+                    }
+                }
+            }
+
             var protectedByDeepest = deepestRuledIndex >= 0 && _folderProtectionRules[ancestors[deepestRuledIndex]];
             var protectedByFallback = fallbackRuled is not null && _folderProtectionRules[fallbackRuled];
 
@@ -366,11 +402,6 @@ public sealed class OrganizerState
             {
                 var folder = ancestors[i];
                 var current = counts.GetValueOrDefault(folder);
-                if (!row.Protected)
-                {
-                    counts[folder] = current with { Total = current.Total + 1 };
-                    continue;
-                }
 
                 // What the action would leave: it clears per-mod sources inside, withdraws this
                 // folder's PROTECT rule, and keeps an exclude. So the row is freeable unless some
