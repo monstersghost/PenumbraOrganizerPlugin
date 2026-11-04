@@ -60,8 +60,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         // body type on the row either way, so toggling the split later re-sorts without rescanning,
         // the same as the gear and hair splits already do.
         var bodyResult = BodyTypeListStore.LoadForMatching(_configDirectory);
-        if (bodyResult.Warning is not null)
-            _warnings.Add(bodyResult.Warning);
+        _warnings.AddRange(bodyResult.Warnings);
         _bodyTypeMatcher = BodyTypeListStore.BuildMatcher(bodyResult.Document);
     }
 
