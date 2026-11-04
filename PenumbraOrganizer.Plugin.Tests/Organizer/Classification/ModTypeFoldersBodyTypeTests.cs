@@ -1,7 +1,7 @@
 namespace PenumbraOrganizer.Plugin.Tests.Organizer.Classification;
 
 using PenumbraOrganizer.Core.Classification;
-using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 /// <summary>
 /// The body-type segment of a folder. The point of the feature is a GEAR mod filed under the body

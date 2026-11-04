@@ -1,7 +1,7 @@
 namespace PenumbraOrganizer.Plugin.Tests.Organizer.BodyTypes;
 
-using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Core.Classification;
 
 /// <summary>
