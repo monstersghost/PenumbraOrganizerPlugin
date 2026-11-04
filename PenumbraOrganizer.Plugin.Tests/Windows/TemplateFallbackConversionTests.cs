@@ -35,13 +35,19 @@ public class TemplateFallbackConversionTests
     // Counts the record's primary-constructor parameters, not its properties: SortSelection also
     // exposes computed properties, so a property count would not mean the same thing.
     //
-    // SortSelection now carries the hair split and race priority, which the on-disk template format
-    // deliberately does not store. The conversion drops those three fields on purpose; this count is
-    // what makes adding a fourth value a visible decision rather than a silent one.
+    // SortSelection now carries the hair split, the race priority and the body split, none of which
+    // the on-disk template format stores. The conversion drops those four fields on purpose; this
+    // count is what makes adding a fifth value a visible decision rather than a silent one.
+    //
+    // SplitBody was the most recent such decision, and it went the same way as the hair split for
+    // the same reason: a template describes where a layout puts things, and TemplatePlanner's
+    // fallback already computes gear and NPC splits only. Storing the body split would mean a
+    // shared template silently re-foldering a recipient's gear by a body list they may not have the
+    // same version of.
     [Fact]
     public void BothTypes_CarryTheValuesTheyHaveBeenDesignedFor()
     {
-        Assert.Equal(6, PrimaryConstructorParameterCount(typeof(SortSelection)));
+        Assert.Equal(7, PrimaryConstructorParameterCount(typeof(SortSelection)));
         Assert.Equal(3, PrimaryConstructorParameterCount(typeof(TemplateFallback)));
     }
 

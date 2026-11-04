@@ -166,17 +166,72 @@ agree with that reading, but no real library has confirmed it yet. The manual ch
 
 The **Split hair by hair number** checkbox defaults off and is disabled when Group by is Creator.
 
+## Body-type sub-classification (which body gear was made for)
+
+Unlike the gear and hair passes, this one reads the mod's **name**, and it has to: a garment made for
+Bibo+ replaces its own equipment set, not the body's models, and nothing in its files names the body.
+Proteus establishes the same fact by mesh and UV correspondence against the body's own meshes, which
+is far more work than a sort should do. So a match here is a STATED intent, not a verified one.
+
+Two things gate it, in this order, in `ScanProcessor.Process`:
+
+1. `ModTypeClassifier.BodyTypeApplies` asks whether a body type means anything for this mod at all.
+   `Body` rows always qualify - the category already says the mod is a body. A `Gear` row qualifies
+   only if its equipment slots include `Top`, `Hands`, `Legs` or `Feet`: the four model halves a body
+   replacer authors (`_top`, `_glv`, `_dwn`, `_sho`), and the same four Proteus's own
+   `BodySizeCatalog.KnownSlots` carries. Head, Ears, Neck, Wrists and Rings are excluded with the
+   weapons, because nothing about a helmet or a ring is cut to a body's shape. A weapon mod is the
+   case that motivates this: it replaces `chara/weapon/...`, resolves no equipment slot, and yet
+   classifies as `Gear` like any other item. Slots that could not be read count as no evidence, not
+   as permission. This needs no extra disk read - the gear pass above already resolved these slots.
+2. Only then does `BodyTypeMatcher.Match` look at the name.
+
+The matcher lower-cases invariantly and splits on everything that is not a letter, a digit or `+`.
+Keeping `+` attached is the whole reason it does not reuse `NpcNameMatcher`'s tokenizer, which treats
+every non-alphanumeric as a boundary and would fold `Bibo+` into `Bibo` and `Rue+` into `Rue`.
+Everything else is a boundary, `&` and `-` included, so one alias covers `Tight&Firm` and
+`Tight & Firm`, and `TBSE-X` and `TBSEX`. Runes, not chars, because mod titles routinely carry emoji.
+
+Aliases are tried longest first, so a variant name cannot be beaten by its parent's shorter one. No
+shipped pair of labels currently differs on that basis - the variants that used to, YAB Buff and
+TBSE-X, are aliases of their parents now - so the ordering is load-bearing for the next variant added
+as its own body rather than for the current list. `Match_LongestAliasWinsRegardlessOfPosition` pins
+it on synthetic entries so the guarantee does not depend on the data exercising it.
+
+A match is stored on the row as `BodyType`, its own field rather than a value in `SubCategory`,
+because a gear mod is both a `Top` and a Bibo+ garment and needs to carry both. No match leaves it
+null; nothing is guessed.
+
+The list is `Organizer/BodyTypes/body-type-list-static.json`, an embedded resource: 30 bodies and 120
+aliases, every one corroborated against either Proteus's source or the community Body Mod Compendium.
+`BodyTypeListStore` unions it with the user's optional `body-type-list.json`, where an entry matching
+a shipped `Label` REPLACES it so a bad alias can be removed and not merely added to. That file is
+capped at 500 bodies - the lesson from the NPC name list, applied where it can still recur.
+
+Roughly twenty Compendium names are deliberately not aliased. Each is a word common in ordinary gear
+titles - `vanilla`, `succulent`, `grande`, `stocky`, `cherie`, `seraphim` - and a false-positive sweep
+showed them mis-filing unrelated mods. The body is still in the list; only the risky spelling is not,
+and `KnownNonBodies_AreNotAliases` fails if one is re-added. `artemis` is the single knowing
+exception, because it is the only name that body has.
+
+The **Split gear and body mods by body type** checkbox defaults off and is disabled when Group by is
+Creator.
+
 ## Sort strategies
 
 Given each mod's `Category`, `SubCategory` (from classification above), and `Author`, one entry
 point builds a `ProposedPath` for every unprotected mod:
 
 ```csharp
-OrganizerState.Sort(SortStrategy strategy, bool splitGear, bool splitNpc,
-                    Func<string, string> canonicalizeCreator)
+OrganizerState.Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
+                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
+                    bool splitBody = false)
 ```
 
 `strategy` comes from the Group by dropdown and picks the path shape:
+
+A body type, where one matched and `splitBody` is on, is inserted directly after
+`{Category}` and above `{SubCategory}`: `Gear/Bibo+/Top/{Name}`.
 
 | `SortStrategy` | Dropdown label | Path shape |
 |----------------|----------------|-----------|
@@ -194,6 +249,7 @@ combination reachable without writing a variant of each strategy:
 | `splitGear` | Gear mods get plain `Gear` | `Gear/Feet`, `Gear/Head`, and so on where the slot resolved |
 | `splitNpc` | **NPC mods get plain `NPC`** | `NPC/NPCs`, `NPC/Bosses`, `NPC/Enemies` |
 | `splitHair` | Hair mods get plain `Hair` | `Hair/115` where exactly one hair number resolved |
+| `splitBody` | No body folders at all | `Gear/Bibo+/Top` and `Body/Rue+` where a body matched |
 
 `splitNpc: false` arrived in 0.6.0. NPC subdivision used to be unconditional, so no button ever
 produced a bare `NPC` folder. At that point the selection space became 1 + (3 x 2 x 2) = 13 -

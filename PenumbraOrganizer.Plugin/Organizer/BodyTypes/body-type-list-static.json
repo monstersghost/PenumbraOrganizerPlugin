@@ -1,0 +1,395 @@
+{
+    "Version": 1,
+    "Bodies": [
+        {
+            "Label": "Neolithe",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "neolithe",
+                "neolithe+"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Bibo+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "bibo+",
+                "bibo",
+                "andro+",
+                "andro",
+                "animebody+",
+                "animebody",
+                "annabelle+",
+                "aphrodite+",
+                "bibowvr",
+                "bju body",
+                "dionys",
+                "izumikos",
+                "kräuter",
+                "krauter",
+                "lilith+",
+                "lux+",
+                "mibo+",
+                "mibo",
+                "naturistix",
+                "naty",
+                "okaa-san",
+                "petite+",
+                "rueto+",
+                "rueto",
+                "seraphim+",
+                "super buff 2",
+                "xs thin",
+                "yabulky",
+                "yet another masc"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Rue+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "rue+",
+                "rue"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "YAB",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "yab+",
+                "yab",
+                "yet another body",
+                "yab buff",
+                "yab+ buff"
+            ],
+            "Race": "",
+            "Note": "Covers YAB Buff and the other YAB variants."
+        },
+        {
+            "Label": "Tre",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "tre+",
+                "tre"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Rosaline",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "rosaline"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "NIRAE",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "nirae",
+                "niræ"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "LavaBod+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "lavabod+",
+                "lavabod",
+                "larue"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Muse+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "muse+",
+                "muse"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Nymph",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "nymph+",
+                "nymph"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Rox+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "rox+",
+                "rox",
+                "bimbo+",
+                "bimbo"
+            ],
+            "Race": "",
+            "Note": "Formerly Bimbo+; renamed by its author. Mods released under the old name are filed here."
+        },
+        {
+            "Label": "Citrus+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "citrus+",
+                "citrus"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Eve",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "ab eve",
+                "eve body",
+                "eve"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "AB Body",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "ab body",
+                "abbody"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Freyja",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "freyjaaf",
+                "freyja"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Pythia",
+            "Sex": "Female",
+            "Race": "",
+            "Source": "verified",
+            "Note": "",
+            "Aliases": [
+                "pythia"
+            ]
+        },
+        {
+            "Label": "Artemis",
+            "Sex": "Female",
+            "Race": "",
+            "Source": "verified",
+            "Note": "Bare \"artemis\" is the only name this body goes by. The weapon case that made it risky (\"Artemis Bow\") is now excluded structurally - a weapon carries no body-shaped equipment slot - so what remains is a top or dress named after the goddess rather than the body.",
+            "Aliases": [
+                "artemis"
+            ]
+        },
+        {
+            "Label": "Doll Body",
+            "Sex": "Female",
+            "Race": "",
+            "Source": "verified",
+            "Note": "",
+            "Aliases": [
+                "doll body gen3",
+                "doll body"
+            ]
+        },
+        {
+            "Label": "FMB2",
+            "Sex": "Female",
+            "Race": "",
+            "Source": "verified",
+            "Note": "",
+            "Aliases": [
+                "female muscle body 2",
+                "fmb2"
+            ]
+        },
+        {
+            "Label": "Tight&Firm",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "tight&firm",
+                "tight & firm",
+                "tight and firm",
+                "tnf3",
+                "tnf",
+                "tf3"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "RUEXB+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "ruexb+",
+                "ruexb"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "RiderTHiCC",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "riderthicc gen3",
+                "riderthicc",
+                "rider thicc"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "EXQB",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "exqb"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "KT+",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "kt+ body",
+                "kt+"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "KNiku",
+            "Sex": "Female",
+            "Source": "verified",
+            "Aliases": [
+                "kniku upper body",
+                "kniku body",
+                "kniku"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "TBSE",
+            "Sex": "Male",
+            "Source": "verified",
+            "Aliases": [
+                "tbse",
+                "the body se",
+                "the body",
+                "tbse-x",
+                "tbsex",
+                "se-x",
+                "andor",
+                "hdcb-m",
+                "lokesh",
+                "ntc+",
+                "old man bones",
+                "tbre",
+                "tb2.0 type m",
+                "thicclanderse",
+                "w25",
+                "q25",
+                "fabulous trans men"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "The hrBody",
+            "Sex": "Male",
+            "Source": "verified",
+            "Aliases": [
+                "hrbody",
+                "hr body",
+                "the hrbody",
+                "hrbody 3",
+                "offseason tummy",
+                "hefty pecs",
+                "sloshy"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "Otopop",
+            "Sex": "Unisex",
+            "Source": "verified",
+            "Aliases": [
+                "otopop",
+                "little lady"
+            ],
+            "Race": "Lalafell",
+            "Note": ""
+        },
+        {
+            "Label": "Re[de]fined Lalafell",
+            "Sex": "Unisex",
+            "Race": "Lalafell",
+            "Source": "verified",
+            "Aliases": [
+                "re de fined lalafell",
+                "redefined lalafell",
+                "relala",
+                "re de fined",
+                "redefined",
+                "re defined"
+            ],
+            "Note": "Also called ReLala. Unisex Lalafell body."
+        },
+        {
+            "Label": "Shapely",
+            "Sex": "Unisex",
+            "Race": "Lalafell",
+            "Source": "verified",
+            "Note": "Covers Shapely SFW and Shapely HD4 SFW.",
+            "Aliases": [
+                "shapely hd4",
+                "shapely sfw"
+            ]
+        }
+    ]
+}

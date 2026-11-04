@@ -511,13 +511,15 @@ public sealed class OrganizerState
         Sort(strategy, splitGear, splitNpc, splitHair: false, canonicalizeCreator);
 
     /// <summary>
-    /// The sort with the hair split and the optional race priority. With no priority and the hair
-    /// split off, this is the same folder selection as the four-argument overload.
+    /// The sort with the hair and body splits and the optional race priority. With no priority and
+    /// both splits off, this is the same folder selection as the four-argument overload.
     /// </summary>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
-                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null) =>
+                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
+                    bool splitBody = false) =>
         Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
-                                               splitHair: splitHair, hairPriority: hairPriority));
+                                               splitHair: splitHair, hairPriority: hairPriority,
+                                               splitBody: splitBody));
 
     /// <summary>
     /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes

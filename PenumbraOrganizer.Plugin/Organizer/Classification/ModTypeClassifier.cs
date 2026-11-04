@@ -13,6 +13,50 @@ public static class ModTypeFolders
 {
     private const string AnimationVfxParent = "Animation and VFX";
 
+    /// <summary>
+    /// The folder a mod belongs in: its category, then the body it is for, then its subcategory.
+    /// </summary>
+    /// <param name="bodyType">
+    /// The body replacer this mod is for, or null for none. Valid only for Gear and Body - the two
+    /// categories a body type means anything for - and rejected for any other, which keeps a
+    /// classifier bug from inventing an "Animation/Bibo+" folder.
+    /// </param>
+    /// <remarks>
+    /// The body segment sits ABOVE the subcategory, so one body's gear gathers in one place
+    /// (Gear/Bibo+/Top, Gear/Bibo+/Legs) rather than scattering across the nine slot folders. That
+    /// is the whole point of the feature: after switching bodies you need to find what still fits.
+    /// <para>
+    /// Both categories that accept one are single-segment folders named after the category itself,
+    /// so inserting the body after that segment cannot disturb a multi-level folder the way it
+    /// would for Animation's "Animation and VFX/..." parent.
+    /// </para>
+    /// </remarks>
+    public static string GetFolder(ModCategory category, string? subCategory, string? bodyType)
+    {
+        var withoutBody = GetFolder(category, subCategory);
+        if (bodyType is null)
+            return withoutBody;
+
+        // Shape, not membership - see IsBodyTypeLabel. The category check is the real guard here:
+        // a body type is meaningless outside Gear and Body, and silently accepting one would put a
+        // body folder under a category that can never have been matched for it.
+        if (!IsBodyTypeLabel(bodyType))
+            throw new ArgumentOutOfRangeException(
+                nameof(bodyType), bodyType, $"Malformed body type '{bodyType}'.");
+        if (category is not (ModCategory.Gear or ModCategory.Body))
+            throw new ArgumentOutOfRangeException(
+                nameof(bodyType), bodyType, $"A body type is not meaningful for {category}.");
+
+        var categorySegment = category.ToString();
+        var tail = withoutBody.Length > categorySegment.Length
+            ? withoutBody[(categorySegment.Length + 1)..]
+            : null;
+
+        return tail is null
+            ? $"{categorySegment}/{bodyType}"
+            : $"{categorySegment}/{bodyType}/{tail}";
+    }
+
     // Valid (category, subCategory) pairings are enumerated explicitly rather than falling
     // through to an open-ended $"{category}/{subCategory}" — that would silently accept a
     // nonsense combination a classifier bug could produce (e.g. Gear + "Bosses") instead of
@@ -44,6 +88,35 @@ public static class ModTypeFolders
         subCategory is { Length: >= 1 and <= 4 }
         && subCategory[0] is >= '1' and <= '9'
         && subCategory.All(char.IsAsciiDigit);
+
+    // A body label as the loaded list spells it: "Bibo+", "Tight&Firm", "Re[de]fined Lalafell".
+    //
+    // A SHAPE check, not a membership check. The set of body replacers is fixed by what the
+    // community releases, not by the game, and the list holding it is loaded at runtime and
+    // extensible by the user (BodyTypeListStore.UserFileName), so enumerating it here would go
+    // stale every time a new body ships. This cannot tell a real body from any other word.
+    //
+    // Membership is guaranteed upstream instead: the only thing that ever sets a row's BodyType is
+    // a match against the loaded list, and BodyTypeListStaticContentTests checks every shipped
+    // label against this method.
+    //
+    // The separator rejection is the load-bearing half. A label containing '/' would silently
+    // nest a folder under Body and break the flat-folder guarantee the Sort tab promises; the
+    // codec drops such a label on parse, and this is the second guard behind it.
+    //
+    // The permitted punctuation is exactly what real body names use - '+' (Bibo+), '&'
+    // (Tight&Firm), '-' (Rue+ / hyphenated variants) and square brackets (RE[DE]FINED) - and all
+    // of them survive PenumbraPathSemantics.FixName unchanged, which matters because a type folder
+    // is deliberately never FixName'd: if FixName rewrote one of these, the folder we propose would
+    // not be the folder Penumbra stores. FixName only trims and turns '/' into '\\', so the one
+    // thing that must stay rejected is a path separator.
+    private static bool IsBodyTypeLabel(string? subCategory) =>
+        subCategory is { Length: >= 1 and <= 40 }
+        && subCategory.Trim() == subCategory
+        && !subCategory.Contains('/')
+        && !subCategory.Contains('\\')
+        && subCategory.All(c => char.IsLetterOrDigit(c)
+                                || c is ' ' or '+' or '-' or '&' or '\'' or '.' or '[' or ']');
 }
 
 /// <summary>
@@ -103,6 +176,50 @@ public static class ModTypeClassifier
         {
             SubCategory = hairNumbers.Single().ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
+    }
+
+    /// <summary>
+    /// The equipment slots a body actually shapes: the four halves a body replacer authors
+    /// (<c>_top</c>, <c>_glv</c>, <c>_dwn</c>, <c>_sho</c>), and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Head, Ears, Neck, Wrists and Rings are deliberately absent. A helmet, an earring or a ring
+    /// is not deformed to the wearer's body shape, so "made for Bibo+" is meaningless for one -
+    /// and the slot list is the same four Proteus's own BodySizeCatalog.KnownSlots carries, for
+    /// the same reason.
+    /// </remarks>
+    public static readonly IReadOnlySet<EquipmentSlot> BodyShapedSlots =
+        new HashSet<EquipmentSlot> { EquipmentSlot.Top, EquipmentSlot.Hands, EquipmentSlot.Legs, EquipmentSlot.Feet };
+
+    /// <summary>
+    /// Whether a body type means anything for this mod at all - the gate on consulting its name.
+    /// </summary>
+    /// <param name="equipmentSlots">
+    /// <see cref="ModEquipmentFileReader.ReadEquipmentSlots"/>'s answer for a Gear row, or null for
+    /// any other category or a failed read.
+    /// </param>
+    /// <remarks>
+    /// A WEAPON is the case that motivates this. A weapon mod replaces <c>chara/weapon/...</c>, so
+    /// it carries no equipment slot at all, yet it classifies as Gear like any other item and would
+    /// otherwise have its name searched for a body - filing an "Artemis Bow" under the Artemis
+    /// body. The same reasoning excludes hats, earrings, necklaces, bracelets and rings: nothing
+    /// about them is cut to a body's shape.
+    /// <para>
+    /// Null slots mean a read that could not be trusted, and are treated as no evidence rather than
+    /// as permission, matching how the gear and hair passes treat the same answer.
+    /// </para>
+    /// <para>
+    /// A Body row needs no slot evidence: the category already says the mod is a body.
+    /// </para>
+    /// </remarks>
+    public static bool BodyTypeApplies(ModCategory? category, IReadOnlySet<EquipmentSlot>? equipmentSlots)
+    {
+        if (category == ModCategory.Body)
+            return true;
+        if (category != ModCategory.Gear || equipmentSlots is null)
+            return false;
+
+        return equipmentSlots.Any(BodyShapedSlots.Contains);
     }
 
     // Returns the single category one changed-item key alone implies, with no cross-key

@@ -17,9 +17,9 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </remarks>
 public readonly record struct SortSelection(
     SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
-    string? HairRaceCode = null, bool MidlanderFallback = false)
+    string? HairRaceCode = null, bool MidlanderFallback = false, bool SplitBody = false)
 {
-    // By Creator never consults category, so no split can change its output. All three checkboxes
+    // By Creator never consults category, so no split can change its output. All four checkboxes
     // are disabled when this is false.
     public bool SplitsApply => Strategy != SortStrategy.CreatorOnly;
 
@@ -27,7 +27,7 @@ public readonly record struct SortSelection(
 }
 
 /// <summary>
-/// The Sort tab's grouping control: a Group by dropdown, three split checkboxes, the scraped-list
+/// The Sort tab's grouping control: a Group by dropdown, four split checkboxes, the scraped-list
 /// opt-in and the Sort button. Replaces the seven sort buttons, and exposes the six combinations
 /// they never offered - the whole splitNpc-off column - plus, since the hair split was added,
 /// everything in the splitHair-on half.
@@ -71,6 +71,7 @@ public sealed class SortPanel
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
     private int _hairRaceIndex;              // 0 is None; see HairRaceLabels
     private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
+    private bool _splitBody;                 // off, like gear and hair: no body folders until asked
     private SortSelection? _lastSorted;
 
     private const string Male = "\u2642";
@@ -157,6 +158,12 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortMidlanderFallback, splitsApply ? null : SplitsInapplicableReason);
 
+        GroupHeading("Body type");
+        ImGui.BeginDisabled(!splitsApply);
+        ImGui.Checkbox("Split gear and body mods by body type", ref _splitBody);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortSplitBody, splitsApply ? null : SplitsInapplicableReason);
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -165,14 +172,14 @@ public sealed class SortPanel
         // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
         // the checkboxes held before the user's click was processed.
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback);
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitBody);
 
         // Stable id: a label varying with mod count makes the widget id vary with it, so a background
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
-                canonicalizeCreator, selection.HairPriority);
+                canonicalizeCreator, selection.HairPriority, selection.SplitBody);
             _lastSorted = selection;
         }
 

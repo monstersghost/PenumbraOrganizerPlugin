@@ -259,6 +259,33 @@ Two controls appear under it, and both apply only while Split hair is on:
 Both reset each session. A mod that still does not resolve to one number stays in the plain `Hair`
 folder; a race with two hair numbers in the same mod never picks one.
 
+**Split gear and body mods by body type** files a gear mod under the body it was made for, such
+as `Gear/Bibo+/Top`, and a body replacer under itself, such as `Body/Rue+`. The body sits above the
+equipment slot, so everything cut for one body gathers in one place instead of scattering across the
+nine slot folders. It is off by default, and the two splits are independent: with Split gear off you
+get `Gear/Bibo+` and no slot below it.
+
+The body is read from the **mod's name**, because nothing inside a garment's files says which body it
+was cut for — a dress replaces its own equipment set, not the body's models. The plugin ships a list
+of 30 known bodies with 120 spellings between them, covering the ones people actually write in mod
+titles: `Bibo+`, `Rue+`, `YAB`, `TnF`, `TF3`, `TBSE`, `Neolithe` and so on. Variants are filed under
+their parent, so a TBSE-X mod goes to `Gear/TBSE` and a YAB Buff mod to `Gear/YAB`.
+
+Only gear that is actually shaped by a body is considered. A mod must occupy the Top, Hands, Legs or
+Feet slot — the four halves a body replacer builds. **Weapons, hats, earrings, necklaces, bracelets
+and rings are never filed under a body**, because nothing about them is cut to a body's shape, so a
+weapon called "Artemis Bow" stays where it is rather than landing under the Artemis body.
+
+A mod whose name matches no known body stays where it would have gone anyway. Because this reads
+names, a mod that merely happens to contain a body's name as a word can be filed under it; the
+Review tab shows every proposed move before anything happens, so a wrong guess is one row to fix.
+
+You can add bodies the plugin does not know, or correct a shipped one, without waiting for an
+update: create `body-type-list.json` in the plugin's configuration folder. An entry whose `Label`
+matches a shipped body replaces it, so a spelling that turns out to be wrong can be removed as well
+as added. The file is only read if it exists, and is ignored with a warning in the log if it is
+malformed or holds more than 500 bodies.
+
 #### The NPC list controls
 
 **Also use the NPC list scraped from the wiki** is off and unavailable in this version. NPC name
@@ -556,6 +583,19 @@ on, and both reset each session.
 
 Read the caveat at the bottom of this page before trusting the numbers on a library you care about.
 
+## Body type
+
+Gear can be filed under the body it was made for, so everything cut for one body gathers in one
+place — useful when you switch bodies and need to know what still fits. The control is **Split gear
+and body mods by body type** on the Sort tab, described under [Sort](#sort) above.
+
+The body is read from the mod's name, because nothing inside a garment says which body it was cut
+for. Only gear in the Top, Hands, Legs or Feet slot is considered, so weapons, hats and jewellery
+are never filed under a body.
+
+Add bodies the plugin does not know by creating `body-type-list.json` in the configuration folder;
+see [Where files live](#where-files-live). Read the caveat at the bottom of this page first.
+
 ## Typical workflows
 
 First-time sort: Scan, choose a grouping on the Sort tab and press Sort, review the proposed paths
@@ -592,7 +632,9 @@ one multi-snapshot history), `organizer-folder-backup.json` for Folder Cleanup's
 rollback data, `organizer-export.txt` for the plain-text Review export, `organizer-diagnostics.txt`
 for the diagnostic dump, `organizer-workbook.xlsx` for the last exported workbook, and
 `npc-name-list.json` for the NPC/enemy/boss name list, which is seeded on first run and updated in
-place by Refresh. Your protected mods and protected folders live in the plugin's own Dalamud
+place by Refresh. The plugin also READS `body-type-list.json` from the same directory if you
+create one, to add bodies the shipped list does not know or correct one it does; it is never created
+or written by the plugin, and is simply ignored when absent. Your protected mods and protected folders live in the plugin's own Dalamud
 settings file (reachable via Show Config File on the Review Changes tab), not in this directory.
 The plugin never writes inside Penumbra's own mod storage, with one exception covered in
 [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md): Folder Cleanup's edits to `organization.json`.
@@ -607,3 +649,14 @@ Sort or Restore. See the Review Changes section above for why, and for how to fo
 Hair numbers are read from the mod's files, and also from the EST entries in its metadata. The EST
 value has not yet been confirmed in game to be the hair number. If a mod is filed under a number that
 is not the hair it replaces, turn Split hair off and report the mod name and both numbers on Discord.
+
+Body types are read from the mod's **name**, not its files, because nothing in a garment's files
+names the body it was cut for. Two consequences. A mod whose title does not name its body is not
+filed under one, even though it was made for one. And a mod that merely contains a body's name as a
+word can be filed under that body — "Rue de la Paix" reads as a Rue+ garment. Review the proposed
+paths before applying; a wrong guess is one row to correct. `artemis` is the one bare common word
+the list knowingly keeps, because it is the only name that body has.
+
+Whether Penumbra stores a folder name containing `+`, `&` or `[` `]` unchanged has not yet been
+confirmed in game — twelve of the thirty body labels contain a `+`. If `Gear/Bibo+/Top` comes back
+as something else after a Rediscover Mods, turn the body split off and report what the folder became.
