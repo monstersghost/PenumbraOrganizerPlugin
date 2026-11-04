@@ -34,6 +34,12 @@ public sealed class BodyTypeEntry
     public string Source { get; set; } = string.Empty;
 
     /// <summary>
+    /// Anything a maintainer needs to know about this entry - a rebrand, a race restriction - or
+    /// empty. Never consulted when building a folder.
+    /// </summary>
+    public string Note { get; set; } = string.Empty;
+
+    /// <summary>
     /// The words to look for in a mod's name, lowercase. Order does not matter: the matcher sorts
     /// every alias globally by length so the longest wins regardless of where it was listed.
     /// </summary>

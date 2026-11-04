@@ -9,7 +9,8 @@
                 "neolithe",
                 "neolithe+"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Bibo+",
@@ -19,7 +20,8 @@
                 "bibo+",
                 "bibo"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Rue+",
@@ -29,7 +31,8 @@
                 "rue+",
                 "rue"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "YAB",
@@ -40,7 +43,8 @@
                 "yab",
                 "yet another body"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "YAB Buff",
@@ -50,7 +54,8 @@
                 "yab buff",
                 "yab+ buff"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Tre",
@@ -60,7 +65,8 @@
                 "tre+",
                 "tre"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Rosaline",
@@ -69,7 +75,8 @@
             "Aliases": [
                 "rosaline"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "NIRAE",
@@ -79,7 +86,8 @@
                 "nirae",
                 "niræ"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "LavaBod+",
@@ -90,7 +98,8 @@
                 "lavabod",
                 "larue"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Muse+",
@@ -100,27 +109,32 @@
                 "muse+",
                 "muse"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
-            "Label": "Nymph+",
+            "Label": "Nymph",
             "Sex": "Female",
             "Source": "verified",
             "Aliases": [
                 "nymph+",
                 "nymph"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
-            "Label": "Bimbo+",
+            "Label": "Rox+",
             "Sex": "Female",
             "Source": "verified",
             "Aliases": [
+                "rox+",
+                "rox",
                 "bimbo+",
                 "bimbo"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": "Formerly Bimbo+; renamed by its author. Mods released under the old name are filed here."
         },
         {
             "Label": "Citrus+",
@@ -130,7 +144,8 @@
                 "citrus+",
                 "citrus"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Eve",
@@ -141,7 +156,8 @@
                 "eve body",
                 "eve"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "AB Body",
@@ -151,17 +167,19 @@
                 "ab body",
                 "abbody"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
-            "Label": "FreyjaAF",
+            "Label": "Freyja",
             "Sex": "Female",
             "Source": "verified",
             "Aliases": [
                 "freyjaaf",
                 "freyja"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Tight&Firm",
@@ -169,9 +187,70 @@
             "Source": "verified",
             "Aliases": [
                 "tight&firm",
-                "tight & firm"
+                "tight & firm",
+                "tight and firm",
+                "tnf3",
+                "tnf",
+                "tf3"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "RUEXB+",
+            "Sex": "Female",
+            "Source": "reported",
+            "Aliases": [
+                "ruexb+",
+                "ruexb"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "RiderTHiCC",
+            "Sex": "Female",
+            "Source": "reported",
+            "Aliases": [
+                "riderthicc gen3",
+                "riderthicc",
+                "rider thicc"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "EXQB",
+            "Sex": "Female",
+            "Source": "reported",
+            "Aliases": [
+                "exqb"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "KT+",
+            "Sex": "Female",
+            "Source": "reported",
+            "Aliases": [
+                "kt+ body",
+                "kt+"
+            ],
+            "Race": "",
+            "Note": ""
+        },
+        {
+            "Label": "KNiku",
+            "Sex": "Female",
+            "Source": "reported",
+            "Aliases": [
+                "kniku upper body",
+                "kniku body",
+                "kniku"
+            ],
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "TBSE",
@@ -185,17 +264,21 @@
                 "tbsex",
                 "se-x"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
-            "Label": "HRBody",
+            "Label": "The hrBody",
             "Sex": "Male",
             "Source": "verified",
             "Aliases": [
                 "hrbody",
-                "hr body"
+                "hr body",
+                "the hrbody",
+                "hrbody 3"
             ],
-            "Race": ""
+            "Race": "",
+            "Note": ""
         },
         {
             "Label": "Otopop",
@@ -204,66 +287,23 @@
             "Aliases": [
                 "otopop"
             ],
-            "Race": "Lalafell"
+            "Race": "Lalafell",
+            "Note": ""
         },
         {
-            "Label": "RiderTHiCC",
-            "Sex": "Female",
-            "Source": "reported",
-            "Aliases": [
-                "riderthicc",
-                "rider thicc"
-            ],
-            "Race": ""
-        },
-        {
-            "Label": "RUEXB+",
-            "Sex": "Female",
-            "Source": "reported",
-            "Aliases": [
-                "ruexb+",
-                "ruexb"
-            ],
-            "Race": ""
-        },
-        {
-            "Label": "EXQB",
-            "Sex": "Female",
-            "Source": "reported",
-            "Aliases": [
-                "exqb"
-            ],
-            "Race": ""
-        },
-        {
-            "Label": "KT+",
-            "Sex": "Female",
-            "Source": "reported",
-            "Aliases": [
-                "kt+"
-            ],
-            "Race": ""
-        },
-        {
-            "Label": "KNiku",
-            "Sex": "Female",
-            "Source": "reported",
-            "Aliases": [
-                "kniku body",
-                "kniku"
-            ],
-            "Race": ""
-        },
-        {
-            "Label": "RE[DE]FINED",
+            "Label": "Re[de]fined Lalafell",
             "Sex": "Unisex",
             "Race": "Lalafell",
             "Source": "reported",
             "Aliases": [
+                "re de fined lalafell",
+                "redefined lalafell",
+                "relala",
                 "re de fined",
                 "redefined",
                 "re defined"
-            ]
+            ],
+            "Note": "Also called ReLala. Unisex Lalafell body."
         }
     ]
 }

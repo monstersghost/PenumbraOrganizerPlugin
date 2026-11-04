@@ -84,7 +84,7 @@ public class BodyTypeListStaticContentTests
     public void EverySex_IsRecognised()
     {
         // Metadata only - nothing builds a folder from it - but a typo here would still be wrong
-        // in a file people read. Unisex is real: Otopop and RE[DE]FINED are Lalafell bodies.
+        // in a file people read. Unisex is real: Otopop and Re[de]fined Lalafell are Lalafell bodies.
         Assert.All(Bundled().Bodies,
             b => Assert.Contains(b.Sex, (string[])["Female", "Male", "Unisex"]));
     }
@@ -96,7 +96,7 @@ public class BodyTypeListStaticContentTests
         // in it would be a mistake worth catching.
         var raced = Bundled().Bodies.Where(b => b.Race.Length > 0).Select(b => b.Label).OrderBy(l => l);
 
-        Assert.Equal(["Otopop", "RE[DE]FINED"], raced);
+        Assert.Equal(["Otopop", "Re[de]fined Lalafell"], raced);
         Assert.All(Bundled().Bodies.Where(b => b.Race.Length > 0), b => Assert.Equal("Lalafell", b.Race));
     }
 
@@ -112,7 +112,7 @@ public class BodyTypeListStaticContentTests
         // TBSE folder, while HRBody is a genuinely separate body.
         var male = Bundled().Bodies.Where(b => b.Sex == "Male").Select(b => b.Label).OrderBy(l => l);
 
-        Assert.Equal(["HRBody", "TBSE"], male);
+        Assert.Equal(["TBSE", "The hrBody"], male);
     }
 
     [Fact]
@@ -125,6 +125,31 @@ public class BodyTypeListStaticContentTests
         var tbse = Bundled().Bodies.Single(b => b.Label == "TBSE");
         Assert.Contains("tbse-x", tbse.Aliases);
         Assert.Contains("tbsex", tbse.Aliases);
+    }
+
+    [Fact]
+    public void BimboResolvesToRox_TheRebrandedName()
+    {
+        // Bimbo+ was renamed Rox+ by its author. Mods released under the old name are still out
+        // there in quantity, so both spellings must land on the new label - dropping either half
+        // breaks it: the old name stops being detected, or the new one does.
+        var rox = Bundled().Bodies.Single(b => b.Label == "Rox+");
+
+        Assert.Contains("bimbo+", rox.Aliases);
+        Assert.Contains("rox+", rox.Aliases);
+        Assert.DoesNotContain("Bimbo+", Bundled().Bodies.Select(b => b.Label));
+        Assert.NotEqual(string.Empty, rox.Note);
+    }
+
+    [Fact]
+    public void TightAndFirm_CarriesItsAbbreviations()
+    {
+        // TnF and TF3 are how the community writes it, and gear titles use them far more than the
+        // full name. Missing these was the single largest detection gap in the first list.
+        var tnf = Bundled().Bodies.Single(b => b.Label == "Tight&Firm").Aliases;
+
+        Assert.Contains("tnf", tnf);
+        Assert.Contains("tf3", tnf);
     }
 
     [Fact]
@@ -142,8 +167,8 @@ public class BodyTypeListStaticContentTests
     // claiming a Body subfolder.
     [InlineData("uranus", "a chest size inside the Luxe garment pack")]
     [InlineData("stabbies", "a hand/nail option")]
-    [InlineData("gen2", "a vanilla skin shader generation")]
-    [InlineData("gen3", "a vanilla skin shader generation")]
+    [InlineData("gen2", "a texture standard (vanilla-based mirrored textures), not a body")]
+    [InlineData("gen3", "a texture standard, not a body - Gen3 bodies are named individually")]
     [InlineData("lithe", "a substring of Neolithe")]
     [InlineData("luxe", "a garment pack")]
     [InlineData("darling", "a garment pack")]

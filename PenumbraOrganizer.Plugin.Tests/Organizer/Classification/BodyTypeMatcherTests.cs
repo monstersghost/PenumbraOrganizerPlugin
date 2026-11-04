@@ -91,8 +91,8 @@ public class BodyTypeMatcherTests
     public void Match_HrBodyIsNotTbse()
     {
         // The other half of the male decision: HRBody stays separate.
-        Assert.Equal("HRBody", Bundled().Match("HRBody Shirt")?.Label);
-        Assert.Equal("HRBody", Bundled().Match("HR Body Shirt")?.Label);
+        Assert.Equal("The hrBody", Bundled().Match("HRBody Shirt")?.Label);
+        Assert.Equal("The hrBody", Bundled().Match("HR Body Shirt")?.Label);
     }
 
     [Theory]
@@ -100,10 +100,11 @@ public class BodyTypeMatcherTests
     [InlineData("REDEFINED Dress")]
     [InlineData("Re-Defined Dress")]
     [InlineData("RE:DEFINED Dress")]
+    [InlineData("ReLala Dress")]
     public void Match_BracketedBodyName_ResolvesHoweverItIsPunctuated(string modName) =>
         // Brackets are boundaries, so "RE[DE]FINED" tokenizes to three words while "REDEFINED" is
         // one. Both spellings are real, so both are aliased; this fails if either is dropped.
-        Assert.Equal("RE[DE]FINED", Bundled().Match(modName)?.Label);
+        Assert.Equal("Re[de]fined Lalafell", Bundled().Match(modName)?.Label);
 
     [Fact]
     public void Match_LaRue_IsLavaBod()

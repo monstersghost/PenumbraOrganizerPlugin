@@ -74,6 +74,7 @@ public static class BodyTypeListCodec
                 Label = b?.Label?.Trim() ?? string.Empty,
                 Sex = b?.Sex?.Trim() ?? string.Empty,
                 Race = b?.Race?.Trim() ?? string.Empty,
+                Note = b?.Note?.Trim() ?? string.Empty,
                 Source = b?.Source?.Trim() ?? string.Empty,
                 Aliases = (b?.Aliases ?? [])
                     .Select(a => a?.Trim().ToLowerInvariant() ?? string.Empty)
