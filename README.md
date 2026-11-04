@@ -7,17 +7,36 @@ files.
 It communicates with Penumbra through its IPC interface and lets you preview proposed changes
 before applying them.
 
+![The Protect tab: folders as a collapsible tree, each with a protect, exclude or inherit box](docs/images/protect-tree.png)
+
 ## Features
 
+**Sorting**
+
 * Organize mods by creator, mod type, or a combination of both
-* Review every proposed folder change before applying it
-* Protect individual mods from sorting and restoration operations
-* Protect entire folders, including all mods contained in their subfolders
+* Split gear by equipment slot, NPC mods by kind, and hair by the hair number it replaces
+* Assign folders to specific mods by hand, or import a layout you edited in Excel
+* Review every proposed folder change before applying it — nothing moves until you press Apply
+
+**Protection**
+
+* Protect individual mods from sorting
+* Protect a whole folder and everything under it, at any depth
+* Or **exclude** one subfolder so it sorts while its parent stays protected — the nearest rule on a
+  path wins, so protection is no longer all-or-nothing down a branch
+* Clear every kind of protection inside one folder in a single confirmed action
 * Automatically protect mods managed by [Heliosphere](https://heliosphere.app/)
+
+**Safety nets**
+
 * Create multiple rollback snapshots and restore any previously saved library state
-* Remove empty folders left behind after mods are reorganized
-* Export your mod organization to an Excel workbook
-* Import edited organization workbooks back into the plugin
+* Every Apply and Restore snapshots your library first, so both are undoable
+* Remove empty folders left behind after mods are reorganized, with its own rollback
+
+**Everything else**
+
+* Export your mod organization to an Excel workbook, and import an edited one back
+* Share a folder layout as a template, or preview someone else's against your library first
 * Search your whole library to find which installed mods change a given game item
 
 ## Installation
@@ -43,7 +62,8 @@ the `devPlugins` folder. Manual installations do not receive normal update notif
 be updated by hand. They may also conflict with the custom-repository version. Remove any manually
 installed copy before installing Penumbra Organizer through the repository.
 
-Once it's installed, see [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to use each tab.
+Once it's installed, see [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to use each tab, with a
+screenshot of every one.
 
 ## Support
 
