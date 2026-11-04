@@ -1,17 +1,52 @@
 # XIV Mod Archive post
 
-Copy for the plugin's XMA page, kept in the repo so it can be updated alongside a release rather
-than rewritten from memory each time. Current as of **0.6.2.1**.
+The live listing: <https://www.xivmodarchive.com/modid/164842>
 
-XMA's description box takes plain text with basic formatting. Headings below are written as plain
-lines rather than Markdown `#` so they can be pasted straight in.
+## Updating the images (the usual job)
 
-Screenshots to attach, in this order, from `docs/images/`:
+The listing's own description is fine and is **not** rewritten on every release. What goes stale is
+the gallery, because it shows the old app and the pre-0.6.2.1 UI.
 
-1. `protect-tree.png` — the folder tree, which is the thing people are being told about.
-2. `sort.png` — what the plugin is for.
-3. `review-changes.png` — proof that nothing moves without review.
-4. `protect-unprotect-confirm.png` — optional, if a fourth slot is useful.
+Upload the files in `docs/xma-images/` in filename order. They are numbered for exactly that, since
+XMA shows the gallery in upload order and supports no captions:
+
+| File | Shows |
+| --- | --- |
+| `01-preview-protect-tree.jpg` | The Protect tab's folder tree. Use this as the **preview image** — it is the thing the listing is selling. |
+| `02-sort.jpg` | The Sort tab: grouping and the three splits. |
+| `03-review-changes.jpg` | Current beside proposed paths. This is the "nothing moves without you" proof. |
+| `04-protect-search.jpg` | Searching the tree. |
+| `05-unprotect-confirm.jpg` | The confirmation before a bulk unprotect. |
+| `06-history.jpg` | Snapshots and Restore. |
+| `07-search.jpg` | Reverse item lookup. |
+| `08-templates.jpg` | Templates and the export warning. |
+| `09-scan.jpg` | The Scan tab. |
+
+Regenerate them after retaking any screenshot:
+
+```bash
+python docs/build-xma-images.py
+```
+
+They are JPEG at 2x the source size, which is what keeps the small UI text readable in XMA's
+gallery viewer.
+
+### Two things to check while you are in there
+
+- The listing links **two** Discord invites (`MhQzVJ65c` and `NHssF8ux6B`) and the text calls the
+  second one the new server. If the first is dead, remove it — a broken invite on the front page
+  costs you support traffic.
+- The description still describes the standalone app's language in places ("bulk moves, undo/redo,
+  one-click strategies"). It is not wrong about the plugin, but if you ever want it to match the
+  plugin's own vocabulary, the rewrite below is ready to paste.
+
+## A full rewrite, if you ever want one
+
+Not needed for a normal release. Everything below is an alternative description, written in the
+plugin's own terms and current as of 0.6.2.1.
+
+XMA's description box takes plain text with basic formatting, so the headings below are plain lines
+rather than Markdown `#`.
 
 ---
 
