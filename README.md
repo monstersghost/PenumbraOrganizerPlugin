@@ -63,7 +63,9 @@ be updated by hand. They may also conflict with the custom-repository version. R
 installed copy before installing Penumbra Organizer through the repository.
 
 Once it's installed, see [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to use each tab, with a
-screenshot of every one.
+screenshot of every one. The same guide is available as a
+[PDF](docs/USER_GUIDE.pdf) for reading away from the game or printing, and both are linked from the
+plugin's own **Help** tab.
 
 ## Support
 

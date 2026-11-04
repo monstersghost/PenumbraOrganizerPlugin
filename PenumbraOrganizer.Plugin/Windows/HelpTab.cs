@@ -47,6 +47,18 @@ public static class HelpTab
         "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.2.1/docs/USER_GUIDE.md";
 
     /// <summary>
+    /// The same guide as a PDF, for reading away from the game or printing.
+    /// </summary>
+    /// <remarks>
+    /// Version-pinned for <see cref="GuideUrl"/>'s reason, and it is the SECOND URL a release has
+    /// to move - forgetting this one serves the previous release's PDF, which
+    /// <c>ThePdfLink_CarriesThisBuildsOwnVersion</c> catches. The file is generated from the
+    /// Markdown by <c>docs/build-pdf.py</c>, so it cannot describe a different UI than the guide.
+    /// </remarks>
+    public const string PdfGuideUrl =
+        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.2.1/docs/USER_GUIDE.pdf";
+
+    /// <summary>
     /// The support Discord. A permanent invite, deliberately - a `discord.gg` code that can expire
     /// is baked into every shipped binary, and a dead one cannot be fixed without a new release.
     /// </summary>
@@ -199,6 +211,10 @@ public static class HelpTab
         ImGui.SameLine();
         if (ImGui.Button("Open the full guide in your browser"))
             BrowserLink.Open(GuideUrl);
+
+        ImGui.SameLine();
+        if (ImGui.Button("Open the guide as a PDF"))
+            BrowserLink.Open(PdfGuideUrl);
 
         if (onShowWalkthrough is not null)
         {

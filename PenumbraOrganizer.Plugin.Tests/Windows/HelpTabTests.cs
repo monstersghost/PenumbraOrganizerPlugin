@@ -90,6 +90,33 @@ public class HelpTabTests
     }
 
     [Fact]
+    public void ThePdfLink_CarriesThisBuildsOwnVersion()
+    {
+        // The second version-pinned URL, and the one more likely to be forgotten at release time
+        // precisely because the Markdown guide is the one people think of.
+        var version = typeof(PenumbraOrganizer.Plugin.Plugin).Assembly.GetName().Version!.ToString(4);
+
+        Assert.Contains($"/blob/{version}/", HelpTab.PdfGuideUrl);
+    }
+
+    [Fact]
+    public void ThePdfLink_PointsAtThePdfInThisRepo()
+    {
+        Assert.StartsWith("https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/", HelpTab.PdfGuideUrl);
+        Assert.EndsWith("/docs/USER_GUIDE.pdf", HelpTab.PdfGuideUrl);
+    }
+
+    [Fact]
+    public void TheTwoGuideLinks_PointAtTheSameRelease()
+    {
+        // They are pinned independently, so they can drift apart: bumping one and not the other
+        // would serve this build's guide beside the previous build's PDF.
+        Assert.Equal(
+            HelpTab.GuideUrl.Replace("/docs/USER_GUIDE.md", string.Empty),
+            HelpTab.PdfGuideUrl.Replace("/docs/USER_GUIDE.pdf", string.Empty));
+    }
+
+    [Fact]
     public void TheGitHubLink_PointsAtTheGuideInThisRepo()
     {
         // A version tag alone is not enough - the URL also has to reach the right file. This is the
