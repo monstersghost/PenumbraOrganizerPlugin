@@ -4,6 +4,25 @@ using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 
 public class BodyTypeListCodecTests
 {
+    /// <summary>
+    /// Parses and asserts the parse SUCCEEDED before handing back the document.
+    /// </summary>
+    /// <remarks>
+    /// Every test below that reads <c>Data</c> goes through this. Dereferencing <c>Data!</c>
+    /// directly is what let a test with malformed JSON in it look like a test of something else:
+    /// "Body\Nested" written as a C# single backslash produced the invalid JSON escape \N, Parse
+    /// correctly answered MalformedJson with a null Data, and the assertion threw a
+    /// NullReferenceException instead of reporting what was actually wrong. Asserting the status
+    /// first turns that whole class of mistake into a legible failure.
+    /// </remarks>
+    private static BodyTypeListDocument ParseOk(string json)
+    {
+        var result = BodyTypeListCodec.Parse(json);
+
+        Assert.Equal(BodyTypeListParseStatus.Ok, result.Status);
+        return result.Data!;
+    }
+
     [Fact]
     public void Parse_Null_IsMalformedNotAThrow() =>
         Assert.Equal(BodyTypeListParseStatus.MalformedJson, BodyTypeListCodec.Parse(null!).Status);
@@ -35,55 +54,59 @@ public class BodyTypeListCodecTests
     [Fact]
     public void Parse_DropsEntryWithNoUsableAlias()
     {
-        var result = BodyTypeListCodec.Parse("""
+        var document = ParseOk("""
             {"Version":1,"Bodies":[{"Label":"Ghost","Aliases":["   ",""]}]}
             """);
 
-        Assert.Empty(result.Data!.Bodies);
+        Assert.Empty(document.Bodies);
     }
 
     [Fact]
     public void Parse_DropsEntryWithNoLabel()
     {
-        var result = BodyTypeListCodec.Parse("""
+        var document = ParseOk("""
             {"Version":1,"Bodies":[{"Label":"","Aliases":["x"]}]}
             """);
 
-        Assert.Empty(result.Data!.Bodies);
+        Assert.Empty(document.Bodies);
     }
 
     [Theory]
-    [InlineData("Body/Nested")]
-    [InlineData("Body\\Nested")]
-    public void Parse_DropsLabelCarryingAPathSeparator(string label)
+    [InlineData("Body/Nested")]          // '/' needs no JSON escaping
+    [InlineData(@"Body\\Nested")]        // JSON for ONE backslash; a lone \N is not a valid escape
+    public void Parse_DropsLabelCarryingAPathSeparator(string jsonEscapedLabel)
     {
-        // The flat-folder guarantee. Such a label would otherwise reach GetFolder and nest a
-        // folder under Body; IsBodyTypeLabel is the second guard behind this one.
-        var result = BodyTypeListCodec.Parse($$"""
-            {"Version":1,"Bodies":[{"Label":"{{label}}","Aliases":["x"]}]}
+        // A label with a separator would otherwise reach GetFolder and add a level below the body
+        // folder; IsBodyTypeLabel is the second guard behind this one.
+        //
+        // The parameter is the label AS WRITTEN IN JSON, not the label itself - the backslash case
+        // has to arrive here already escaped or the document is malformed rather than merely
+        // carrying a bad label, which is a different test entirely (Parse_Garbage covers that).
+        var document = ParseOk($$"""
+            {"Version":1,"Bodies":[{"Label":"{{jsonEscapedLabel}}","Aliases":["x"]}]}
             """);
 
-        Assert.Empty(result.Data!.Bodies);
+        Assert.Empty(document.Bodies);
     }
 
     [Fact]
     public void Parse_DropsOverLongLabel()
     {
-        var result = BodyTypeListCodec.Parse($$"""
+        var document = ParseOk($$"""
             {"Version":1,"Bodies":[{"Label":"{{new string('x', 41)}}","Aliases":["x"]}]}
             """);
 
-        Assert.Empty(result.Data!.Bodies);
+        Assert.Empty(document.Bodies);
     }
 
     [Fact]
     public void Parse_DeDuplicatesAliasesWithinAnEntry()
     {
-        var result = BodyTypeListCodec.Parse("""
+        var document = ParseOk("""
             {"Version":1,"Bodies":[{"Label":"Rue+","Aliases":["rue","RUE","Rue"]}]}
             """);
 
-        Assert.Equal(["rue"], result.Data!.Bodies.Single().Aliases);
+        Assert.Equal(["rue"], document.Bodies.Single().Aliases);
     }
 
     [Fact]
@@ -91,13 +114,13 @@ public class BodyTypeListCodecTests
     {
         // Deliberately NOT repaired: silently dropping one would hide an authoring mistake that
         // BodyTypeListStaticContentTests is there to fail on.
-        var result = BodyTypeListCodec.Parse("""
+        var document = ParseOk("""
             {"Version":1,"Bodies":[
               {"Label":"Alpha","Aliases":["shared"]},
               {"Label":"Beta","Aliases":["shared"]}]}
             """);
 
-        Assert.Equal(2, result.Data!.Bodies.Count);
+        Assert.Equal(2, document.Bodies.Count);
     }
 
     [Fact]
