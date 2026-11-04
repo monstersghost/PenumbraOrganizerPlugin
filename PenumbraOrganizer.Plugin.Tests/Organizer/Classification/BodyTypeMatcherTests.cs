@@ -143,11 +143,15 @@ public class BodyTypeMatcherTests
     // ── token boundaries: a body name inside a longer word is not a match ──
 
     [Theory]
-    [InlineData("Evening Gown")]
-    [InlineData("Truest Form")]
-    [InlineData("Museum Piece")]
-    [InlineData("Rueful Glance")]
-    public void Match_BodyNameAsASubstringOfAWord_IsNull(string modName) =>
+    [InlineData("Evening Gown")]     // 'eve' inside 'evening'
+    [InlineData("Truest Form")]      // 'tre' inside 'truest'
+    [InlineData("Museum Piece")]     // 'muse' inside 'museum'
+    [InlineData("Rueful Glance")]    // 'rue' inside 'rueful'
+    public void Match_BodyNameInsideALongerWord_IsNull(string modName) =>
+        // Token boundaries still hold even with bare aliases kept. A body name must be a WHOLE
+        // word in the title; this is what separates the accepted false positive above ("Rue de la
+        // Paix", where 'rue' is a word) from an unbounded substring search, which would drag in a
+        // large slice of any library.
         Assert.Null(Bundled().Match(modName));
 
     [Fact]
@@ -183,7 +187,27 @@ public class BodyTypeMatcherTests
     [Fact]
     public void Match_UnknownBody_IsNull()
     {
-        // Never a guess: an unrecognised body leaves the row flat under Body.
+        // Never a guess: a mod naming no known body gets no body folder at all.
         Assert.Null(Bundled().Match("Totally Made Up Body 9000"));
+    }
+
+    [Fact]
+    public void Match_AGarmentNamedAfterABody_Matches()
+    {
+        // The point of the feature, and the inversion of what an earlier design did: a dress made
+        // for Bibo+ IS a Bibo+ match. Whether that becomes Gear/Bibo+/Top or Body/Bibo+ is the
+        // caller's business (ScanProcessor gates on category); the matcher only reads the name.
+        Assert.Equal("Bibo+", Bundled().Match("Bibo+ Medieval Dress")?.Label);
+        Assert.Equal("TBSE", Bundled().Match("TBSE Leather Jacket")?.Label);
+    }
+
+    [Fact]
+    public void Match_LooseAliasOnAnUnrelatedTitle_MatchesAndThatIsAccepted()
+    {
+        // Documents a KNOWN and deliberate false positive rather than pretending it cannot happen.
+        // Bare aliases are kept for detection: a wrongly filed mod is one visible row in the review
+        // step, whereas an undetected body is silently missing from the folder the user looked in.
+        // If this ever needs tightening, the bare aliases are what to drop.
+        Assert.Equal("Rue+", Bundled().Match("Rue de la Paix")?.Label);
     }
 }

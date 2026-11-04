@@ -10,9 +10,14 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 /// code rather than two implementations that can drift.
 /// </summary>
 /// <remarks>
-/// The two split flags are applied in sequence rather than switched over, because they are
-/// independent decisions about the same subcategory: composing them is what makes all four
-/// combinations reachable without writing four variants of each strategy.
+/// The subcategory split flags are applied in sequence rather than switched over, because they are
+/// independent decisions about the same subcategory: composing them is what makes every
+/// combination reachable without writing a variant of each strategy.
+/// <para>
+/// The body split is not one of them. A body type is a segment of its own, above the subcategory,
+/// so it composes with the others rather than competing for the same slot - which is what lets a
+/// gear mod be both a Top and a Bibo+ garment at Gear/Bibo+/Top.
+/// </para>
 /// </remarks>
 public static class SortFolderSelectors
 {
@@ -53,8 +58,9 @@ public static class SortFolderSelectors
             if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
             if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
-            if (!splitBody) sub = FlattenBodySubCategory(row.Category, sub);
-            return TypeFolder(row.Category, sub, renameFolder);
+            // Not flattened the way the three above are: a body type is its own segment on the row,
+            // never a value in SubCategory, so turning the split off is simply not passing it.
+            return TypeFolder(row.Category, sub, renameFolder, splitBody ? row.BodyType : null);
         }
 
         return strategy switch
@@ -99,18 +105,13 @@ public static class SortFolderSelectors
     public static string? FlattenHairSubCategory(ModCategory? category, string? subCategory) =>
         category == ModCategory.Hair ? null : subCategory;
 
-    // The body mirror of the three above. Like gear and hair and unlike NPC, this has a checkbox
-    // and defaults off, so flat "Body" is what an unchanged install produces - no existing
-    // library's proposed paths move until the user asks for the split.
-    public static string? FlattenBodySubCategory(ModCategory? category, string? subCategory) =>
-        category == ModCategory.Body ? null : subCategory;
-
-    public static string? TypeFolder(ModCategory? category, string? subCategory, Func<string, string>? renameFolder)
+    public static string? TypeFolder(ModCategory? category, string? subCategory,
+                                    Func<string, string>? renameFolder, string? bodyType = null)
     {
         if (category is null)
             return null;
 
-        var folder = ModTypeFolders.GetFolder(category.Value, subCategory);
+        var folder = ModTypeFolders.GetFolder(category.Value, subCategory, bodyType);
         if (string.IsNullOrWhiteSpace(folder))
             return null;
 

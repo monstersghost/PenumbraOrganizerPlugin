@@ -71,7 +71,7 @@ public sealed class SortPanel
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
     private int _hairRaceIndex;              // 0 is None; see HairRaceLabels
     private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
-    private bool _splitBody;              // off, like gear and hair: an unchanged install keeps flat Body/
+    private bool _splitBody;                 // off, like gear and hair: no body folders until asked
     private SortSelection? _lastSorted;
 
     private const string Male = "\u2642";
@@ -158,9 +158,9 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortMidlanderFallback, splitsApply ? null : SplitsInapplicableReason);
 
-        GroupHeading("Body");
+        GroupHeading("Body type");
         ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Split body by body type", ref _splitBody);
+        ImGui.Checkbox("Split gear and body mods by body type", ref _splitBody);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortSplitBody, splitsApply ? null : SplitsInapplicableReason);
 

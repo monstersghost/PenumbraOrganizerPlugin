@@ -20,5 +20,22 @@ public sealed class OrganizerModRow
 
     /// <summary>Hair numbers keyed by four-digit race folder code, from file paths only. Null unless a readable hair mod.</summary>
     public IReadOnlyDictionary<string, IReadOnlySet<int>>? HairByRaceCode { get; init; }
+    /// <summary>
+    /// The body replacer this mod is for, as the body-type list spells it ("Bibo+"), or null when
+    /// its name matched none.
+    /// </summary>
+    /// <remarks>
+    /// Its OWN dimension, deliberately not folded into <see cref="SubCategory"/>. A gear mod
+    /// already uses that for its equipment slot, and the point of this field is a gear mod that is
+    /// both - "Bibo+ Medieval Dress" is a Top AND a Bibo+ garment, filed at Gear/Bibo+/Top.
+    /// <para>
+    /// Set for Gear and Body rows only, from the mod's NAME alone. There is no structural signal
+    /// for which body a garment was cut for: it replaces its own equipment set, not the body's
+    /// models, and nothing in its files names the body. Proteus establishes this by mesh and UV
+    /// correspondence against the body's meshes, which is far beyond what a sort should do.
+    /// </para>
+    /// </remarks>
+    public string? BodyType { get; init; }
+
     public GearSlotDiagnostic GearSlotDiagnostic { get; init; } = GearSlotDiagnostic.NotApplicable;
 }

@@ -2,11 +2,11 @@ namespace PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 
 /// <summary>One body replacer: the folder name it earns, and the words a mod for it is named with.</summary>
 /// <remarks>
-/// <see cref="Sex"/> is metadata only. The Sort tab files bodies flat (<c>Body/Bibo+</c>), never
-/// <c>Body/Female/Bibo+</c>, because <c>SortFolderSelectors</c> carries one primary and one
-/// secondary segment and a third level would be a wider change than this feature needs. It is kept
-/// because it is real domain information the list would otherwise lose, and because a future
-/// grouping would need it back.
+/// <see cref="Sex"/> is metadata only. The Sort tab files a body as one segment
+/// (<c>Gear/Bibo+/Top</c>), never <c>Gear/Female/Bibo+/Top</c>: a gear library is browsed by the
+/// body it was cut for, and the body's sex is already implied by the body. It is kept because it is
+/// real domain information the list would otherwise lose, and because a future grouping would need
+/// it back.
 /// </remarks>
 public sealed class BodyTypeEntry
 {

@@ -101,19 +101,19 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairEvidence?.Flat);
         }
 
-        // Disk I/O only for mods already classified Body, matching the gear and hair gates above.
+        // The body a mod is for, from its NAME, and no disk read at all - unlike the gear and hair
+        // passes above. There is no structural signal to read: a garment made for Bibo+ replaces
+        // its own equipment set, not the body's models, and nothing in its files names the body.
+        // Proteus establishes this by mesh and UV correspondence against the body's own meshes,
+        // which is far more work than a sort should do.
         //
-        // The name is consulted ONLY once the files confirm the mod replaces a body model. That
-        // order is the whole safeguard: most mods carrying a body's name are garments made FOR it,
-        // so matching the name first would file "Bibo+ Medieval Dress" as the Bibo+ body. See
-        // BodyTypeMatcher's remarks, and Proteus's own BodySizeCatalog, which reaches the same
-        // conclusion from the other direction.
-        if (classification.Category == ModCategory.Body)
-        {
-            var isBodyReplacer = ModBodyFileReader.ReadIsBodyReplacer(modPath);
-            classification = ModTypeClassifier.EnrichBodySubCategory(
-                classification, isBodyReplacer, _bodyTypeMatcher.Match(item.Name));
-        }
+        // Gear and Body only. Gear is the point - a library's "Bibo+ Medieval Dress" is what the
+        // user wants gathered under Bibo+ - and Body is near-free since a body mod's name is
+        // already its body type. Every other category is left alone, so an outfit-adjacent
+        // Animation or VFX mod cannot acquire a body folder.
+        var bodyType = classification.Category is ModCategory.Gear or ModCategory.Body
+            ? _bodyTypeMatcher.Match(item.Name)?.Label
+            : null;
 
         return new OrganizerModRow
         {
@@ -126,6 +126,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
                 item.Identifier, modPath, item.Name, _knownHeliosphereIdentifiers),
             Category = classification.Category,
             SubCategory = classification.SubCategory,
+            BodyType = bodyType,
             HairFlat = hairEvidence?.Flat,
             HairByRaceCode = hairEvidence?.ByRaceCode,
             GearSlotDiagnostic = gearSlotDiagnostic,

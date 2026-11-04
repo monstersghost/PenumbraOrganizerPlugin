@@ -10,13 +10,19 @@ public sealed record BodyTypeMatch(string Label, string Alias);
 /// Matches a mod's display name against the known body replacers.
 /// </summary>
 /// <remarks>
-/// NEVER call this on a mod's name alone. A name match is only trustworthy for a mod already known
-/// STRUCTURALLY to be a body replacer (<see cref="ModBodyFileReader"/>), because the overwhelming
-/// majority of mods carrying a body's name are garments MADE FOR that body rather than the body
-/// itself - "Bibo+ Medieval Dress" is a dress. Proteus reaches the same conclusion from the other
-/// direction: it finds bodies by their files and uses names only as a tie-break among mods already
-/// holding a body's model files, with the note that a loose word must not be allowed to "pull in an
-/// outfit". <c>ScanProcessor</c> is where that gate lives.
+/// Answers "which body is this mod FOR", which for a gear mod is the only question there is: a
+/// garment made for Bibo+ replaces its own equipment set, not the body's models, so no structural
+/// signal exists to read. Proteus resolves it by mesh and UV correspondence against the body's own
+/// meshes - accurate, and far more work than a sort should do. The name is what is left, and mod
+/// authors do reliably put the body in the title.
+/// <para>
+/// So a match is a STATED intent, not a verified fact, and the cost of that is accepted
+/// deliberately: a loose alias can match a title that merely contains the word, and "Rue de la
+/// Paix" will be read as a Rue+ garment. Detection is preferred over precision here because the
+/// Sort tab's review step shows every proposed move before anything happens, and a wrongly filed
+/// mod is one visible row to correct - whereas a body that is never detected is silently absent
+/// from the folder the user went looking in.
+/// </para>
 /// <para>
 /// A plain ordered scan, NOT the first-token index <see cref="NpcNameMatcher"/> builds. That index
 /// earns its complexity against ~20,000 names; this list is 26 bodies and 53 aliases, where an

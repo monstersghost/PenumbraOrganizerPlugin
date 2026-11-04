@@ -55,9 +55,9 @@ public static class BodyTypeListCodec
     /// </summary>
     /// <remarks>
     /// A label carrying a path separator is dropped rather than repaired. It would otherwise reach
-    /// <c>ModTypeFolders.GetFolder</c> and silently create a nested folder under Body, which is the
-    /// one thing the flat-folder decision rules out; <c>IsBodyTypeLabel</c> is the second guard, and
-    /// this is the first.
+    /// <c>ModTypeFolders.GetFolder</c> and silently add a level below the body folder - a
+    /// "Gear/Bibo+/Extra/Top" nobody asked for; <c>IsBodyTypeLabel</c> is the second guard, and this
+    /// is the first.
     /// <para>
     /// Aliases are NOT de-duplicated across entries. Two bodies claiming the same alias is a real
     /// authoring mistake, and silently dropping one would hide it; the matcher resolves such a

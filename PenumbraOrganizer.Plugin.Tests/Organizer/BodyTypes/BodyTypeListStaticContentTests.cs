@@ -70,13 +70,13 @@ public class BodyTypeListStaticContentTests
     [Fact]
     public void EveryLabel_SurvivesGetFolder()
     {
-        // The real contract: every shipped label must be accepted by ModTypeFolders.GetFolder and
-        // produce exactly one level under Body. A label GetFolder rejects would throw mid-sort.
+        // The real contract: every shipped label must be accepted as a body type and produce
+        // exactly one segment. A label GetFolder rejects would throw mid-sort.
         Assert.All(Bundled().Bodies, b =>
         {
-            var folder = ModTypeFolders.GetFolder(ModCategory.Body, b.Label);
-            Assert.Equal($"Body/{b.Label}", folder);
-            Assert.Equal(2, folder.Split('/').Length);
+            Assert.Equal($"Gear/{b.Label}/Top", ModTypeFolders.GetFolder(ModCategory.Gear, "Top", b.Label));
+            Assert.Equal($"Gear/{b.Label}", ModTypeFolders.GetFolder(ModCategory.Gear, null, b.Label));
+            Assert.Equal($"Body/{b.Label}", ModTypeFolders.GetFolder(ModCategory.Body, null, b.Label));
         });
     }
 
