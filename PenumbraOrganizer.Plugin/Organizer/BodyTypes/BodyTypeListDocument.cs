@@ -13,8 +13,18 @@ public sealed class BodyTypeEntry
     /// <summary>The subfolder under <c>Body</c>, spelled as the community spells it.</summary>
     public string Label { get; set; } = string.Empty;
 
-    /// <summary>"Female", "Male", or anything else; never consulted when building a folder.</summary>
+    /// <summary>"Female", "Male" or "Unisex"; never consulted when building a folder.</summary>
     public string Sex { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The race a body is specific to ("Lalafell"), or empty for one that is not.
+    /// </summary>
+    /// <remarks>
+    /// Metadata, like <see cref="Sex"/>, and for the same reason: a Lalafell body only ever applies
+    /// to Lalafell gear, which is real domain information the list would lose if the only place to
+    /// put it were the label.
+    /// </remarks>
+    public string Race { get; set; } = string.Empty;
 
     /// <summary>
     /// "verified" for a body cross-checked against Proteus's own source, "reported" for one carried

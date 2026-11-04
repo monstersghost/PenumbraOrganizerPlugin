@@ -40,7 +40,8 @@ public class ModTypeFoldersBodyTypeTests
     [InlineData("Bibo+", "Gear/Bibo+/Top")]
     [InlineData("YAB Buff", "Gear/YAB Buff/Top")]
     [InlineData("Tight&Firm", "Gear/Tight&Firm/Top")]
-    [InlineData("TBSE-X", "Gear/TBSE-X/Top")]
+    [InlineData("TBSE", "Gear/TBSE/Top")]
+    [InlineData("RE[DE]FINED", "Gear/RE[DE]FINED/Top")]
     [InlineData("FreyjaAF", "Gear/FreyjaAF/Top")]
     public void GetFolder_RealBodyLabels_AllSurvive(string bodyType, string expected) =>
         Assert.Equal(expected, ModTypeFolders.GetFolder(ModCategory.Gear, "Top", bodyType));

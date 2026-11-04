@@ -81,11 +81,23 @@ public class BodyTypeListStaticContentTests
     }
 
     [Fact]
-    public void EverySex_IsFemaleOrMale()
+    public void EverySex_IsRecognised()
     {
         // Metadata only - nothing builds a folder from it - but a typo here would still be wrong
-        // in a file people read.
-        Assert.All(Bundled().Bodies, b => Assert.Contains(b.Sex, (string[])["Female", "Male"]));
+        // in a file people read. Unisex is real: Otopop and RE[DE]FINED are Lalafell bodies.
+        Assert.All(Bundled().Bodies,
+            b => Assert.Contains(b.Sex, (string[])["Female", "Male", "Unisex"]));
+    }
+
+    [Fact]
+    public void OnlyTheLalafellBodies_CarryARace()
+    {
+        // A race-specific body is the exception, so an empty field is the norm and a stray value
+        // in it would be a mistake worth catching.
+        var raced = Bundled().Bodies.Where(b => b.Race.Length > 0).Select(b => b.Label).OrderBy(l => l);
+
+        Assert.Equal(["Otopop", "RE[DE]FINED"], raced);
+        Assert.All(Bundled().Bodies.Where(b => b.Race.Length > 0), b => Assert.Equal("Lalafell", b.Race));
     }
 
     [Fact]
@@ -93,13 +105,35 @@ public class BodyTypeListStaticContentTests
         Assert.All(Bundled().Bodies, b => Assert.Contains(b.Source, (string[])["verified", "reported"]));
 
     [Fact]
-    public void TheMaleBodies_AreTheThreeKeptSeparate()
+    public void TheMaleBodies_AreTbseAndHrBodyOnly()
     {
-        // A deliberate decision, recorded here because it is easy to "tidy" TBSE-X and HRBody into
-        // TBSE later: they are distinct bodies, not TBSE variants, and Proteus models them that way.
-        var male = Bundled().Bodies.Where(b => b.Sex == "Male").Select(b => b.Label).OrderBy(l => l).ToList();
+        // A deliberate decision from the plugin author, recorded here because Proteus models it
+        // differently and it is easy to "correct" back: every TBSE flavour, TBSE-X included, is one
+        // TBSE folder, while HRBody is a genuinely separate body.
+        var male = Bundled().Bodies.Where(b => b.Sex == "Male").Select(b => b.Label).OrderBy(l => l);
 
-        Assert.Equal(["HRBody", "TBSE", "TBSE-X"], male);
+        Assert.Equal(["HRBody", "TBSE"], male);
+    }
+
+    [Fact]
+    public void TbseAbsorbsItsVariants()
+    {
+        // TBSE-X must NOT be its own label, and its spellings must still be detected - the two
+        // halves of "fold the variant in" that a careless edit could get half-right.
+        Assert.DoesNotContain("TBSE-X", Bundled().Bodies.Select(b => b.Label));
+
+        var tbse = Bundled().Bodies.Single(b => b.Label == "TBSE");
+        Assert.Contains("tbse-x", tbse.Aliases);
+        Assert.Contains("tbsex", tbse.Aliases);
+    }
+
+    [Fact]
+    public void LaRueBelongsToLavaBod_NotRue()
+    {
+        // LaRue is LavaBod in a Rue shape, so a LaRue garment is cut for LavaBod. Easy to "fix" the
+        // wrong way on the strength of the name alone, hence the test.
+        Assert.Contains("larue", Bundled().Bodies.Single(b => b.Label == "LavaBod+").Aliases);
+        Assert.DoesNotContain("larue", Bundled().Bodies.Single(b => b.Label == "Rue+").Aliases);
     }
 
     [Theory]

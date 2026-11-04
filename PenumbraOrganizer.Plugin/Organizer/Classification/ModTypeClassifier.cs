@@ -105,15 +105,18 @@ public static class ModTypeFolders
     // codec drops such a label on parse, and this is the second guard behind it.
     //
     // The permitted punctuation is exactly what real body names use - '+' (Bibo+), '&'
-    // (Tight&Firm), '-' (TBSE-X) - and all three survive PenumbraPathSemantics.FixName unchanged,
-    // which matters because a type folder is deliberately never FixName'd: if FixName rewrote one
-    // of these, the folder we propose would not be the folder Penumbra stores.
+    // (Tight&Firm), '-' (Rue+ / hyphenated variants) and square brackets (RE[DE]FINED) - and all
+    // of them survive PenumbraPathSemantics.FixName unchanged, which matters because a type folder
+    // is deliberately never FixName'd: if FixName rewrote one of these, the folder we propose would
+    // not be the folder Penumbra stores. FixName only trims and turns '/' into '\\', so the one
+    // thing that must stay rejected is a path separator.
     private static bool IsBodyTypeLabel(string? subCategory) =>
         subCategory is { Length: >= 1 and <= 40 }
         && subCategory.Trim() == subCategory
         && !subCategory.Contains('/')
         && !subCategory.Contains('\\')
-        && subCategory.All(c => char.IsLetterOrDigit(c) || c is ' ' or '+' or '-' or '&' or '\'' or '.');
+        && subCategory.All(c => char.IsLetterOrDigit(c)
+                                || c is ' ' or '+' or '-' or '&' or '\'' or '.' or '[' or ']');
 }
 
 /// <summary>

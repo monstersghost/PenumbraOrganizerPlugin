@@ -48,7 +48,6 @@ public class BodyTypeMatcherTests
     [InlineData("Bibo Top", "Bibo+")]
     [InlineData("Rue+ Dress", "Rue+")]
     [InlineData("Rue Dress", "Rue+")]
-    [InlineData("LaRue Bodysuit", "Rue+")]
     [InlineData("YAB+ Gloves", "YAB")]
     [InlineData("YAB Gloves", "YAB")]
     public void Match_BundledList_PlusAndPlainSpellingsBothResolve(string modName, string expected) =>
@@ -59,12 +58,10 @@ public class BodyTypeMatcherTests
     [Fact]
     public void Match_LongerAliasBeatsItsOwnPrefix()
     {
-        // "tbse" is a prefix of "tbse-x", and "yab" of "yab buff". Answering the shorter one would
-        // file a body under its neighbour.
+        // "yab" is a prefix of "yab buff". Answering the shorter one would file buff-shaped gear
+        // under standard YAB.
         var matcher = Bundled();
 
-        Assert.Equal("TBSE-X", matcher.Match("TBSE-X Legs")?.Label);
-        Assert.Equal("TBSE", matcher.Match("TBSE Legs")?.Label);
         Assert.Equal("YAB Buff", matcher.Match("YAB Buff Chest")?.Label);
         Assert.Equal("YAB", matcher.Match("YAB Chest")?.Label);
     }
@@ -79,13 +76,49 @@ public class BodyTypeMatcherTests
     }
 
     [Fact]
-    public void Match_TbseXSpellings_AllResolveToTbseX()
+    public void Match_EveryTbseSpelling_ResolvesToTbse()
     {
+        // TBSE-X is a TBSE variant, not a body of its own, so every flavour lands on one label.
         var matcher = Bundled();
 
-        Assert.Equal("TBSE-X", matcher.Match("TBSE-X")?.Label);
-        Assert.Equal("TBSE-X", matcher.Match("TBSEX body")?.Label);
-        Assert.Equal("TBSE-X", matcher.Match("The Body SE-X")?.Label);
+        Assert.Equal("TBSE", matcher.Match("TBSE Legs")?.Label);
+        Assert.Equal("TBSE", matcher.Match("TBSE-X Legs")?.Label);
+        Assert.Equal("TBSE", matcher.Match("TBSEX body")?.Label);
+        Assert.Equal("TBSE", matcher.Match("The Body SE-X")?.Label);
+    }
+
+    [Fact]
+    public void Match_HrBodyIsNotTbse()
+    {
+        // The other half of the male decision: HRBody stays separate.
+        Assert.Equal("HRBody", Bundled().Match("HRBody Shirt")?.Label);
+        Assert.Equal("HRBody", Bundled().Match("HR Body Shirt")?.Label);
+    }
+
+    [Theory]
+    [InlineData("RE[DE]FINED Dress")]
+    [InlineData("REDEFINED Dress")]
+    [InlineData("Re-Defined Dress")]
+    [InlineData("RE:DEFINED Dress")]
+    public void Match_BracketedBodyName_ResolvesHoweverItIsPunctuated(string modName) =>
+        // Brackets are boundaries, so "RE[DE]FINED" tokenizes to three words while "REDEFINED" is
+        // one. Both spellings are real, so both are aliased; this fails if either is dropped.
+        Assert.Equal("RE[DE]FINED", Bundled().Match(modName)?.Label);
+
+    [Fact]
+    public void Match_LaRue_IsLavaBod()
+    {
+        // LaRue is LavaBod in a Rue shape. The name says Rue; the body is LavaBod.
+        Assert.Equal("LavaBod+", Bundled().Match("LaRue Bodysuit")?.Label);
+    }
+
+    [Fact]
+    public void Match_Ruexb_IsNotRue()
+    {
+        // RUEXB+ is its own body and must not collapse into Rue+ despite the shared first letters:
+        // "ruexb" and "rue" are different tokens, which is what keeps them apart.
+        Assert.Equal("RUEXB+", Bundled().Match("RUEXB+ Top")?.Label);
+        Assert.Equal("RUEXB+", Bundled().Match("RUEXB Top")?.Label);
     }
 
     [Fact]
