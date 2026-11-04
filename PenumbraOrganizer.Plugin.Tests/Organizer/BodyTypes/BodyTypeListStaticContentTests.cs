@@ -96,7 +96,7 @@ public class BodyTypeListStaticContentTests
         // in it would be a mistake worth catching.
         var raced = Bundled().Bodies.Where(b => b.Race.Length > 0).Select(b => b.Label).OrderBy(l => l);
 
-        Assert.Equal(["Otopop", "Re[de]fined Lalafell"], raced);
+        Assert.Equal(["Otopop", "Re[de]fined Lalafell", "Shapely"], raced);
         Assert.All(Bundled().Bodies.Where(b => b.Race.Length > 0), b => Assert.Equal("Lalafell", b.Race));
     }
 
@@ -113,6 +113,33 @@ public class BodyTypeListStaticContentTests
         var male = Bundled().Bodies.Where(b => b.Sex == "Male").Select(b => b.Label).OrderBy(l => l);
 
         Assert.Equal(["TBSE", "The hrBody"], male);
+    }
+
+    [Fact]
+    public void VariantEditsResolveToTheirParentBody()
+    {
+        // The Compendium's family tree, applied: an edit OF a body is filed under that body rather
+        // than earning a folder, which is the rule set for TBSE-X and YAB Buff generalised to the
+        // rest of the catalogue. Checks the alias is on the right parent, since putting a Bibo+
+        // edit on TBSE would be silently wrong.
+        var bibo = Bundled().Bodies.Single(b => b.Label == "Bibo+").Aliases;
+        var tbse = Bundled().Bodies.Single(b => b.Label == "TBSE").Aliases;
+
+        Assert.Contains("yabulky", bibo);
+        Assert.Contains("yet another masc", bibo);
+        Assert.Contains("xs thin", bibo);
+        Assert.Contains("tbre", tbse);
+        Assert.Contains("thicclanderse", tbse);
+        Assert.Contains("old man bones", tbse);
+    }
+
+    [Fact]
+    public void ArtemisCarriesANoteAboutItsKnownRisk()
+    {
+        // The one entry knowingly kept despite matching ordinary gear titles ("Artemis Bow"),
+        // because bare "artemis" is the only name the body has and dropping it would make the body
+        // undetectable. Recorded rather than left for someone to rediscover as a bug report.
+        Assert.NotEqual(string.Empty, Bundled().Bodies.Single(b => b.Label == "Artemis").Note);
     }
 
     [Fact]
@@ -189,6 +216,24 @@ public class BodyTypeListStaticContentTests
     [InlineData("coconut", "a Rosaline chest size")]
     [InlineData("yiggle", "a YAS physics variant")]
     [InlineData("squish", "a NIRAE physics variant")]
+    // Bare forms deliberately NOT aliased, though the body itself IS in the list. Each matched an
+    // ordinary gear title in the false-positive sweep - a common word, a flower or mythological
+    // name, or a three-letter acronym - so only the distinctive spelling is matched. Re-adding any
+    // of these starts mis-filing unrelated mods, which is why they are pinned here.
+    [InlineData("succulent", "a common word; the body is reached by its other spellings")]
+    [InlineData("grande", "a common word (matched \"Grande Cafe Apron\")")]
+    [InlineData("stocky", "a common word (matched \"Stocky Boots\")")]
+    [InlineData("nino", "a common given name (matched \"Nino's Hat\")")]
+    [InlineData("cherie", "a French term of endearment (matched \"Ma Cherie Dress\")")]
+    [InlineData("hyacinth", "a flower name (matched \"Hyacinth Bouquet Hat\")")]
+    [InlineData("melusine", "a mythological name (matched \"Melusine Tail\")")]
+    [InlineData("seraphim", "common in wing and angel gear; use seraphim+")]
+    [InlineData("annabelle", "a common given name; use annabelle+")]
+    [InlineData("aphrodite", "a mythological name; use aphrodite+")]
+    [InlineData("shapely", "a common adjective; use \"shapely hd4\" or \"shapely sfw\"")]
+    [InlineData("gao", "a three-letter acronym, too short to be safe")]
+    [InlineData("lob", "a three-letter acronym; use lokesh")]
+    [InlineData("omb", "a three-letter acronym; use \"old man bones\"")]
     public void KnownNonBodies_AreNotAliases(string alias, string reason)
     {
         var aliases = Bundled().Bodies.SelectMany(b => b.Aliases).ToHashSet(StringComparer.Ordinal);
