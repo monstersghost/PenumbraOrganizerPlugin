@@ -56,14 +56,17 @@ public class BodyTypeMatcherTests
     // ── longest alias wins, which is what keeps prefix bodies apart ──
 
     [Fact]
-    public void Match_LongerAliasBeatsItsOwnPrefix()
+    public void Match_EveryYabSpelling_ResolvesToYab()
     {
-        // "yab" is a prefix of "yab buff". Answering the shorter one would file buff-shaped gear
-        // under standard YAB.
+        // YAB Buff is a YAB variant, not a body of its own, so every flavour lands on one label -
+        // the same call made for TBSE-X.
         var matcher = Bundled();
 
-        Assert.Equal("YAB Buff", matcher.Match("YAB Buff Chest")?.Label);
         Assert.Equal("YAB", matcher.Match("YAB Chest")?.Label);
+        Assert.Equal("YAB", matcher.Match("YAB+ Chest")?.Label);
+        Assert.Equal("YAB", matcher.Match("YAB Buff Chest")?.Label);
+        Assert.Equal("YAB", matcher.Match("YAB+ Buff Chest")?.Label);
+        Assert.Equal("YAB", matcher.Match("Yet Another Body Chest")?.Label);
     }
 
     [Fact]

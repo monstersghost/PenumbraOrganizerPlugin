@@ -89,7 +89,7 @@ public static class ModTypeFolders
         && subCategory[0] is >= '1' and <= '9'
         && subCategory.All(char.IsAsciiDigit);
 
-    // A body label as the loaded list spells it: "Bibo+", "YAB Buff", "Tight&Firm", "TBSE-X".
+    // A body label as the loaded list spells it: "Bibo+", "Tight&Firm", "Re[de]fined Lalafell".
     //
     // A SHAPE check, not a membership check. The set of body replacers is fixed by what the
     // community releases, not by the game, and the list holding it is loaded at runtime and

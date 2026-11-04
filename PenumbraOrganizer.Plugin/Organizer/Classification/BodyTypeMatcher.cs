@@ -43,13 +43,23 @@ public sealed class BodyTypeMatcher
         _aliases = bodies
             .SelectMany(b => b.Aliases.Select(a => new Alias(b.Label, a, Tokenize(Normalize(a)))))
             .Where(a => a.Tokens.Length > 0)
-            // LONGEST ALIAS FIRST, AND THIS IS NOT A STYLE CHOICE. Several bodies' names are
-            // prefixes of another's: "tbse" is a prefix of "tbse-x", and "yab" of "yab buff". A
-            // scan in list order would answer TBSE for a TBSE-X mod and YAB for a YAB Buff mod,
-            // silently filing a body under its neighbour. Token count first, then character
-            // length, then ordinal on the alias and label so the order is TOTAL - two aliases of
-            // equal shape must not resolve by input file order, which is what makes a duplicate
-            // alias across two entries deterministic rather than arbitrary.
+            // LONGEST ALIAS FIRST, AND THIS IS NOT A STYLE CHOICE. Body names are routinely
+            // prefixes of one another - "yab" of "yab buff", "tbse" of "tbse-x", "eve" of
+            // "ab eve", "rue" of "ruexb" - so a scan in list order would answer the shorter one
+            // and file a body under its neighbour.
+            //
+            // No SHIPPED pair currently differs in label on that basis: the variants that used to
+            // (YAB Buff, TBSE-X) are now aliases of their parents, so today the longest match and
+            // the shortest agree on the answer. That makes this ordering load-bearing for the
+            // NEXT variant added as its own body rather than for the current list, which is
+            // exactly when it would be easy to drop and hard to notice -
+            // Match_LongestAliasWinsRegardlessOfPosition pins it on synthetic entries so the
+            // guarantee does not depend on the data happening to exercise it.
+            //
+            // Token count first, then character length, then ordinal on the alias and label so
+            // the order is TOTAL - two aliases of equal shape must not resolve by input file
+            // order, which is what makes a duplicate alias across two entries deterministic
+            // rather than arbitrary.
             .OrderByDescending(a => a.Tokens.Length)
             .ThenByDescending(a => a.Text.Length)
             .ThenBy(a => a.Text, StringComparer.Ordinal)

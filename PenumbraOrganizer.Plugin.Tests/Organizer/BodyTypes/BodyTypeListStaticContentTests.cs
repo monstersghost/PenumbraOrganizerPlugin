@@ -116,6 +116,19 @@ public class BodyTypeListStaticContentTests
     }
 
     [Fact]
+    public void YabAbsorbsItsVariants()
+    {
+        // YAB Buff must NOT be its own label, and its spellings must still be detected. Same shape
+        // as TbseAbsorbsItsVariants, and the same risk: folding a variant in is easy to get
+        // half-right, leaving the variant either undetected or still split out.
+        Assert.DoesNotContain("YAB Buff", Bundled().Bodies.Select(b => b.Label));
+
+        var yab = Bundled().Bodies.Single(b => b.Label == "YAB").Aliases;
+        Assert.Contains("yab buff", yab);
+        Assert.Contains("yab", yab);
+    }
+
+    [Fact]
     public void TbseAbsorbsItsVariants()
     {
         // TBSE-X must NOT be its own label, and its spellings must still be detected - the two

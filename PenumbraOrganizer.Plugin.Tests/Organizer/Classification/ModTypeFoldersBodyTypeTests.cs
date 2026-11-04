@@ -38,7 +38,7 @@ public class ModTypeFoldersBodyTypeTests
 
     [Theory]
     [InlineData("Bibo+", "Gear/Bibo+/Top")]
-    [InlineData("YAB Buff", "Gear/YAB Buff/Top")]
+    [InlineData("YAB", "Gear/YAB/Top")]
     [InlineData("Tight&Firm", "Gear/Tight&Firm/Top")]
     [InlineData("TBSE", "Gear/TBSE/Top")]
     [InlineData("RE[DE]FINED", "Gear/RE[DE]FINED/Top")]
