@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.NpcNames;
 
@@ -22,6 +23,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
     private readonly List<string> _warnings = [];
 
     private NpcNameMatcher _npcNameMatcher = NpcNameMatcher.Empty;
+    private BodyTypeMatcher _bodyTypeMatcher = BodyTypeMatcher.Empty;
 
     /// <param name="useScrapedNpcNameList">
     /// Already the conjunction of the config flag and the compile-time feature gate - ScanJob
@@ -52,6 +54,15 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         if (result.Warning is not null)
             _warnings.Add(result.Warning);
         _npcNameMatcher = NpcNameListStore.BuildMatcher(result.Document);
+
+        // Built unconditionally, not behind the split flag. Prepare runs once per scan and this
+        // list is 26 bodies, so there is nothing to save by deferring it - and the scan stores the
+        // body type on the row either way, so toggling the split later re-sorts without rescanning,
+        // the same as the gear and hair splits already do.
+        var bodyResult = BodyTypeListStore.LoadForMatching(_configDirectory);
+        if (bodyResult.Warning is not null)
+            _warnings.Add(bodyResult.Warning);
+        _bodyTypeMatcher = BodyTypeListStore.BuildMatcher(bodyResult.Document);
     }
 
     public OrganizerModRow? Process(ScanSeed item, CancellationToken ct)
@@ -88,6 +99,20 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         {
             hairEvidence = ModHairFileReader.ReadHairEvidence(modPath);
             classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairEvidence?.Flat);
+        }
+
+        // Disk I/O only for mods already classified Body, matching the gear and hair gates above.
+        //
+        // The name is consulted ONLY once the files confirm the mod replaces a body model. That
+        // order is the whole safeguard: most mods carrying a body's name are garments made FOR it,
+        // so matching the name first would file "Bibo+ Medieval Dress" as the Bibo+ body. See
+        // BodyTypeMatcher's remarks, and Proteus's own BodySizeCatalog, which reaches the same
+        // conclusion from the other direction.
+        if (classification.Category == ModCategory.Body)
+        {
+            var isBodyReplacer = ModBodyFileReader.ReadIsBodyReplacer(modPath);
+            classification = ModTypeClassifier.EnrichBodySubCategory(
+                classification, isBodyReplacer, _bodyTypeMatcher.Match(item.Name));
         }
 
         return new OrganizerModRow

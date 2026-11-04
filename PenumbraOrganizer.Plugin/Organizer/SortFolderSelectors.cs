@@ -33,7 +33,8 @@ public static class SortFolderSelectors
         Func<string, string>? canonicalizeCreator = null,
         Func<string, string>? renameFolder = null,
         bool splitHair = false,
-        HairPriority? hairPriority = null)
+        HairPriority? hairPriority = null,
+        bool splitBody = false)
     {
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
@@ -52,6 +53,7 @@ public static class SortFolderSelectors
             if (!splitGear) sub = FlattenGearSubCategory(row.Category, sub);
             if (!splitNpc) sub = FlattenNpcSubCategory(row.Category, sub);
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
+            if (!splitBody) sub = FlattenBodySubCategory(row.Category, sub);
             return TypeFolder(row.Category, sub, renameFolder);
         }
 
@@ -96,6 +98,12 @@ public static class SortFolderSelectors
     // off, so flat "Hair" is what an unchanged install produces.
     public static string? FlattenHairSubCategory(ModCategory? category, string? subCategory) =>
         category == ModCategory.Hair ? null : subCategory;
+
+    // The body mirror of the three above. Like gear and hair and unlike NPC, this has a checkbox
+    // and defaults off, so flat "Body" is what an unchanged install produces - no existing
+    // library's proposed paths move until the user asks for the split.
+    public static string? FlattenBodySubCategory(ModCategory? category, string? subCategory) =>
+        category == ModCategory.Body ? null : subCategory;
 
     public static string? TypeFolder(ModCategory? category, string? subCategory, Func<string, string>? renameFolder)
     {

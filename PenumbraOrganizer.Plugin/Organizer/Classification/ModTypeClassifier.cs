@@ -24,6 +24,21 @@ public static class ModTypeFolders
         (ModCategory.NPC, "NPCs" or "Enemies" or "Bosses") => $"{ModCategory.NPC}/{subCategory}",
         (ModCategory.Gear, "Head" or "Top" or "Hands" or "Legs" or "Feet" or "Ears" or "Neck" or "Wrists" or "Rings")
             => $"{ModCategory.Gear}/{subCategory}",
+        // Body cannot be enumerated here either, and for a different reason from hair's: the set of
+        // body replacers is not fixed by the game but by what the community has released, and the
+        // list that holds it is loaded at runtime and extensible by the user
+        // (BodyTypeListStore.UserFileName). Enumerating it would mean this switch going stale every
+        // time a new body ships.
+        //
+        // So this arm is WEAKER than the ones above, and deliberately: it validates the label's
+        // SHAPE, and unlike hair's digits-only check that shape cannot tell a real body from any
+        // other word - Body + "Bosses" is accepted here where Hair + "Bosses" throws. What keeps a
+        // nonsense label out is upstream: the only thing that ever sets this subcategory is a match
+        // against the loaded list (EnrichBodySubCategory), and BodyTypeListStaticContentTests
+        // checks every shipped label against this method. What the shape check DOES guarantee is
+        // the part membership would not - that no label can escape the Body folder or name
+        // something the filesystem will refuse.
+        (ModCategory.Body, _) when IsBodyTypeLabel(subCategory) => $"{ModCategory.Body}/{subCategory}",
         // Hair cannot be enumerated the way the nine gear slots and three NPC kinds are - there are
         // several hundred vanilla hair numbers. The shape is validated instead, which keeps the
         // fail-fast intent above: Hair + "Bosses" still throws.
@@ -44,6 +59,26 @@ public static class ModTypeFolders
         subCategory is { Length: >= 1 and <= 4 }
         && subCategory[0] is >= '1' and <= '9'
         && subCategory.All(char.IsAsciiDigit);
+
+    // A body label as the loaded list spells it: "Bibo+", "YAB Buff", "Tight&Firm", "TBSE-X".
+    //
+    // A SHAPE check, not a membership check - see the Body arm's comment in GetFolder for why it
+    // cannot be the latter and what guarantees membership instead.
+    //
+    // The separator rejection is the load-bearing half. A label containing '/' would silently
+    // nest a folder under Body and break the flat-folder guarantee the Sort tab promises; the
+    // codec drops such a label on parse, and this is the second guard behind it.
+    //
+    // The permitted punctuation is exactly what real body names use - '+' (Bibo+), '&'
+    // (Tight&Firm), '-' (TBSE-X) - and all three survive PenumbraPathSemantics.FixName unchanged,
+    // which matters because a type folder is deliberately never FixName'd: if FixName rewrote one
+    // of these, the folder we propose would not be the folder Penumbra stores.
+    private static bool IsBodyTypeLabel(string? subCategory) =>
+        subCategory is { Length: >= 1 and <= 40 }
+        && subCategory.Trim() == subCategory
+        && !subCategory.Contains('/')
+        && !subCategory.Contains('\\')
+        && subCategory.All(c => char.IsLetterOrDigit(c) || c is ' ' or '+' or '-' or '&' or '\'' or '.');
 }
 
 /// <summary>
@@ -103,6 +138,39 @@ public static class ModTypeClassifier
         {
             SubCategory = hairNumbers.Single().ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
+    }
+
+    /// <summary>
+    /// The body mirror of <see cref="EnrichGearSubCategory"/> and <see cref="EnrichHairSubCategory"/>,
+    /// with the same guard shape and the same caller contract: a second pass the caller runs only
+    /// when <see cref="Classify"/> already returned <see cref="ModCategory.Body"/>, never a new
+    /// top-level classification path. <c>ScanProcessor</c> gates the disk I/O on that.
+    /// </summary>
+    /// <param name="isBodyReplacer">
+    /// <see cref="ModBodyFileReader.ReadIsBodyReplacer"/>'s answer. Null (walk failed) and false
+    /// (replaces no body model) are both left untouched, so a mod is only ever filed under a body
+    /// when there is positive structural evidence that it IS one.
+    /// </param>
+    /// <param name="nameMatch">
+    /// <see cref="BodyTypeMatcher.Match"/>'s answer for the mod's name. Null leaves the row flat
+    /// under Body, which is the honest outcome for a body this list does not know - never a guess.
+    /// </param>
+    /// <remarks>
+    /// Both arguments are required to be affirmative, and that conjunction IS the feature. The
+    /// structure says "this is a body"; the name says "which one". Either alone is wrong: the name
+    /// alone files every garment made for Bibo+ as the Bibo+ body, and the structure alone cannot
+    /// name what it found. See <see cref="BodyTypeMatcher"/> for why the ecosystem forces this.
+    /// </remarks>
+    public static ClassificationResult EnrichBodySubCategory(
+        ClassificationResult baseResult, bool? isBodyReplacer, BodyTypeMatch? nameMatch)
+    {
+        if (baseResult.Category != ModCategory.Body || isBodyReplacer != true || nameMatch is null)
+            return baseResult;
+
+        // Source stays whatever Classify decided. The body type is a subcategory refinement of a
+        // category the structural rules already settled, exactly as a gear slot or a hair number
+        // is - it does not turn a structural classification into a name-heuristic one.
+        return baseResult with { SubCategory = nameMatch.Label };
     }
 
     // Returns the single category one changed-item key alone implies, with no cross-key

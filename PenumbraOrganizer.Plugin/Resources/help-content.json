@@ -166,6 +166,11 @@
       "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
     },
     {
+      "id": "sort.split-body",
+      "title": "Split body by body type",
+      "short": "Files a body replacer under the body it is, as Body/Bibo+. Only mods that really replace a body model are split, so a dress named \"Bibo+ Medieval\" is not one. An unrecognized body stays in Body."
+    },
+    {
       "id": "sort.priority-race",
       "title": "Priority race",
       "short": "When a hair mod has one hair number for this race, files it under that number. Pick None to turn this off."

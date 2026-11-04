@@ -14,7 +14,8 @@ before applying them.
 **Sorting**
 
 * Organize mods by creator, mod type, or a combination of both
-* Split gear by equipment slot, NPC mods by kind, and hair by the hair number it replaces
+* Split gear by equipment slot, NPC mods by kind, hair by the hair number it replaces, and
+  body replacers by body type (Bibo+, Rue+, YAB, TBSE and more)
 * Assign folders to specific mods by hand, or import a layout you edited in Excel
 * Review every proposed folder change before applying it — nothing moves until you press Apply
 

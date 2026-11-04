@@ -76,6 +76,28 @@ public class SortSelectionTests
     }
 
     [Fact]
+    public void SortSelection_ValueEquality_CoversSplitBody()
+    {
+        // The SplitHair test's reasoning applies verbatim: this pins only that SplitBody is a
+        // positional member the generated equality covers, not the staleness behaviour it enables.
+        //
+        // SplitBody sits AFTER the two hair priority fields, so it is spelled out positionally here
+        // rather than with a named argument - a member appended in the wrong place would still
+        // compare unequal under a named argument and this test would not notice.
+        Assert.NotEqual(
+            new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, false),
+            new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, true));
+    }
+
+    [Fact]
+    public void SortSelection_SplitBody_DefaultsOff()
+    {
+        // An unchanged install must not start splitting bodies, and the four-argument construction
+        // every existing test uses must keep meaning what it meant.
+        Assert.False(new SortSelection(SortStrategy.TypeOnly, false, false, false).SplitBody);
+    }
+
+    [Fact]
     public void SplitsApply_IgnoresEveryFlag_AndReadsOnlyTheStrategy()
     {
         // The hair checkbox is disabled under Creator-only for the same reason as the other two:

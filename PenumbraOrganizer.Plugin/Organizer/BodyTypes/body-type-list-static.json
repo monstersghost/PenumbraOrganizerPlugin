@@ -1,0 +1,31 @@
+{
+    "Version":  1,
+    "Bodies":  [
+                   { "Label": "Neolithe",    "Sex": "Female", "Source": "verified", "Aliases": [ "neolithe", "neolithe+" ] },
+                   { "Label": "Bibo+",       "Sex": "Female", "Source": "verified", "Aliases": [ "bibo+", "bibo" ] },
+                   { "Label": "Rue+",        "Sex": "Female", "Source": "verified", "Aliases": [ "rue+", "rue", "larue" ] },
+                   { "Label": "YAB",         "Sex": "Female", "Source": "verified", "Aliases": [ "yab+", "yab", "yet another body" ] },
+                   { "Label": "YAB Buff",    "Sex": "Female", "Source": "verified", "Aliases": [ "yab buff", "yab+ buff" ] },
+                   { "Label": "Tre",         "Sex": "Female", "Source": "verified", "Aliases": [ "tre+", "tre" ] },
+                   { "Label": "Rosaline",    "Sex": "Female", "Source": "verified", "Aliases": [ "rosaline" ] },
+                   { "Label": "NIRAE",       "Sex": "Female", "Source": "verified", "Aliases": [ "nirae", "niræ" ] },
+                   { "Label": "LavaBod+",    "Sex": "Female", "Source": "verified", "Aliases": [ "lavabod+", "lavabod" ] },
+                   { "Label": "Muse+",       "Sex": "Female", "Source": "verified", "Aliases": [ "muse+", "muse" ] },
+                   { "Label": "Nymph+",      "Sex": "Female", "Source": "verified", "Aliases": [ "nymph+", "nymph" ] },
+                   { "Label": "Bimbo+",      "Sex": "Female", "Source": "verified", "Aliases": [ "bimbo+", "bimbo" ] },
+                   { "Label": "Citrus+",     "Sex": "Female", "Source": "verified", "Aliases": [ "citrus+", "citrus" ] },
+                   { "Label": "Eve",         "Sex": "Female", "Source": "verified", "Aliases": [ "ab eve", "eve body", "eve" ] },
+                   { "Label": "AB Body",     "Sex": "Female", "Source": "verified", "Aliases": [ "ab body", "abbody" ] },
+                   { "Label": "FreyjaAF",    "Sex": "Female", "Source": "verified", "Aliases": [ "freyjaaf", "freyja" ] },
+                   { "Label": "Tight&Firm",  "Sex": "Female", "Source": "verified", "Aliases": [ "tight&firm", "tight & firm" ] },
+                   { "Label": "TBSE",        "Sex": "Male",   "Source": "verified", "Aliases": [ "tbse", "the body se", "the body" ] },
+                   { "Label": "TBSE-X",      "Sex": "Male",   "Source": "verified", "Aliases": [ "tbse-x", "tbsex", "se-x" ] },
+                   { "Label": "HRBody",      "Sex": "Male",   "Source": "verified", "Aliases": [ "hrbody", "hr body" ] },
+                   { "Label": "Otopop",      "Sex": "Female", "Source": "reported", "Aliases": [ "otopop" ] },
+                   { "Label": "RiderTHiCC",  "Sex": "Female", "Source": "reported", "Aliases": [ "riderthicc", "rider thicc" ] },
+                   { "Label": "RUEXB+",      "Sex": "Female", "Source": "reported", "Aliases": [ "ruexb+", "ruexb" ] },
+                   { "Label": "EXQB",        "Sex": "Female", "Source": "reported", "Aliases": [ "exqb" ] },
+                   { "Label": "KT+",         "Sex": "Female", "Source": "reported", "Aliases": [ "kt+" ] },
+                   { "Label": "KNiku",       "Sex": "Female", "Source": "reported", "Aliases": [ "kniku body", "kniku" ] }
+               ]
+}
