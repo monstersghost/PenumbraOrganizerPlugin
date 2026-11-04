@@ -168,7 +168,7 @@
     {
       "id": "sort.split-body",
       "title": "Split body by body type",
-      "short": "Files gear under the body it was made for, as Gear/Bibo+/Top. Body mods too. Read from the mod name, so a mod that does not name its body is not filed under one."
+      "short": "Puts gear in a folder named after the body it was made for, as Gear/Bibo+/Top. Body mods too. The body comes from the mod's name, so a mod that does not name one is left where it was."
     },
     {
       "id": "sort.priority-race",

@@ -40,6 +40,12 @@ public static class OrganizerExportFormatter
             sb.AppendLine($"Author: {mod.Author}");
             sb.AppendLine($"Category: {(mod.Category is null ? "(none)" : mod.Category.Value.ToString())}");
             sb.AppendLine($"SubCategory: {mod.SubCategory ?? "(none)"}");
+            // Always emitted, including "(none)", unlike GearSlotDiagnostic below which is
+            // suppressed when not applicable. A body type is read from the mod's NAME, so it is
+            // the classification signal most likely to be wrong, and "this mod matched no body"
+            // is exactly as diagnostic as "it matched Bibo+" - a dump that showed only the hits
+            // could not answer how many mods went unmatched.
+            sb.AppendLine($"BodyType: {mod.BodyType ?? "(none)"}");
             if (mod.GearSlotDiagnostic != GearSlotDiagnostic.NotApplicable)
                 sb.AppendLine($"GearSlotDiagnostic: {mod.GearSlotDiagnostic}");
             sb.AppendLine($"HeliosphereManaged: {mod.HeliosphereManaged}");

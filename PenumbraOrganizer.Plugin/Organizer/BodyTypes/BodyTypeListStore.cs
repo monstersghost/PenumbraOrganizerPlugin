@@ -2,7 +2,13 @@ using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 
-public sealed record BodyTypeListLoadResult(BodyTypeListDocument Document, string? Warning);
+/// <param name="Warnings">
+/// Everything the user should be told about their own list, or empty. A LIST and not one string,
+/// deliberately: unlike the NPC list, where exactly one thing can be wrong per load, a body list
+/// can simultaneously have entries dropped for a malformed label AND aliases that collide with
+/// shipped ones. Reporting only the first would hide the second.
+/// </param>
+public sealed record BodyTypeListLoadResult(BodyTypeListDocument Document, IReadOnlyList<string> Warnings);
 
 /// <summary>
 /// The body-type list's source: the bundled list, plus the user's own file when they have written
@@ -61,6 +67,11 @@ public static class BodyTypeListStore
         if (staticParse.Status != BodyTypeListParseStatus.Ok)
             throw new InvalidOperationException(
                 "Bundled static body-type list is not valid JSON - this is a packaging bug, not a runtime condition.");
+        if (staticParse.DroppedLabels.Count > 0)
+            throw new InvalidOperationException(
+                "Bundled static body-type list has entries the codec rejects ("
+                + string.Join(", ", staticParse.DroppedLabels)
+                + ") - a packaging bug, not a runtime condition.");
         var bundled = staticParse.Data!;
 
         var userPath = UserListPath(configDirectory);
@@ -68,7 +79,7 @@ public static class BodyTypeListStore
         // Not created when absent, unlike NpcNameListStore.Load's seeding branch: a user who has
         // never added a body should not find a file they have to maintain.
         if (!File.Exists(userPath))
-            return new BodyTypeListLoadResult(bundled, null);
+            return new BodyTypeListLoadResult(bundled, []);
 
         string contents;
         try
@@ -78,8 +89,8 @@ public static class BodyTypeListStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return new BodyTypeListLoadResult(bundled,
-                $"{UserFileName} could not be read ({ex.GetType().Name}); "
-                + "using the bundled body-type list for this session.");
+                [$"{UserFileName} could not be read ({ex.GetType().Name}); "
+                 + "using the bundled body-type list for this session."]);
         }
 
         var parse = BodyTypeListCodec.Parse(contents);
@@ -87,11 +98,11 @@ public static class BodyTypeListStore
         {
             case BodyTypeListParseStatus.MalformedJson:
                 return new BodyTypeListLoadResult(bundled,
-                    $"{userPath} is not valid JSON; using the bundled body-type list for this session.");
+                    [$"{userPath} is not valid JSON; using the bundled body-type list for this session."]);
 
             case BodyTypeListParseStatus.UnsupportedVersion:
                 return new BodyTypeListLoadResult(bundled,
-                    $"{userPath} has an unsupported Version; using the bundled body-type list for this session.");
+                    [$"{userPath} has an unsupported Version; using the bundled body-type list for this session."]);
         }
 
         var user = parse.Data!;
@@ -102,12 +113,34 @@ public static class BodyTypeListStore
             // oversized scrape - that behaviour exists to disarm a crash, and this list cannot
             // cause one.
             return new BodyTypeListLoadResult(bundled,
-                $"{UserFileName} holds {user.Bodies.Count:N0} bodies, more than the "
-                + $"{MaxUserBodyCount:N0} this version will build a matcher from. Using the bundled "
-                + "list for this session; the file has not been changed.");
+                [$"{UserFileName} holds {user.Bodies.Count:N0} bodies, more than the "
+                 + $"{MaxUserBodyCount:N0} this version will build a matcher from. Using the bundled "
+                 + "list for this session; the file has not been changed."]);
         }
 
-        return new BodyTypeListLoadResult(Union(bundled, user), null);
+        // Both kinds of problem are reported, not just the first: an entry can be dropped for a
+        // malformed label while a different entry's alias collides with a shipped one.
+        var warnings = new List<string>();
+        if (parse.DroppedLabels.Count > 0)
+            warnings.Add($"{UserFileName}: {parse.DroppedLabels.Count} entr"
+                + (parse.DroppedLabels.Count == 1 ? "y was" : "ies were")
+                + " ignored because the label is unusable as a folder name ("
+                + string.Join(", ", parse.DroppedLabels)
+                + "). A label needs at least one letter or digit and may only use spaces, "
+                + "+ - & ' . [ ] besides letters and digits.");
+
+        var merged = Union(bundled, user);
+        var shadowed = CollidingAliases(bundled, user);
+        if (shadowed.Count > 0)
+            warnings.Add($"{UserFileName}: {shadowed.Count} alias"
+                + (shadowed.Count == 1 ? " is" : "es are")
+                + " already used by a different body in the bundled list ("
+                + string.Join(", ", shadowed)
+                + "). Which body wins is decided by name order, so one of the two will never "
+                + "match. Rename the alias, or give your entry the bundled body's exact Label to "
+                + "replace it instead of competing with it.");
+
+        return new BodyTypeListLoadResult(merged, warnings);
     }
 
     /// <summary>
@@ -130,9 +163,31 @@ public static class BodyTypeListStore
         };
     }
 
-    public static BodyTypeMatcher BuildMatcher(BodyTypeListDocument document) => new(document.Bodies);
+    /// <summary>
+    /// Aliases a user entry claims that a DIFFERENT bundled body already claims.
+    /// </summary>
+    /// <remarks>
+    /// Not an error, and not repaired: the matcher resolves a collision deterministically by its
+    /// ordinal label tie-break. But the outcome is arbitrary from the user's point of view - their
+    /// new body silently never matches, or it silently shadows a shipped one - so it is worth
+    /// saying out loud. An entry that REPLACES a bundled body by sharing its Label is excluded,
+    /// since that is the supported way to correct a shipped body's aliases.
+    /// </remarks>
+    private static IReadOnlyList<string> CollidingAliases(
+        BodyTypeListDocument bundled, BodyTypeListDocument user)
+    {
+        var replacedLabels = new HashSet<string>(user.Bodies.Select(b => b.Label), StringComparer.OrdinalIgnoreCase);
+        var bundledAliases = bundled.Bodies
+            .Where(b => !replacedLabels.Contains(b.Label))
+            .SelectMany(b => b.Aliases)
+            .ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>Every label the loaded list defines, which is the set a Body subfolder may name.</summary>
-    public static IReadOnlySet<string> Labels(BodyTypeListDocument document) =>
-        document.Bodies.Select(b => b.Label).ToHashSet(StringComparer.Ordinal);
+        return user.Bodies
+            .SelectMany(b => b.Aliases)
+            .Where(bundledAliases.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    public static BodyTypeMatcher BuildMatcher(BodyTypeListDocument document) => new(document.Bodies);
 }

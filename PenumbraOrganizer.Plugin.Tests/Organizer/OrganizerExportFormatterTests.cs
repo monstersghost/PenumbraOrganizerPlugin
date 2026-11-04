@@ -9,7 +9,8 @@ public class OrganizerExportFormatterTests
     private static OrganizerModRow MakeRow(
         string id, string name, bool isProtected = false, bool heliosphere = false,
         ModCategory? category = null, string? subCategory = null,
-        GearSlotDiagnostic gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable) => new()
+        GearSlotDiagnostic gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable,
+        string? bodyType = null) => new()
     {
         Identifier = id,
         Name = name,
@@ -20,6 +21,7 @@ public class OrganizerExportFormatterTests
         HeliosphereManaged = heliosphere,
         Category = category,
         SubCategory = subCategory,
+        BodyType = bodyType,
         GearSlotDiagnostic = gearSlotDiagnostic,
     };
 
@@ -63,6 +65,22 @@ public class OrganizerExportFormatterTests
 
         Assert.Contains("Category: (none)", result);
         Assert.Contains("SubCategory: (none)", result);
+        Assert.Contains("BodyType: (none)", result);
+    }
+
+    [Fact]
+    public void Format_BodyType_IsAlwaysEmitted()
+    {
+        // A body type is read from the mod's NAME, so it is the classification signal most likely
+        // to be wrong, and a dump is the only place a user can audit it. "(none)" is emitted too,
+        // so the dump can answer how many mods went unmatched and not just which ones matched.
+        var matched = MakeRow("a", "Bibo+ Medieval Dress", category: ModCategory.Gear,
+            subCategory: "Top", bodyType: "Bibo+");
+
+        var result = OrganizerExportFormatter.Format(
+            [matched], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.Contains("BodyType: Bibo+", result);
     }
 
     [Fact]

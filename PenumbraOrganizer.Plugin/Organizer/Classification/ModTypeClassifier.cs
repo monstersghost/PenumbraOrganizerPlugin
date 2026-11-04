@@ -1,4 +1,5 @@
 using PenumbraOrganizer.Core.Classification;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Classification;
 
@@ -91,32 +92,18 @@ public static class ModTypeFolders
 
     // A body label as the loaded list spells it: "Bibo+", "Tight&Firm", "Re[de]fined Lalafell".
     //
+    // Delegated to BodyTypeListCodec.IsValidLabel rather than duplicated, because duplicating it
+    // was a bug: this method once enforced a character whitelist the codec did not, so a user file
+    // with a label containing '*', ':', an emoji or a pasted non-breaking space parsed cleanly and
+    // then threw out of GetFolder partway through a sort. One owner for the rule, and the codec is
+    // it - a label is only ever set from a list the codec parsed.
+    //
     // A SHAPE check, not a membership check. The set of body replacers is fixed by what the
     // community releases, not by the game, and the list holding it is loaded at runtime and
-    // extensible by the user (BodyTypeListStore.UserFileName), so enumerating it here would go
-    // stale every time a new body ships. This cannot tell a real body from any other word.
-    //
-    // Membership is guaranteed upstream instead: the only thing that ever sets a row's BodyType is
-    // a match against the loaded list, and BodyTypeListStaticContentTests checks every shipped
-    // label against this method.
-    //
-    // The separator rejection is the load-bearing half. A label containing '/' would silently
-    // nest a folder under Body and break the flat-folder guarantee the Sort tab promises; the
-    // codec drops such a label on parse, and this is the second guard behind it.
-    //
-    // The permitted punctuation is exactly what real body names use - '+' (Bibo+), '&'
-    // (Tight&Firm), '-' (Rue+ / hyphenated variants) and square brackets (RE[DE]FINED) - and all
-    // of them survive PenumbraPathSemantics.FixName unchanged, which matters because a type folder
-    // is deliberately never FixName'd: if FixName rewrote one of these, the folder we propose would
-    // not be the folder Penumbra stores. FixName only trims and turns '/' into '\\', so the one
-    // thing that must stay rejected is a path separator.
-    private static bool IsBodyTypeLabel(string? subCategory) =>
-        subCategory is { Length: >= 1 and <= 40 }
-        && subCategory.Trim() == subCategory
-        && !subCategory.Contains('/')
-        && !subCategory.Contains('\\')
-        && subCategory.All(c => char.IsLetterOrDigit(c)
-                                || c is ' ' or '+' or '-' or '&' or '\'' or '.' or '[' or ']');
+    // extensible by the user, so enumerating it here would go stale every time a new body ships.
+    // Membership is guaranteed upstream: the only thing that ever sets a row's BodyType is a match
+    // against the loaded list, and BodyTypeListStaticContentTests checks every shipped label here.
+    private static bool IsBodyTypeLabel(string? subCategory) => BodyTypeListCodec.IsValidLabel(subCategory);
 }
 
 /// <summary>

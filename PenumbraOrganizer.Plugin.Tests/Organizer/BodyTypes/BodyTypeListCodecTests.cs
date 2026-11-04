@@ -145,6 +145,70 @@ public class BodyTypeListCodecTests
         Assert.Equal("Eve", result.Data!.Bodies.Single().Label);
     }
 
+    [Theory]
+    // Everything IsValidLabel must reject, and why each matters. These all once passed the codec
+    // and then threw out of ModTypeFolders.GetFolder partway through a sort.
+    [InlineData("Yo*Body", "asterisk")]
+    [InlineData("Body:X", "colon")]
+    [InlineData("Bibo?", "question mark")]
+    [InlineData("My|Body", "pipe")]
+    [InlineData("✨Sparkle", "emoji - outside the BMP, so not a letter or digit")]
+    [InlineData("Bibo Plus", "non-breaking space, the classic paste artifact")]
+    [InlineData(".", "punctuation only")]
+    [InlineData("..", "punctuation only, and would become its own path segment")]
+    [InlineData("+", "punctuation only")]
+    public void IsValidLabel_RejectsWhatGetFolderWouldReject(string label, string why) =>
+        Assert.False(BodyTypeListCodec.IsValidLabel(label), why);
+
+    [Theory]
+    [InlineData("Bibo+")]
+    [InlineData("Tight&Firm")]
+    [InlineData("Re[de]fined Lalafell")]
+    [InlineData("TB2.0 Type M")]
+    [InlineData("NIRAE")]
+    [InlineData("Kräuter")]
+    [InlineData("YAB Buff")]
+    public void IsValidLabel_AcceptsRealBodyNames(string label) =>
+        Assert.True(BodyTypeListCodec.IsValidLabel(label));
+
+    [Fact]
+    public void Parse_UnusableLabel_IsDroppedAndReported()
+    {
+        // Dropping silently is what let the whole class of bug hide: the entry vanished and the
+        // user had no way to know. DroppedLabels is what the store turns into a warning.
+        var result = ParseRaw("{\"Version\":1,\"Bodies\":[{\"Label\":\"Yo*Body\",\"Aliases\":[\"yo\"]}]}");
+
+        Assert.Equal(BodyTypeListParseStatus.Ok, result.Status);
+        Assert.Empty(result.Data!.Bodies);
+        Assert.Equal(["Yo*Body"], result.DroppedLabels);
+    }
+
+    [Fact]
+    public void Parse_EntryWithNoLabelAtAll_IsReportedWithAPlaceholder()
+    {
+        var result = ParseRaw("{\"Version\":1,\"Bodies\":[{\"Label\":\"\",\"Aliases\":[\"x\"]}]}");
+
+        Assert.Equal(["(entry with no label)"], result.DroppedLabels);
+    }
+
+    [Fact]
+    public void Parse_EntryDroppedForHavingNoAlias_IsAlsoReported()
+    {
+        var result = ParseRaw("{\"Version\":1,\"Bodies\":[{\"Label\":\"Ghost\",\"Aliases\":[]}]}");
+
+        Assert.Equal(["Ghost"], result.DroppedLabels);
+    }
+
+    [Fact]
+    public void Parse_AllEntriesUsable_ReportsNothingDropped()
+    {
+        var result = ParseRaw("{\"Version\":1,\"Bodies\":[{\"Label\":\"Bibo+\",\"Aliases\":[\"bibo+\"]}]}");
+
+        Assert.Empty(result.DroppedLabels);
+    }
+
+    private static BodyTypeListParseResult ParseRaw(string json) => BodyTypeListCodec.Parse(json);
+
     [Fact]
     public void SerializeThenParse_RoundTrips()
     {
