@@ -5,7 +5,18 @@ drift out of sync with `docs/HANDOFF_ORGANIZER_AND_DARK_THEME.md`. Scope guardra
 Phase 1 design (read-only MVP, no shared code beyond two linked files) still apply everywhere
 below unless a phase explicitly says otherwise.
 
-## Where we are (2026-07-18)
+## Where we are (2026-11-04)
+
+- **0.6.2.1 — shipped stable, on both channels.** Folder protection became protect/exclude/inherit
+  rules with deepest-rule-wins, and the Protect tab's folder list became a collapsible tri-state
+  tree. Config is v2, with a rollback mirror so a downgrade keeps its protected folders. Verified
+  in game before release. See `docs/HANDOFF_FOLDER_PROTECTION_RULES.md`.
+- **Docs carry screenshots now.** `docs/ui-mock/` is an HTML emulation of the window built from the
+  real theme colours and the labels in the drawing code; `docs/images/` holds the nine screenshots
+  taken from it, and `docs/USER_GUIDE.pdf` is generated from the guide by `docs/build-pdf.py`.
+  Change a label in the plugin and you change the mock and retake the shot.
+
+## Earlier (2026-07-18)
 
 - **Phase 1a/1b — shipped.** Scan/Protect/Sort/Review Changes, live IPC scan, Heliosphere
   auto-protect, manual + By Creator sort, collision/protected-violation validation. Apply disabled.

@@ -141,6 +141,32 @@ anything that didn't match "Expected" even if it's minor.
       matches as you type (mod name, author, identifier, or current path
       for mods; folder path for folders). Clear the box. **Expected:**
       everything reappears.
+- [ ] **The folder tree.** The Folders list is a tree: click a folder's
+      arrow to open it. **Expected:** subfolders appear indented, each row
+      showing how many of its mods are protected out of how many it holds,
+      plus a subfolder count. Open a few, close the window, reopen it.
+      **Expected:** the folders you left open are still open.
+- [ ] **The three states.** Click a folder's box repeatedly. **Expected:**
+      it cycles `[ ]` (no rule) -> `[x]` (protected) -> `[-]` (excluded) ->
+      `[ ]`. A box whose state came from a folder ABOVE it is drawn dim;
+      hovering it names the folder the rule came from.
+- [ ] **Protect a parent, exclude a child.** Set a parent folder to `[x]`,
+      then click a subfolder's box twice (once to give it its own rule,
+      once more to make it `[-]`). Press Sort. **Expected:** only that
+      subfolder's mods are proposed for moving; the parent's own mods are
+      left alone.
+- [ ] **What an exclude does not free.** Inside that excluded subfolder,
+      tick one mod individually. Press Sort again. **Expected:** that mod
+      is NOT proposed - an exclude frees only what the folder was
+      protecting. Heliosphere mods in there stay protected too.
+- [ ] **Searching the tree.** Type part of a subfolder's name into the
+      search box. **Expected:** only matching branches show, already opened
+      for you. Clear the search. **Expected:** the tree returns to exactly
+      the folders you had open before searching - a search never changes
+      what is saved.
+- [ ] **A rule on a folder that empties.** Exclude a folder, Apply so its
+      mods move out, then Scan. **Expected:** the folder is still listed,
+      marked `(currently empty)`, with its rule intact.
 - [ ] **Folder-level protection.** Find a folder in the Folders list that
       contains several mods (e.g. `Gear/Feet` if you have mods sorted
       there) and check it. **Expected:** every mod currently in that
