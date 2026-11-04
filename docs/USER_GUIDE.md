@@ -259,32 +259,32 @@ Two controls appear under it, and both apply only while Split hair is on:
 Both reset each session. A mod that still does not resolve to one number stays in the plain `Hair`
 folder; a race with two hair numbers in the same mod never picks one.
 
-**Split gear and body mods by body type** files a gear mod under the body it was made for, such
-as `Gear/Bibo+/Top`, and a body replacer under itself, such as `Body/Rue+`. The body sits above the
-equipment slot, so everything cut for one body gathers in one place instead of scattering across the
-nine slot folders. It is off by default, and the two splits are independent: with Split gear off you
-get `Gear/Bibo+` and no slot below it.
+**Split gear and body mods by body type** puts a gear mod in a folder named after the body it was
+made for, such as `Gear/Bibo+/Top`, and a body mod under its own name, such as `Body/Rue+`. The body
+comes before the equipment slot, so everything made for one body sits together instead of being
+spread across the nine slot folders. It is off by default. The slot split is separate: turn that off
+and you get `Gear/Bibo+` with nothing below it.
 
-The body is read from the **mod's name**, because nothing inside a garment's files says which body it
-was cut for — a dress replaces its own equipment set, not the body's models. The plugin ships a list
-of 30 known bodies with 120 spellings between them, covering the ones people actually write in mod
-titles: `Bibo+`, `Rue+`, `YAB`, `TnF`, `TF3`, `TBSE`, `Neolithe` and so on. Variants are filed under
-their parent, so a TBSE-X mod goes to `Gear/TBSE` and a YAB Buff mod to `Gear/YAB`.
+The body comes from the mod's name. Nothing inside a dress says which body it was cut for, so the
+name is all there is to go on. The plugin knows 30 bodies and 120 ways of writing them, including
+`Bibo+`, `Rue+`, `YAB`, `TnF`, `TF3`, `TBSE` and `Neolithe`. Variants go in with their parent, so a
+TBSE-X mod lands in `Gear/TBSE` and a YAB Buff mod in `Gear/YAB`.
 
-Only gear that is actually shaped by a body is considered. A mod must occupy the Top, Hands, Legs or
-Feet slot — the four halves a body replacer builds. **Weapons, hats, earrings, necklaces, bracelets
-and rings are never filed under a body**, because nothing about them is cut to a body's shape, so a
-weapon called "Artemis Bow" stays where it is rather than landing under the Artemis body.
+Only gear that a body changes the shape of is looked at: the Top, Hands, Legs and Feet slots, which
+are the four pieces a body mod replaces. Weapons, hats, earrings, necklaces, bracelets and rings
+never get a body folder, so a weapon called "Artemis Bow" stays where it is instead of being filed
+under the Artemis body.
 
-A mod whose name matches no known body stays where it would have gone anyway. Because this reads
-names, a mod that merely happens to contain a body's name as a word can be filed under it; the
-Review tab shows every proposed move before anything happens, so a wrong guess is one row to fix.
+A mod whose name matches no body the plugin knows is left where it would have gone otherwise.
+Because this works from names, a mod that merely happens to have a body's name in its title can end
+up filed under it. Review Changes shows every move before anything happens, so one wrong guess is
+one line to put right.
 
-You can add bodies the plugin does not know, or correct a shipped one, without waiting for an
-update: create `body-type-list.json` in the plugin's configuration folder. An entry whose `Label`
-matches a shipped body replaces it, so a spelling that turns out to be wrong can be removed as well
-as added. The file is only read if it exists, and is ignored with a warning in the log if it is
-malformed or holds more than 500 bodies.
+You can add bodies it does not know, or fix one it has wrong, by creating `body-type-list.json` in
+the configuration folder. Give your entry the same `Label` as a body already in the list and yours
+replaces it, which is how you remove a spelling that turns out to be wrong instead of only adding to
+it. The file is read only if it is there, and the plugin says so in the log if it cannot use part of
+it: an entry it had to ignore, or a name you reused that a different body already answers to.
 
 #### The NPC list controls
 
@@ -585,15 +585,16 @@ Read the caveat at the bottom of this page before trusting the numbers on a libr
 
 ## Body type
 
-Gear can be filed under the body it was made for, so everything cut for one body gathers in one
-place — useful when you switch bodies and need to know what still fits. The control is **Split gear
-and body mods by body type** on the Sort tab, described under [Sort](#sort) above.
+Gear can be put in folders named after the body it was made for, so everything that fits one body
+sits together. That is worth having when you change body and need to know what still works. The
+control is **Split gear and body mods by body type** on the Sort tab, described under [Sort](#sort)
+above.
 
-The body is read from the mod's name, because nothing inside a garment says which body it was cut
-for. Only gear in the Top, Hands, Legs or Feet slot is considered, so weapons, hats and jewellery
-are never filed under a body.
+The body comes from the mod's name, because nothing inside a dress says which body it was cut for.
+Only gear in the Top, Hands, Legs and Feet slots is looked at, so weapons, hats and jewellery never
+get a body folder.
 
-Add bodies the plugin does not know by creating `body-type-list.json` in the configuration folder;
+To add bodies the plugin does not know, create `body-type-list.json` in the configuration folder;
 see [Where files live](#where-files-live). Read the caveat at the bottom of this page first.
 
 ## Typical workflows
@@ -650,13 +651,14 @@ Hair numbers are read from the mod's files, and also from the EST entries in its
 value has not yet been confirmed in game to be the hair number. If a mod is filed under a number that
 is not the hair it replaces, turn Split hair off and report the mod name and both numbers on Discord.
 
-Body types are read from the mod's **name**, not its files, because nothing in a garment's files
-names the body it was cut for. Two consequences. A mod whose title does not name its body is not
-filed under one, even though it was made for one. And a mod that merely contains a body's name as a
-word can be filed under that body — "Rue de la Paix" reads as a Rue+ garment. Review the proposed
-paths before applying; a wrong guess is one row to correct. `artemis` is the one bare common word
-the list knowingly keeps, because it is the only name that body has.
+Body types come from the mod's **name**, not its files, because nothing inside a dress says which
+body it was cut for. That cuts both ways. A mod whose title does not mention its body will not be
+filed under one, even though it was made for a body. And a mod that merely has a body's name in its
+title can be filed under that body: "Rue de la Paix" reads as a Rue+ garment. Look over the proposed
+paths before you apply them, where one wrong guess is one line to put right. `artemis` is the one
+ordinary word kept on purpose, because it is the only name that body goes by.
 
-Whether Penumbra stores a folder name containing `+`, `&` or `[` `]` unchanged has not yet been
-confirmed in game — twelve of the thirty body labels contain a `+`. If `Gear/Bibo+/Top` comes back
-as something else after a Rediscover Mods, turn the body split off and report what the folder became.
+Whether Penumbra keeps a folder name containing `+`, `&` or `[` `]` exactly as given has not been
+confirmed in game yet, and twelve of the thirty bodies have a `+` in their name. If `Gear/Bibo+/Top`
+comes back as something else after a Rediscover Mods, turn the body split off and say what the
+folder turned into.

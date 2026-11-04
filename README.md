@@ -15,8 +15,8 @@ before applying them.
 
 * Organize mods by creator, mod type, or a combination of both
 * Split gear by equipment slot, NPC mods by kind, and hair by the hair number it replaces
-* Group gear by the body it was made for — Gear/Bibo+/Top, Gear/TBSE/Legs — across 26 known
-  bodies (Bibo+, Rue+, YAB, Neolithe, TBSE and more), extensible without a plugin update
+* Put gear in folders named after the body it was made for, so everything that fits one body sits
+  together: Gear/Bibo+/Top, Gear/TBSE/Legs. Knows 30 bodies, and you can add your own
 * Assign folders to specific mods by hand, or import a layout you edited in Excel
 * Review every proposed folder change before applying it — nothing moves until you press Apply
 
