@@ -214,7 +214,7 @@
             "Sex": "Female",
             "Race": "",
             "Source": "verified",
-            "Note": "Bare \"artemis\" is the only name this body goes by, and it is also a common glamour word - a known false-positive source, kept because dropping it would make the body undetectable.",
+            "Note": "Bare \"artemis\" is the only name this body goes by. The weapon case that made it risky (\"Artemis Bow\") is now excluded structurally - a weapon carries no body-shaped equipment slot - so what remains is a top or dress named after the goddess rather than the body.",
             "Aliases": [
                 "artemis"
             ]

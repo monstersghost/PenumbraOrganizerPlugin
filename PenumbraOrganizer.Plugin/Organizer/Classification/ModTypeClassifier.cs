@@ -178,6 +178,50 @@ public static class ModTypeClassifier
         };
     }
 
+    /// <summary>
+    /// The equipment slots a body actually shapes: the four halves a body replacer authors
+    /// (<c>_top</c>, <c>_glv</c>, <c>_dwn</c>, <c>_sho</c>), and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Head, Ears, Neck, Wrists and Rings are deliberately absent. A helmet, an earring or a ring
+    /// is not deformed to the wearer's body shape, so "made for Bibo+" is meaningless for one -
+    /// and the slot list is the same four Proteus's own BodySizeCatalog.KnownSlots carries, for
+    /// the same reason.
+    /// </remarks>
+    public static readonly IReadOnlySet<EquipmentSlot> BodyShapedSlots =
+        new HashSet<EquipmentSlot> { EquipmentSlot.Top, EquipmentSlot.Hands, EquipmentSlot.Legs, EquipmentSlot.Feet };
+
+    /// <summary>
+    /// Whether a body type means anything for this mod at all - the gate on consulting its name.
+    /// </summary>
+    /// <param name="equipmentSlots">
+    /// <see cref="ModEquipmentFileReader.ReadEquipmentSlots"/>'s answer for a Gear row, or null for
+    /// any other category or a failed read.
+    /// </param>
+    /// <remarks>
+    /// A WEAPON is the case that motivates this. A weapon mod replaces <c>chara/weapon/...</c>, so
+    /// it carries no equipment slot at all, yet it classifies as Gear like any other item and would
+    /// otherwise have its name searched for a body - filing an "Artemis Bow" under the Artemis
+    /// body. The same reasoning excludes hats, earrings, necklaces, bracelets and rings: nothing
+    /// about them is cut to a body's shape.
+    /// <para>
+    /// Null slots mean a read that could not be trusted, and are treated as no evidence rather than
+    /// as permission, matching how the gear and hair passes treat the same answer.
+    /// </para>
+    /// <para>
+    /// A Body row needs no slot evidence: the category already says the mod is a body.
+    /// </para>
+    /// </remarks>
+    public static bool BodyTypeApplies(ModCategory? category, IReadOnlySet<EquipmentSlot>? equipmentSlots)
+    {
+        if (category == ModCategory.Body)
+            return true;
+        if (category != ModCategory.Gear || equipmentSlots is null)
+            return false;
+
+        return equipmentSlots.Any(BodyShapedSlots.Contains);
+    }
+
     // Returns the single category one changed-item key alone implies, with no cross-key
     // aggregation and no first-match-wins ordering between different keys — that's what Classify
     // does. This exists for LibrarySearch, which needs a per-item facet, not one first-match answer

@@ -136,9 +136,10 @@ public class BodyTypeListStaticContentTests
     [Fact]
     public void ArtemisCarriesANoteAboutItsKnownRisk()
     {
-        // The one entry knowingly kept despite matching ordinary gear titles ("Artemis Bow"),
-        // because bare "artemis" is the only name the body has and dropping it would make the body
-        // undetectable. Recorded rather than left for someone to rediscover as a bug report.
+        // The one entry kept on a bare common word, because it is the only name the body has.
+        // Its worst case - "Artemis Bow" - is now excluded structurally rather than by the alias
+        // list, since a weapon carries no body-shaped slot (see BodyTypeAppliesTests), so the Note
+        // records what residual risk is left rather than the original one.
         Assert.NotEqual(string.Empty, Bundled().Bodies.Single(b => b.Label == "Artemis").Note);
     }
 

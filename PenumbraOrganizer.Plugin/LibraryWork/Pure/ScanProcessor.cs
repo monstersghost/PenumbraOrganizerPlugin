@@ -75,9 +75,12 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         // Disk I/O only for mods the changed-items rule already confirmed are Gear - every other
         // category never touches disk for this.
         var gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable;
+        // Hoisted: the body-type gate below needs these slots too, to tell gear that is cut to a
+        // body's shape from a weapon or a ring that merely classifies as Gear.
+        IReadOnlySet<EquipmentSlot>? equipmentSlots = null;
         if (classification.Category == ModCategory.Gear)
         {
-            var equipmentSlots = ModEquipmentFileReader.ReadEquipmentSlots(modPath);
+            equipmentSlots = ModEquipmentFileReader.ReadEquipmentSlots(modPath);
             classification = ModTypeClassifier.EnrichGearSubCategory(classification, equipmentSlots);
 
             gearSlotDiagnostic = equipmentSlots switch
@@ -107,11 +110,14 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         // Proteus establishes this by mesh and UV correspondence against the body's own meshes,
         // which is far more work than a sort should do.
         //
-        // Gear and Body only. Gear is the point - a library's "Bibo+ Medieval Dress" is what the
-        // user wants gathered under Bibo+ - and Body is near-free since a body mod's name is
-        // already its body type. Every other category is left alone, so an outfit-adjacent
-        // Animation or VFX mod cannot acquire a body folder.
-        var bodyType = classification.Category is ModCategory.Gear or ModCategory.Body
+        // Gear and Body only, and for Gear only when the slots say the mod is cut to a body's
+        // shape - see ModTypeClassifier.BodyTypeApplies. That gate needs no extra disk read: the
+        // gear pass above already resolved these slots.
+        //
+        // It is what keeps a weapon out. A weapon mod classifies as Gear, carries no equipment
+        // slot, and would otherwise have its name searched for a body, filing an "Artemis Bow"
+        // under the Artemis body. Hats, earrings, necklaces, bracelets and rings go the same way.
+        var bodyType = ModTypeClassifier.BodyTypeApplies(classification.Category, equipmentSlots)
             ? _bodyTypeMatcher.Match(item.Name)?.Label
             : null;
 
