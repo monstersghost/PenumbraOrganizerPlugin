@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Penumbra Organizer UI mock</title>
+<!--
+  A static emulation of the plugin's in-game window, used only to produce the screenshots in
+  docs/USER_GUIDE.md. It is NOT the plugin and nothing here is wired to anything.
+
+  Colours are the real ones from PenumbraOrganizer.Plugin/Windows/PluginTheme.cs, and every control
+  label is copied from the drawing code (MainWindow.*Tab.cs, SortPanel.cs, FolderProtectionTree.cs)
+  so the screenshots cannot drift from the strings a user actually sees. If you change a label in
+  the plugin, change it here and retake the shot.
+
+  Pick a screen with the URL hash: #scan #protect #protect-search #sort #review #history.
+-->
+<style>
+  :root {
+    --window-bg: #1B1D24;
+    --surface: #23262F;
+    --surface-alt: #2A2E3A;
+    --border: #383C4A;
+    --text: #E7E9F3;
+    --text-dim: #9CA3B8;
+    --accent: #6366F1;
+    --protected: #F3C969;
+    --changed-good: #6EE7A8;
+    --collision-bad: #F98080;
+    --dalamud-yellow: #FFE266;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: #10121a;
+    font-family: "Segoe UI", "Noto Sans", system-ui, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  body { padding: 10px; }
+
+  .window {
+    /* Sized to the browser pane so screenshots are captured 1:1 rather than downscaled, which
+       smears ImGui's small text. Widen it only if you also widen the pane. */
+    width: 100%;
+    max-width: 1120px;
+    background: var(--window-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: 0 10px 34px rgba(0,0,0,.55);
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+  }
+  .titlebar .collapse { color: var(--text-dim); font-size: 11px; }
+  .titlebar .title { font-weight: 600; letter-spacing: .2px; }
+  .titlebar .spacer { flex: 1; }
+  .titlebar .icon {
+    width: 22px; height: 18px;
+    display: grid; place-items: center;
+    color: var(--text-dim);
+    border-radius: 3px;
+  }
+  .titlebar .icon.sep { margin-left: 6px; border-left: 1px solid var(--border); }
+
+  .tabbar { display: flex; gap: 2px; padding: 6px 8px 0; background: var(--window-bg); }
+  .tab {
+    padding: 5px 11px 6px;
+    border-radius: 4px 4px 0 0;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom: none;
+  }
+  .tab.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .tabstrip { height: 1px; background: var(--border); }
+
+  .body { padding: 12px 14px 14px; }
+
+  button, .btn {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 10px;
+  }
+  .btn.small { padding: 1px 7px; font-size: 12px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.disabled { color: #5c6274; background: #20232c; border-color: #2c303b; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .dim { color: var(--text-dim); }
+  .warn { color: var(--dalamud-yellow); }
+  .bad { color: var(--collision-bad); }
+  .good { color: var(--changed-good); }
+  .prot { color: var(--protected); }
+  .mt { margin-top: 10px; }
+  .mt-s { margin-top: 6px; }
+  .label { margin: 12px 0 4px; }
+
+  .input {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .input .field {
+    background: #171920;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 8px;
+    min-width: 260px;
+    color: var(--text);
+  }
+  .input .field.caret::after { content: "|"; color: var(--accent); margin-left: 1px; }
+  .combo {
+    background: #171920; border: 1px solid var(--border); border-radius: 3px;
+    padding: 4px 8px; min-width: 210px;
+    display: flex; justify-content: space-between; gap: 14px;
+  }
+  .combo .arrow { color: var(--text-dim); }
+
+  .child {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 6px 8px;
+    overflow: hidden;
+  }
+  .grip { height: 6px; margin: 3px 0 0; background: var(--surface-alt); border-radius: 2px; }
+
+  .cb { display: inline-grid; place-items: center; width: 15px; height: 15px;
+        border: 1px solid var(--border); background: #171920; border-radius: 2px;
+        font-size: 11px; line-height: 1; color: var(--accent); }
+  .cb.on::after { content: "\2714"; }
+
+  /* Tree rows */
+  .trow { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
+  .trow .glyph {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    background: var(--surface-alt); border: 1px solid var(--border); border-radius: 3px;
+    padding: 0 5px; font-size: 12px;
+  }
+  .trow .glyph.inherited { color: #6d7384; border-color: #2f3340; background: #23262f; }
+  .trow .arrow { color: var(--text-dim); width: 10px; display: inline-block; }
+  .trow .name { }
+  .trow .counts { color: var(--text-dim); }
+  .indent-1 { padding-left: 20px; }
+  .indent-2 { padding-left: 40px; }
+  .indent-3 { padding-left: 60px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th {
+    text-align: left; font-weight: 600; color: var(--text);
+    background: var(--surface-alt);
+    border: 1px solid var(--border); padding: 4px 7px;
+  }
+  td { border: 1px solid var(--border); padding: 3px 7px; }
+  tr:nth-child(even) td { background: #20232b; }
+
+  .log { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; color: var(--text-dim); }
+  .sep { height: 1px; background: var(--border); margin: 12px 0; }
+  .rule { height: 1px; background: var(--border); margin: 8px 0; }
+  .group-label { color: var(--text-dim); margin: 2px 0 4px; }
+
+  /* Modal overlay for the confirm-prompt screenshot */
+  .overlay { position: relative; }
+  .modal {
+    position: absolute; left: 50%; top: 120px; transform: translateX(-50%);
+    width: 560px; background: var(--window-bg);
+    border: 1px solid var(--border); border-radius: 4px;
+    box-shadow: 0 14px 40px rgba(0,0,0,.6);
+  }
+  .modal .mtitle { padding: 6px 10px; background: var(--surface-alt); border-bottom: 1px solid var(--border); font-weight: 600; }
+  .modal .mbody { padding: 10px 12px; }
+  .modal p { margin: 0 0 8px; line-height: 1.45; }
+
+  section { display: none; }
+  section:target { display: block; }
+  /* Default screen when no hash is given. */
+  body:not(:has(section:target)) #protect { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ============================ SCAN ============================ -->
+<section id="scan">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab active">Scan</div><div class="tab">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="row">
+        <button>Refresh mod list</button>
+        <span class="dim">Last scan: 1 743 mods</span>
+      </div>
+      <div class="label">Library</div>
+      <table>
+        <tr><th style="width:26%">Name</th><th style="width:18%">Author</th><th>Current Path</th></tr>
+        <tr><td>Aetheric Bob</td><td>Nyx</td><td>hair/115/Aetheric Bob</td></tr>
+        <tr><td>Bunny Ears</td><td>Mira</td><td>Gear/Head/Bunny Ears</td></tr>
+        <tr><td class="prot">Dance Pack</td><td>Rook</td><td>haloween/animation/Dance Pack</td></tr>
+        <tr><td class="prot">Festive Mask</td><td>Rook</td><td>haloween/Festive Mask</td></tr>
+        <tr><td>Short Layered</td><td>Nyx</td><td>hair/9/Short Layered</td></tr>
+      </table>
+      <div class="label">Event log</div>
+      <div class="child log">
+        <div>22:14:03  ModAdded      hs-Nightingale-1.0.4</div>
+        <div>22:14:03  ModMoved      Bunny Ears -&gt; Gear/Head/Bunny Ears</div>
+        <div>22:13:58  ModDeleted    Old Test Mod</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PROTECT ============================ -->
+<section id="protect">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab active">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="row">
+        <button>Toggle protect all</button>
+        <button>Toggle Heliosphere protection</button>
+        <span class="dim">(31/31 Heliosphere mods protected)</span>
+      </div>
+
+      <div class="input mt">
+        <span>Search mods and folders</span>
+        <span class="field">&nbsp;</span>
+      </div>
+
+      <div class="label">Folders</div>
+      <div class="child" style="height:250px">
+        <div class="trow">
+          <span class="glyph">[x]</span><span class="arrow">&#9660;</span>
+          <span class="name">haloween</span>
+          <span class="counts">(14/19 protected, 3 subfolders)</span>
+          <span class="btn small">Unprotect 14 inside</span>
+        </div>
+        <div class="trow indent-1">
+          <span class="glyph">[-]</span><span class="arrow">&#9660;</span>
+          <span class="name">animation</span>
+          <span class="counts">(1/5 protected, 1 subfolder)</span>
+          <span class="btn small">Unprotect 1 inside</span>
+        </div>
+        <div class="trow indent-2">
+          <span class="glyph inherited">[-]</span><span class="arrow">&#9654;</span>
+          <span class="name">sub</span>
+          <span class="counts">(0/2 protected)</span>
+        </div>
+        <div class="trow indent-1">
+          <span class="glyph inherited">[x]</span><span class="arrow">&#9654;</span>
+          <span class="name">props</span>
+          <span class="counts">(6/6 protected)</span>
+        </div>
+        <div class="trow">
+          <span class="glyph">[ ]</span><span class="arrow">&#9660;</span>
+          <span class="name">hair</span>
+          <span class="counts">(0/212 protected, 23 subfolders)</span>
+        </div>
+        <div class="trow indent-1">
+          <span class="glyph">[ ]</span><span class="arrow">&#9654;</span>
+          <span class="name">115</span>
+          <span class="counts">(0/11 protected)</span>
+        </div>
+        <div class="trow indent-1">
+          <span class="glyph">[ ]</span><span class="arrow">&#9654;</span>
+          <span class="name">9</span>
+          <span class="counts">(0/4 protected)</span>
+        </div>
+        <div class="trow">
+          <span class="glyph">[ ]</span><span class="arrow">&#9654;</span>
+          <span class="name">Gear</span>
+          <span class="counts">(2/684 protected, 11 subfolders)</span>
+          <span class="btn small">Unprotect 2 inside</span>
+        </div>
+        <div class="trow">
+          <span class="glyph">[x]</span><span class="arrow">&#9654;</span>
+          <span class="name">Private</span>
+          <span class="counts">(currently empty)</span>
+        </div>
+      </div>
+      <div class="grip"></div>
+
+      <div class="label">Mods</div>
+      <div class="child" style="height:118px">
+        <div class="row" style="gap:7px"><span class="cb on"></span><span>[HS] Nightingale</span><span class="dim">(Heliosphere)</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb on"></span><span>Festive Mask</span><span class="dim">(via folder: haloween)</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb on"></span><span>Dance Pack</span><span class="dim">(protected)</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb"></span><span>Aetheric Bob</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PROTECT, CONFIRM PROMPT ============================ -->
+<section id="protect-confirm">
+  <div class="window overlay">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab active">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body" style="filter:brightness(.72)">
+      <div class="row">
+        <button>Toggle protect all</button>
+        <button>Toggle Heliosphere protection</button>
+        <span class="dim">(31/31 Heliosphere mods protected)</span>
+      </div>
+      <div class="label">Folders</div>
+      <div class="child" style="height:150px">
+        <div class="trow"><span class="glyph">[x]</span><span class="arrow">&#9660;</span><span class="name">haloween</span><span class="counts">(14/19 protected, 3 subfolders)</span><span class="btn small">Unprotect 14 inside</span></div>
+        <div class="trow indent-1"><span class="glyph">[-]</span><span class="arrow">&#9660;</span><span class="name">animation</span><span class="counts">(1/5 protected, 1 subfolder)</span><span class="btn small">Unprotect 1 inside</span></div>
+        <div class="trow indent-2"><span class="glyph inherited">[-]</span><span class="arrow">&#9654;</span><span class="name">sub</span><span class="counts">(0/2 protected)</span></div>
+      </div>
+    </div>
+    <div class="modal">
+      <div class="mtitle">Unprotect everything inside this folder?</div>
+      <div class="mbody">
+        <p>Unprotect all 1 mod(s) inside &quot;haloween/animation&quot;, at any depth?</p>
+        <p>Their individual ticks are cleared too, so Sort and Apply will be free to move them.</p>
+        <p class="warn">Heliosphere-managed mods inside this folder are unprotected as well. As with
+          the Heliosphere toggle, that lasts this session only - the next Scan re-protects them.</p>
+        <div class="row">
+          <button>Yes, unprotect them</button>
+          <button>Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PROTECT, SEARCHING ============================ -->
+<section id="protect-search">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab active">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="row">
+        <button>Toggle protect all</button>
+        <button>Toggle Heliosphere protection</button>
+        <span class="dim">(31/31 Heliosphere mods protected)</span>
+      </div>
+      <div class="input mt">
+        <span>Search mods and folders</span>
+        <span class="field caret">animation</span>
+      </div>
+      <div class="label">Folders</div>
+      <div class="child" style="height:150px">
+        <div class="trow">
+          <span class="glyph">[x]</span><span class="arrow">&#9660;</span>
+          <span class="name">haloween</span><span class="counts">(14/19 protected, 3 subfolders)</span>
+          <span class="btn small">Unprotect 14 inside</span>
+        </div>
+        <div class="trow indent-1">
+          <span class="glyph">[-]</span><span class="arrow">&#9660;</span>
+          <span class="name">animation</span><span class="counts">(1/5 protected, 1 subfolder)</span>
+          <span class="btn small">Unprotect 1 inside</span>
+        </div>
+        <div class="trow indent-2">
+          <span class="glyph inherited">[-]</span><span class="arrow">&#9660;</span>
+          <span class="name">sub</span><span class="counts">(0/2 protected)</span>
+        </div>
+      </div>
+      <div class="grip"></div>
+      <div class="label">Mods</div>
+      <div class="child" style="height:70px">
+        <div class="row" style="gap:7px"><span class="cb"></span><span>Dance Pack</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb"></span><span>Wave Emote</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ SORT ============================ -->
+<section id="sort">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab">Protect</div><div class="tab active">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="input">
+        <span>Group by</span>
+        <span class="combo"><span>Mod type</span><span class="arrow">&#9662;</span></span>
+      </div>
+
+      <div class="rule mt"></div>
+      <div class="group-label">Gear</div>
+      <div class="row" style="gap:7px"><span class="cb on"></span><span>Split gear by equipment slot</span></div>
+
+      <div class="rule"></div>
+      <div class="group-label">NPC</div>
+      <div class="row" style="gap:7px"><span class="cb on"></span><span>Split NPC mods by kind</span></div>
+      <div class="row mt-s" style="gap:7px"><span class="cb"></span><span class="dim">Also use the NPC list scraped from the wiki</span>
+        <span class="btn small disabled">Refresh NPC list from wiki</span></div>
+
+      <div class="rule"></div>
+      <div class="group-label">Hair</div>
+      <div class="row" style="gap:7px"><span class="cb on"></span><span>Split hair by hair number</span></div>
+      <div class="input mt-s"><span>Priority race</span>
+        <span class="combo"><span>Viera female</span><span class="arrow">&#9662;</span></span></div>
+      <div class="row mt-s" style="gap:7px"><span class="cb on"></span><span>Midlander fallback</span></div>
+
+      <div class="rule"></div>
+      <div class="row">
+        <button class="primary">Sort</button>
+        <button class="small">?</button>
+        <button>Import Workbook</button>
+      </div>
+      <div class="mt-s warn">The selection no longer matches what was sorted. Press Sort again.</div>
+
+      <div class="sep"></div>
+      <div>Manual assignment</div>
+      <div class="input mt-s"><span>Filter mods</span><span class="field">&nbsp;</span></div>
+      <div class="child mt-s" style="height:84px">
+        <div class="row" style="gap:7px"><span class="cb on"></span><span>Aetheric Bob</span><span class="dim">hair/115/Aetheric Bob</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb"></span><span>Bunny Ears</span><span class="dim">Gear/Head/Bunny Ears</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb on"></span><span>Short Layered</span><span class="dim">hair/9/Short Layered</span></div>
+      </div>
+      <div class="input mt-s">
+        <span>Destination folder</span><span class="field">Favourites/Hair</span>
+        <button>Assign 2 selected mods</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ REVIEW ============================ -->
+<section id="review">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab">Protect</div><div class="tab">Sort</div>
+      <div class="tab active">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="good">No validation issues. 412 mods will move.</div>
+      <table class="mt">
+        <tr><th style="width:20%">Name</th><th style="width:13%">Author</th><th>Current Path</th><th>Proposed Path</th></tr>
+        <tr><td>Dance Pack</td><td>Rook</td><td>haloween/animation/Dance Pack</td><td class="good">Animation/Dance Pack</td></tr>
+        <tr><td>Wave Emote</td><td>Rook</td><td>haloween/animation/Wave Emote</td><td class="good">Animation/Wave Emote</td></tr>
+        <tr><td class="prot">Festive Mask</td><td>Rook</td><td>haloween/Festive Mask</td><td>haloween/Festive Mask</td></tr>
+        <tr><td class="prot">[HS] Nightingale</td><td>Lyra</td><td>hs-Nightingale-1.0.4</td><td>hs-Nightingale-1.0.4</td></tr>
+        <tr><td>Aetheric Bob</td><td>Nyx</td><td>hair/115/Aetheric Bob</td><td class="good">Hair/115/Aetheric Bob</td></tr>
+      </table>
+      <div class="row mt">
+        <button class="primary">Apply</button>
+        <button>Export</button>
+        <button>Export Workbook</button>
+        <span class="input"><span>Workbook destinations</span>
+          <span class="combo"><span>Mod type</span><span class="arrow">&#9662;</span></span></span>
+      </div>
+      <div class="row mt-s">
+        <button>Protect &amp; Skip All Blocking Mods</button>
+        <button>Show Config File</button>
+        <button>Create Diagnostic Dump</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row">
+        <span>Orphaned Folders</span>
+        <button class="small">Re-read organization.json</button>
+        <span class="dim">Last read: 22:15:41</span>
+      </div>
+      <div class="child mt-s" style="height:74px">
+        <div class="row" style="gap:7px"><span class="cb on"></span><span>haloween/animation/sub</span><span class="dim">empty</span></div>
+        <div class="row mt-s" style="gap:7px"><span class="cb"></span><span>Favourites</span><span class="prot">keeps your colour and icon</span></div>
+      </div>
+      <button class="mt-s">Clean Up Selected Folders</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ HISTORY ============================ -->
+<section id="history">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab active">History</div><div class="tab">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="row">
+        <button>Create Backup</button>
+        <span class="input"><span>Label</span><span class="field">before halloween cleanup</span></span>
+      </div>
+      <table class="mt">
+        <tr><th style="width:21%">Captured</th><th>Label</th><th style="width:12%">Mods</th><th style="width:16%"></th></tr>
+        <tr><td>2026-11-04 22:16</td><td>Before Apply - 412 mods moved</td><td>1 743</td><td><span class="btn small">Restore</span> <span class="btn small">Delete</span></td></tr>
+        <tr><td>2026-11-04 21:02</td><td>before halloween cleanup</td><td>1 743</td><td><span class="btn small">Restore</span> <span class="btn small">Delete</span></td></tr>
+        <tr><td>2026-11-01 18:44</td><td>Before Apply - 1 196 mods moved</td><td>1 702</td><td><span class="btn small">Restore</span> <span class="btn small">Delete</span></td></tr>
+      </table>
+      <div class="mt dim">Restore reproduces a snapshot's recorded paths exactly, whatever is protected now.</div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

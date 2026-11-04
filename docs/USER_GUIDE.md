@@ -22,15 +22,23 @@ your browser:
 
 Hover over each one to see what it opens.
 
+## About the pictures
+
+The screenshots below are rendered from a faithful mock of the plugin's window (`docs/ui-mock/`),
+using the plugin's own colours and the exact control labels from its code. They show the layout and
+wording you will see; your own numbers, mod names and folder names will differ.
+
 ## Requirements
 
 Dalamud, via XIVLauncher. Penumbra installed and enabled: every tab depends on Penumbra's IPC
 being available, and if Penumbra isn't running, Refresh mod list shows a connection error instead
 of a mod list.
 
-## The seven tabs
+## The eight tabs
 
 ### Scan
+
+![The Scan tab: Refresh mod list, the loaded library, and the live event log](images/scan.png)
 
 Refresh mod list re-reads every installed mod from Penumbra (`GetModList`) along with its full
 changed-items set (`GetChangedItems`), then classifies each one. See
@@ -59,55 +67,123 @@ is informational only; it doesn't trigger a re-scan.
 
 ### Protect
 
-A search box filters both lists below by mod name, author, identifier, current path, or folder
-path. Clear it to see everything again.
+Protection is what stops the plugin proposing a move for a mod. A protected mod keeps its current
+path through every Sort and is skipped by Apply. Nothing on this tab moves anything by itself.
 
-**Folders** lists every folder your mods currently occupy, plus any folder you've protected that's
-now empty. Checking a folder protects it and everything under it, at any depth. Checking `Gear`
-protects `Gear/Feet`, `Gear/Feet/Sub`, and so on, without checking each subfolder individually.
-Folders already covered by a protected ancestor show a note explaining which ancestor covers them,
-instead of their own checkbox state being meaningful. This list is resizable: drag the thin bar
-just below it up or down.
+![The Protect tab: the folder tree with tri-state boxes, and the mod list below it](images/protect-tree.png)
 
-Unchecking a folder withdraws only that folder's own protection: a mod you ticked individually, or
-one caught by Toggle protect all, stays protected. When a folder holds protected mods, an
-**Unprotect N inside** button appears next to it, which clears protection from every mod under it
-whatever the source - its own tick, Toggle protect all, this folder, or Heliosphere. That is how
-you protect your whole library and then free a single folder for sorting: Toggle protect all, then
-Unprotect N inside on the one folder you want filed away. The count is what the button can actually
-free. A protected ancestor folder is a separate instruction that this never withdraws, so where one
-covers a folder there is nothing to free and no button: untick the ancestor instead. As with Toggle
-Heliosphere protection, unprotecting Heliosphere mods this way lasts the session only.
+A search box at the top filters both lists below it by mod name, author, identifier, current path,
+or folder path. Clear it to see everything again.
 
-**Mods** lists every scanned mod with a checkbox, in its own scrollable area below the Folders
-list. A protected mod is excluded from every grouping and from Apply: its proposed path
-always stays equal to its current path, and if anything does touch a protected mod, Review Changes
-flags it as a "protected mod changed" error. A mod protected by something other than its own
-checkbox (a folder, or Heliosphere) shows a note next to it explaining why.
+#### Three sources of protection
+
+A mod is protected if **any** of these is true, and the tab tells you which one applies:
+
+1. **Its own checkbox**, in the Mods list.
+2. **A folder rule** covering the folder it sits in. The note beside the mod reads
+   `(via folder: Gear)`, naming the folder whose rule actually decided it.
+3. **Heliosphere manages it**, shown as `(Heliosphere)`. Heliosphere owns where its mods live, so
+   they are re-protected on every scan no matter how you last left the toggle.
+
+These are independent. Freeing a mod means clearing whichever source is protecting it, which is why
+the notes name the source rather than only saying "protected".
+
+#### The folder tree
+
+**Folders** shows every folder your mods occupy, plus any folder that carries a rule but no longer
+holds anything, as a collapsible tree. Click the arrow to open a folder. Each row shows how many of
+its mods are protected out of how many it holds at any depth, and how many subfolders are under it.
+Folders you open stay open the next time you open the window. The list is resizable: drag the thin
+bar just below it.
+
+Every row has one box with three states, and clicking it cycles through them:
+
+| Box | Meaning |
+| --- | --- |
+| `[ ]` | **No rule.** This folder follows whatever the nearest folder above it says. |
+| `[x]` | **Protected.** Nothing in this folder or below it is moved. |
+| `[-]` | **Excluded.** This folder and everything below it may be sorted, *even if a parent is protected.* |
+
+**The nearest rule wins.** A rule applies down the tree until a deeper folder sets its own. That is
+what makes "protect this folder, except that one subfolder inside it" possible, and you can keep
+nesting: protect `haloween`, exclude `haloween/animation`, then protect `haloween/animation/keep`
+inside that if you want.
+
+A **dim** box means the state was inherited from a folder above; hover it to see which one. A
+**solid** box means this folder sets its own rule. Clicking a dim box gives that folder its own rule
+first, so going from an inherited `[x]` to an excluded `[-]` takes two clicks: the first click's
+only visible effect is the box turning solid.
+
+A folder that still carries a rule after its mods have moved away is listed as **(currently
+empty)**, so a rule can never become invisible.
+
+#### What an exclude does not free
+
+An exclude withdraws the **folder's** protection and nothing else. Inside an excluded folder, a mod
+you ticked yourself stays protected, and so does a Heliosphere-managed one. That is deliberate:
+those are per-mod decisions, and a folder rule has no business reversing them silently.
+
+To clear those as well, use the **Unprotect N inside** button on the folder's row. It clears
+protection from every mod under it at any depth whatever the source - its own tick, Toggle protect
+all, a folder rule, or Heliosphere - and asks first.
+
+![The confirmation prompt shown by Unprotect N inside](images/protect-unprotect-confirm.png)
+
+The count on the button is what it can actually free, so if there is nothing left to free there is
+no button. Three details worth knowing:
+
+- On a folder you have **excluded**, the button leaves the exclude in place and clears only the
+  per-mod protection inside. If it withdrew the exclude, the subfolder would fall straight back
+  under its protected parent and everything you just freed would be re-protected.
+- The button never overrides a protected parent on its own. Escaping a parent is the box's job, and
+  takes a deliberate click.
+- Unprotecting Heliosphere mods this way lasts the session only: the next Scan re-protects them.
+
+#### Searching the tree
+
+Typing in the search box narrows the tree to the branches that match and opens them for you, so a
+match several levels down is visible without digging. Clearing the search puts the tree back exactly
+as you had it - what a search opens is never saved. While a search is running, folders stay open.
+
+![Searching for "animation" narrows the tree to matching branches and opens them](images/protect-search.png)
+
+#### The Mods list
+
+**Mods** lists every scanned mod with its own checkbox, in its own scrollable area below the
+folders. A protected mod is excluded from every grouping and from Apply: its proposed path always
+stays equal to its current path, and if anything does touch a protected mod, Review Changes flags it
+as a "protected mod changed" error.
 
 Toggle protect all is a true toggle: it protects everything if anything is currently unprotected,
 and unprotects everything otherwise. Toggle Heliosphere protection does the same, scoped to
 [Heliosphere](https://heliosphere.app/)-managed mods (detected by the `hs-` directory prefix, by
 Heliosphere's `[HS] ` name prefix, by a `heliosphere.json` file in the mod folder, or by having been
 recognised as Heliosphere's on any earlier scan; see [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)). That
-last one matters during a Heliosphere update, which briefly removes the mod's folder and writes a new
-one — without it, a scan landing in that moment would see an ordinary mod and offer to move it.
-Heliosphere mods are re-protected on every scan no matter how that toggle was last left, because
-Heliosphere owns their location and the plugin never proposes moving them during Sort or Apply.
-Manually unprotecting a non-Heliosphere mod does persist across scans; that choice, along with your
-protected folders, is saved to the plugin's own config.
+last one matters during a Heliosphere update, which briefly removes the mod's folder and writes a
+new one - without it, a scan landing in that moment would see an ordinary mod and offer to move it.
 
-Protection governs Sort and Apply only. Restoring a snapshot from the History tab reproduces its
-recorded paths regardless of current protection. See History below.
+Manually unprotecting a non-Heliosphere mod persists across scans; that choice, along with your
+folder rules, is saved to the plugin's own config.
 
-If any protected mods are sitting at the very top level of your library, outside every folder, the
-tab says so. That combination is a dead end worth knowing about: protection means the plugin never
-proposes a path for a mod, so sorting will never file those away and they stay at the top level
+#### Two things that catch people out
+
+**Protected mods at the top level.** If any protected mods sit at the very top level of your
+library, outside every folder, the tab says so in yellow. That combination is a dead end: protection
+means the plugin never proposes a path, so sorting will never file them away and they stay there
 indefinitely. Heliosphere installs new mods there and they are protected by the same scan that first
 notices them, so this can happen without you doing anything. Untick one and it sorts like any other
 mod.
 
+**Protect all, then free one folder.** Toggle protect all writes a tick on every *mod* and ticks no
+folder, so there is no folder to untick afterwards and Sort reports "apply to 0 mods". The way to do
+it is Toggle protect all, then **Unprotect N inside** on the one folder you want filed away.
+
+Protection governs Sort and Apply only. Restoring a snapshot from the History tab reproduces its
+recorded paths regardless of current protection. See History below.
+
 ### Sort
+
+![The Sort tab: grouping, the Gear, NPC and Hair groups, and manual assignment](images/sort.png)
 
 Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
 path for every unprotected mod without moving anything yet. Only Apply, on the Review Changes tab,
@@ -175,6 +251,8 @@ down, check some mods, clear the filter, and check more without losing what you 
 
 ### Review Changes
 
+![Review Changes: current and proposed paths side by side, with Orphaned Folders below](images/review-changes.png)
+
 Shows the result of `Validate()`. Any protected-mod-changed or path-collision errors are listed in
 red. The tree view below shows current and proposed paths side by side, so you can review every
 change before committing to it.
@@ -228,6 +306,8 @@ reminds you to click Rediscover Mods in Penumbra's own settings, since this plug
 that can trigger that reload itself.
 
 ### History
+
+![The History tab: snapshots with Restore and Delete](images/history.png)
 
 Every Apply and every Restore automatically captures a snapshot of your library just before it
 runs, so both are undoable. You can also click Create Backup at any time, with an optional label,
@@ -381,6 +461,12 @@ protection carries over), press Sort again, review, then Apply.
 
 Hand-tuning through Excel: on Review Changes, Export Workbook, edit destinations in Excel, then on
 the Sort tab Import Workbook, review again, then Apply.
+
+Protecting a folder but letting one subfolder sort: on the Protect tab, click the parent folder's
+box until it shows a solid `[x]`, open it, then click the subfolder's box twice - once to give it
+its own rule, once more to make it `[-]`. Sort, and only that subfolder's mods are proposed for
+moving. If some mods in there are still protected by their own tick or by Heliosphere, use Unprotect
+N inside on that subfolder to clear those too.
 
 Undoing an Apply, or going back further: open the History tab and Restore the snapshot from just
 before the Apply (or any earlier one). Protection doesn't block this, so it works even for mods
