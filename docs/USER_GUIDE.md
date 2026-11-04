@@ -40,30 +40,50 @@ of a mod list.
 
 ![The Scan tab: Refresh mod list, the loaded library, and the live event log](images/scan.png)
 
-Refresh mod list re-reads every installed mod from Penumbra (`GetModList`) along with its full
-changed-items set (`GetChangedItems`), then classifies each one. See
-[HOW_SORTING_WORKS.md](HOW_SORTING_WORKS.md) for how classification works. Run this first, and run
-it again whenever mods are installed, removed, or moved outside the plugin. Nothing else on this
-tab, or any other tab, updates automatically.
+This is where every session starts. Nothing anywhere else in the plugin updates by itself.
 
-The scan runs in the background, so the game keeps responding while it works. A progress line
-replaces the button while it's running, with a Cancel button next to it. Cancelling leaves your
-previously loaded library exactly as it was.
+#### Refresh mod list
 
-Anything that would collide with a running scan is disabled while it runs, with a note explaining
+Re-reads every installed mod from Penumbra (`GetModList`) along with its full changed-items set
+(`GetChangedItems`), then classifies each one. See
+[HOW_SORTING_WORKS.md](HOW_SORTING_WORKS.md) for how classification works.
+
+Run it first, and run it again whenever mods are installed, removed, or moved outside the plugin.
+Scanning never moves anything; it only reads.
+
+#### While a scan runs
+
+The scan runs in the background, so the game keeps responding. A progress line replaces the button
+while it works, with a Cancel button beside it. Cancelling leaves your previously loaded library
+exactly as it was.
+
+Anything that would collide with a running scan is disabled while it runs, each with a note saying
 why: Apply, Restore, Create Backup, Folder Cleanup, the Sort controls, and Import Workbook.
 
-If you add, remove, or move a mod in Penumbra while a scan is running, its results no longer match
-your library, so they're discarded rather than shown. You'll be told the mod list changed and asked
-to run it again.
+Two situations end a scan early, both on purpose:
 
-If the mod list changes while the plugin is taking its initial snapshot, the scan stops straight away
-and asks you to run it again, rather than spending time on a snapshot that may already be out of
-date.
+- **Your mod list changed mid-scan.** If you add, remove, or move a mod in Penumbra while a scan is
+  running, its results no longer describe your library, so they are discarded rather than shown.
+  You are told the mod list changed and asked to run it again.
+- **The mod list changed during the initial snapshot.** The scan stops straight away rather than
+  spending time on a snapshot that may already be out of date.
 
-The mod count and tree view below the button show what's currently loaded. A live event log at the
-bottom reports `ModAdded`, `ModDeleted`, and `ModMoved` events as Penumbra reports them. This log
-is informational only; it doesn't trigger a re-scan.
+Neither leaves anything half-applied. A discarded scan simply leaves the previous one in place.
+
+#### What the tab shows afterwards
+
+A count of how many mods are loaded, and the library itself: name, author and current path.
+Protected mods are drawn in the protected colour, so you can see at a glance what Sort will leave
+alone.
+
+At the bottom, **Live events (ModAdded / ModDeleted / ModMoved)** reports those events as Penumbra
+raises them. It is informational only — it does not trigger a re-scan, which is why the rule above
+is to scan again yourself after installing mods.
+
+#### If Penumbra is not available
+
+Every tab depends on Penumbra's IPC. If Penumbra is not running or not enabled, Refresh mod list
+reports a connection error instead of a mod list. Start Penumbra and scan again.
 
 ### Protect
 
@@ -186,181 +206,256 @@ recorded paths regardless of current protection. See History below.
 ![The Sort tab: grouping, the Gear, NPC and Hair groups, and manual assignment](images/sort.png)
 
 Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
-path for every unprotected mod without moving anything yet. Only Apply, on the Review Changes tab,
-actually calls Penumbra.
+path for every unprotected mod **without moving anything**. Only Apply, on the Review Changes tab,
+calls Penumbra.
 
-The controls are grouped into Gear, NPC and Hair, with a rule between each group. Each group has its
-own split checkbox. The **?** button beside Sort opens the Help tab at its Sort section.
+The controls are grouped into Gear, NPC and Hair with a rule between each group. The **?** button
+beside Sort opens the Help tab at its Sort section.
 
-**Group by** picks the shape of the path:
+#### Group by
 
-- Creator: `{Creator}/{ModName}`
-- Mod type: `{Category}[/{SubCategory}]/{ModName}`
-- Type then creator: `{Category}[/{SubCategory}]/{Creator}/{ModName}`
-- Creator then type: `{Creator}/{Category}[/{SubCategory}]/{ModName}`
+This picks the shape of the path:
+
+| Choice | Result |
+| --- | --- |
+| Creator | `{Creator}/{ModName}` |
+| Mod type | `{Category}[/{SubCategory}]/{ModName}` |
+| Type then creator | `{Category}[/{SubCategory}]/{Creator}/{ModName}` |
+| Creator then type | `{Creator}/{Category}[/{SubCategory}]/{ModName}` |
+
+A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it is
+easy to find and sort by hand instead of landing somewhere unexpected.
+
+All three split checkboxes are greyed out when Group by is Creator, because grouping by creator
+alone never looks at a mod's type.
+
+#### The three splits
 
 **Split gear by equipment slot** puts gear mods in `Gear/Feet`, `Gear/Head` and so on, wherever the
-slot can be determined from a single, unambiguous match. Anything ambiguous or unidentifiable falls
-back to the plain `Gear` folder.
+slot can be determined from a single unambiguous match. Anything ambiguous — a real multi-piece
+outfit — or unidentifiable falls back to the plain `Gear` folder. The Export on Review Changes
+breaks down how many resolved, how many were ambiguous, and how many had no equipment evidence at
+all, which is the fastest way to find out why a mod did not land where you expected.
 
 **Split NPC mods by kind** puts NPC mods in `NPC/NPCs`, `NPC/Bosses` or `NPC/Enemies`. Turning it
 **off puts every NPC mod straight into `NPC`** with no subfolder. That combination did not exist in
-earlier versions, where NPC mods were always subdivided — if you preferred the old behaviour, leave
-this ticked, as it is by default.
+earlier versions, where NPC mods were always subdivided; if you preferred the old behaviour, leave
+it ticked, as it is by default.
 
 **Split hair by hair number** puts a hair mod in a folder named after the vanilla hair number it
-replaces, such as `Hair/115`, when the mod targets exactly one number. A mod that targets two or more
-numbers, or whose files could not be read, stays directly in `Hair`, as does every hair mod while
-this is off. The numbers come from the mod's own configuration, not its name. The checkbox is off by
-default. Penumbra sorts its folders as text, so `Hair/9` appears after `Hair/115`; that is expected,
-not a fault.
+replaces, such as `Hair/115`, when the mod targets exactly one number. A mod that targets two or
+more numbers, or whose files could not be read, stays directly in `Hair`, as does every hair mod
+while this is off. The numbers come from the mod's own configuration, not its name. It is off by
+default. Penumbra sorts folders as text, so `Hair/9` appears after `Hair/115`; that is expected.
 
-All three checkboxes are greyed out when Group by is set to Creator, because grouping by creator alone
-never looks at a mod's type.
+Two controls appear under it, and both apply only while Split hair is on:
 
-A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it's
-easy to find and sort by hand instead of landing somewhere unexpected.
+- **Priority race.** Pick a race and gender. A hair mod that uses exactly one hair number for that
+  race is filed under that number, whatever the other races use — a mod using 169 for most races
+  and 3 for Viera goes to `Hair/3` with Viera female chosen.
+- **Midlander fallback.** When a mod uses different numbers across races, this uses the Midlander
+  number if male and female Midlanders agree.
 
-If you change the grouping or either checkbox after sorting, a line appears reminding you that the
-selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
+Both reset each session. A mod that still does not resolve to one number stays in the plain `Hair`
+folder; a race with two hair numbers in the same mod never picks one.
 
-Import Workbook opens a file picker for an `.xlsx` file, exported either from this plugin or the
-standalone app, and applies its per-mod destination folders as proposed paths. Use this instead of
-the built-in groupings when you want to hand-edit an assignment list in Excel first. A summary
-line, plus any errors or warnings, appears below the button once the import finishes.
+#### The NPC list controls
 
-**Also use the NPC list scraped from the wiki** is turned off and unavailable in this version. NPC
-name recognition works from a curated list that ships with the plugin, which needs no setup and no
-network access. The opt-in exists for a much larger list scraped from the FFXIV wiki; it recognises
-far more character names at the cost of matching some very common words, and it stays disabled
-until that has been verified in-game.
+**Also use the NPC list scraped from the wiki** is off and unavailable in this version. NPC name
+recognition works from a curated list shipped with the plugin, which needs no setup and no network
+access. The opt-in exists for a much larger scraped list; it recognises far more character names at
+the cost of matching some very common words, and stays disabled until that is verified in game.
 
-Refresh NPC list from wiki is likewise turned off in this version. When enabled, it rewrites the
+**Refresh NPC list from wiki** is likewise off in this version. When enabled, it rewrites the
 opt-in scraped list — not the bundled one — with whatever the wiki returns on that run, so names
-the wiki no longer lists are dropped rather than accumulating forever. Results are shown per
-category as a plain name total, or a failure reason if a category's scrape didn't complete; a
-category whose scrape fails keeps whatever it already held rather than being emptied.
+the wiki no longer lists are dropped rather than accumulating. Results are shown per category as a
+name total, or a failure reason; a category whose scrape fails keeps what it already held rather
+than being emptied.
 
-The bottom of this tab is manual assignment. Its own search box filters the mod list below it, the
-same way the Protect tab's does. Check the mods you want (protected mods never appear in this
-list), type a destination folder, and click "Assign N selected mods": each checked mod's proposed
-path becomes `{destination}/{ModName}`. A summary line reports how many were assigned and how many
-were skipped (for example, because a mod stopped being eligible after you checked it, or you left
-the folder box empty). Your checked selection survives changes to the search box, so you can filter
-down, check some mods, clear the filter, and check more without losing what you already picked.
+#### After sorting
+
+If you change the grouping or any checkbox after sorting, a line appears reminding you that the
+selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
+Sorting again always recomputes from scratch, so it is safe to press repeatedly.
+
+#### Import Workbook
+
+Opens a file picker for an `.xlsx` exported either from this plugin or the standalone app, and
+applies its per-mod destination folders as proposed paths. Use it instead of the built-in groupings
+when you want to hand-edit an assignment list in Excel first. A summary line, plus any errors or
+warnings, appears below the button once the import finishes.
+
+#### Manual assignment
+
+The bottom of the tab assigns a folder to specific mods. Its own **Search mods** box filters the
+list below it, the same way the Protect tab's does. Check the mods you want — protected mods never
+appear here — type a destination folder, and click **Assign N selected mods**. Each checked mod's
+proposed path becomes `{destination}/{ModName}`.
+
+A summary line reports how many were assigned and how many were skipped, for example because a mod
+stopped being eligible after you checked it, or because you left the folder box empty. Your checked
+selection survives changes to the search box, so you can filter down, check some mods, clear the
+filter, and check more without losing what you already picked.
 
 ### Review Changes
 
 ![Review Changes: current and proposed paths side by side, with Orphaned Folders below](images/review-changes.png)
 
-Shows the result of `Validate()`. Any protected-mod-changed or path-collision errors are listed in
-red. The tree view below shows current and proposed paths side by side, so you can review every
-change before committing to it.
+The gate between a proposal and your actual library. Everything above this tab is reversible by
+doing nothing; this is where you commit.
 
-Export writes every mod's full field set, plus the validation result, to a plain-text file
-(`organizer-export.txt`, in the plugin's config directory, overwritten each time). If any of your
-mods are Gear, it also includes a one-line summary of how many resolved to a single slot, how many
-were ambiguous (a real multi-piece outfit), and how many had no equipment evidence in their config
-files at all, which is useful for figuring out why a mod didn't land where you expected under By
-Mod Type Detailed. It's a quick snapshot to review, not something meant to be re-imported later.
+#### The validation line and the table
 
-Export Workbook writes an `.xlsx` file (`organizer-workbook.xlsx`). It's interoperable with the
-standalone app's own workbook feature: edit the file in Excel, then use Import Workbook on the Sort
-tab to bring your edits back in.
+The top line is the result of `Validate()`. Any **protected-mod-changed** or **path-collision**
+errors are listed in red, and Apply stays disabled while any exist. The table below shows every
+mod's current path beside its proposed path, so you can read the whole change before committing.
 
-The Workbook destinations dropdown decides what goes in the workbook's Destination column. The four
-sorting choices fill it with suggested folders. Keep current folders (as-is) fills it with each
-mod's folder as it stands right now, which is what you want when you intend to write the layout
-yourself in Excel rather than start from a suggestion. Protected mods and mods sitting at the top
-level of your library get a blank Destination, which means "leave this one alone" on import.
+- A **protected mod changed** error means something assigned a proposed path to a mod you
+  protected. It is a bug-catcher: protection is supposed to make that impossible.
+- A **path collision** means two mods would end up at the same path. Penumbra would reject or
+  mangle one of them, so the plugin refuses first.
 
-Show Config File opens Explorer with the plugin's own settings file (your protected mods and
-protected folders) pre-selected, so you can copy or attach it directly. Create Diagnostic Dump
-writes a plain-text state summary (mod and protection counts, the last Apply/Restore/Folder
-Cleanup result, including one from a previous session if nothing's run yet this session, and the
-session's event log) to `organizer-diagnostics.txt`, then a button next to it opens Explorer
-with that file pre-selected.
+**Protect & Skip All Blocking Mods** is the one-click fix: every mod currently blocking Apply —
+whether protected-but-changed or on the losing side of a collision — has its proposed path reset to
+its current path and gets protected. Apply becomes available without you tracking down each one.
 
-Protect & Skip All Blocking Mods is a one-click fix for validation errors. Every mod currently
-blocking Apply, whether it's protected-but-changed or on the losing side of a collision, gets its
-proposed path reset to its current path and gets protected. Apply becomes available again without
-you having to track down each offender by hand.
+#### Apply
 
-Apply is disabled while any validation issue exists. When it's enabled and you click it, a
-confirmation popup shows how many mods will move; confirming calls Penumbra's `SetModPath` for
-every mod whose proposed path differs from its current path. The result shows a succeeded and
-failed count, with Penumbra's own error code as the reason for each failure (for example
-`PathRenameFailed`). Apply also captures a snapshot of your library just before it runs, so you can
-always get back to where you started. See History below for how to use it.
+Apply is disabled while any validation issue exists. When you click it, a confirmation popup shows
+how many mods will move; confirming calls Penumbra's `SetModPath` for every mod whose proposed path
+differs from its current path.
 
-Below a separator, the Orphaned Folders section appears once you've scanned at least once. It
-detects folder entries left behind in Penumbra's own `organization.json` after a mod moved out of
-them. A "Re-read organization.json" button and a "Last read" timestamp sit above the list. This
-re-reads the file from disk; it does not ask Penumbra to refresh its own live folder tree. So if
-the count looks wrong right after a big Sort or Restore, try moving one folder in Penumbra's own UI
-(or clicking Penumbra's Rediscover Mods) and re-reading again. Plain, empty folders are pre-checked;
-folders that still carry your own customization (an icon, color, or name override) are shown
-unchecked, for you to review before pruning. Clean Up Selected Folders removes the checked entries,
-with its own backup and rollback pair, separate from Apply's history. After cleanup, a banner
-reminds you to click Rediscover Mods in Penumbra's own settings, since this plugin has no IPC call
-that can trigger that reload itself.
+The result shows a succeeded and failed count, with Penumbra's own error code as the reason for
+each failure, for example `PathRenameFailed`. Apply also captures a snapshot of your library just
+before it runs, so you can always get back to where you started — see History below.
+
+#### Exports
+
+- **Export** writes every mod's full field set plus the validation result to a plain-text file
+  (`organizer-export.txt`, overwritten each time). If any of your mods are Gear, it adds the
+  one-line slot-resolution summary described under Sort. It is a snapshot to read, not something to
+  re-import.
+- **Export Workbook** writes `organizer-workbook.xlsx`, interoperable with the standalone app: edit
+  it in Excel, then use Import Workbook on the Sort tab to bring your edits back. **Open Workbook**
+  opens the file you just wrote.
+- **Workbook destinations** decides what goes in the workbook's Destination column. The four
+  sorting choices fill it with suggested folders; **Keep current folders (as-is)** fills it with
+  each mod's folder as it stands, which is what you want when you intend to write the layout
+  yourself. Protected mods and mods at the top level of your library get a blank Destination, which
+  means "leave this one alone" on import.
+
+#### Diagnostics
+
+**Show Config File** opens Explorer with the plugin's own settings file (your protected mods and
+folder rules) selected, so you can copy or attach it. **Create Diagnostic Dump** writes a
+plain-text state summary — mod and protection counts, the last Apply/Restore/Folder Cleanup result
+including one from a previous session, and the session's event log — to `organizer-diagnostics.txt`,
+and **Show Dump File** opens Explorer with it selected. Attach that file when reporting a problem.
+
+#### Orphaned Folders
+
+Below a separator, this section appears once you have scanned at least once. It finds folder entries
+left behind in Penumbra's own `organization.json` after a mod moved out of them.
+
+**Re-read organization.json**, with a "Last read" timestamp beside it, re-reads the file from disk.
+It does **not** ask Penumbra to refresh its own live folder tree, which is why the count can look
+wrong right after a big Sort or Restore. If it does, move one folder in Penumbra's own UI (or click
+its Rediscover Mods) and re-read.
+
+Plain empty folders are pre-checked. Folders that still carry your own customization — an icon,
+colour, or name override — are shown unchecked for you to review before pruning, because deleting
+one throws that customization away.
+
+**Clean Up Selected Folders** removes the checked entries, with its own backup and **Rollback
+Folder Cleanup** pair, separate from Apply's history. Afterwards a banner reminds you to click
+Rediscover Mods in Penumbra's settings, since this plugin has no IPC call that can trigger that
+reload itself.
 
 ### History
 
 ![The History tab: snapshots with Restore and Delete](images/history.png)
 
-Every Apply and every Restore automatically captures a snapshot of your library just before it
-runs, so both are undoable. You can also click Create Backup at any time, with an optional label,
-to save a snapshot on demand.
+The undo for everything this plugin does to your library.
 
-Each entry in the list shows when it was captured, its label (or an auto-generated description like
-"1723 mods moved"), and how many mods it covers. Clicking Restore opens a confirmation popup with an
-exact preview: how many mods will move, how many are already at their snapshot path, how many
-(installed since the snapshot was taken) will be relocated to the Penumbra root, and how many
-(uninstalled since) will be skipped. If any mods in that preview are currently protected or
-Heliosphere-managed, a warning line tells you how many of those will move anyway.
+#### What gets captured
 
-Restore reproduces a snapshot's recorded paths exactly for every mod it covers, regardless of
-current protection or Heliosphere status. A snapshot is a record of history, and current sort
-protection shouldn't be able to stop you from getting back to it. Only two things stop a mod from
-being restored: it's no longer installed (reported as skipped), or Penumbra's own `SetModPath`
-rejects the move (reported as failed, with Penumbra's error code). Confirming a Restore also
-captures its own pre-restore snapshot first, so a restore is itself undoable.
+Every Apply and every Restore automatically captures a snapshot just before it runs, so both are
+undoable. You can also click **Create Backup** at any time, with an optional label, to save one on
+demand — worth doing before a big reorganisation you are unsure about.
 
-Delete removes a snapshot from the list; restoring to any other snapshot still works normally
-afterward. History persists across game restarts.
+Each entry shows when it was captured, its label or an auto-generated description such as "1723
+mods moved", and how many mods it covers. History persists across game restarts.
+
+#### Restoring
+
+Clicking **Restore** opens a confirmation with an exact preview:
+
+- how many mods will move to their snapshot path;
+- how many are already at it;
+- how many, installed since the snapshot was taken, will be moved to the Penumbra root;
+- how many, uninstalled since, will be skipped.
+
+If any mods in that preview are currently protected or Heliosphere-managed, a warning line tells you
+how many will move anyway.
+
+That is deliberate: **Restore ignores protection.** A snapshot is a record of where your mods were,
+and current sort protection should not be able to stop you getting back to it. Only two things stop
+a mod being restored — it is no longer installed (reported as skipped), or Penumbra's `SetModPath`
+rejects the move (reported as failed, with Penumbra's error code).
+
+Confirming a Restore captures its own pre-restore snapshot first, so a restore is itself undoable.
+
+#### Delete
+
+Removes a snapshot from the list. Restoring to any other snapshot still works normally afterwards.
+Deleting a snapshot does not touch your mods.
 
 ### Search
 
+![The Search tab: filters, matching mods, and the changed items of the selected mod](images/search.png)
+
 A read-only reverse lookup: find every installed mod, enabled or not, by the game items it changes.
-It's independent of the Sort tab. It builds its own index and never moves, protects, or otherwise
-modifies anything.
+It is independent of the Sort tab, builds its own index, and never moves, protects, or modifies
+anything.
 
-Build/Refresh Index scans your installed mods and their changed-items sets into a searchable index.
-This is separate from the Scan tab's own scan, so click it once here before searching, and again
-after installing or removing mods. A summary line reports what was indexed (mod count, total changed
-items, and a gear-slot breakdown); the index's build time is shown beneath it.
+#### Build/Refresh Index
 
-Like the Scan tab's scan, the index build runs in the background with a progress line and a Cancel
-button, and is discarded if your mod list changes while it's running.
+Scans your installed mods and their changed-items sets into a searchable index. This is **separate
+from the Scan tab's scan**, so click it once here before searching, and again after installing or
+removing mods. A summary line reports what was indexed — mod count, total changed items, and a
+gear-slot breakdown — with the build time beneath it.
 
-Two text boxes narrow the results: "Mod name contains" matches against the mod's name, and "Item
-contains" matches against the names of the items it changes. The Categories row filters by mod
-category (with an Unknown toggle for mods that didn't classify). When Gear is among the selected
-categories, a Slots row appears to filter Gear mods by equipment slot, plus an Unresolved toggle
-for Gear mods whose slot couldn't be determined.
+Like the Scan tab's scan, it runs in the background with a progress line and a Cancel button, and
+is discarded if your mod list changes while it is running.
 
-Results show in two panes. The left pane lists the matching mods as `Name (Author)`; click one to
-select it. The right pane lists that mod's changed items. If a mod matched only because of the "Mod
-name contains" box and not because of any item, a red "Matched by mod name, not by item" note
-appears above its item list, so you can tell a name hit from an item hit.
+#### Narrowing the results
+
+- **Mod name contains** matches the mod's name.
+- **Item contains** matches the names of the items it changes.
+- **Categories** filters by mod category, with an Unknown toggle for mods that did not classify.
+- **Slots** appears when Gear is among the selected categories, filtering Gear mods by equipment
+  slot, plus an Unresolved toggle for Gear mods whose slot could not be determined.
+
+#### Reading the results
+
+The left pane lists matching mods as `Name (Author)`; click one to select it. The right pane lists
+that mod's changed items.
+
+If a mod matched only because of the **Mod name contains** box and not because of any item, a red
+"Matched by mod name, not by item" note appears above its item list. That distinction matters when
+you are hunting for which mod touches an item: a name hit is a coincidence of naming, an item hit is
+the real answer.
 
 ### Templates
 
-A template is an organization layout someone else shared as a `.json` file. Importing one
-proposes where your mods would go: mods you and the template's author both have land in the
-folder they chose, and everything else is placed by the fallback sort strategy they picked, using
-their folder names.
+![The Templates tab: an imported template, its preview, and the export button](images/templates.png)
+
+A template is an organization layout someone else shared as a `.json` file. Importing one proposes
+where your mods would go: mods you and the template's author both have land in the folder they
+chose, and everything else is placed by the fallback sort strategy they picked, using their folder
+names.
+
+#### Using someone else's template
 
 1. Get a template file from whoever shared it and click **Import template file...**, or drop the
    file into the templates folder yourself (**Open templates folder** shows you where) and click
@@ -431,6 +526,8 @@ Each tab's section lists that tab's controls with the same one-line explanation 
 them, so the Help tab doubles as a reference for anything you saw a tooltip on and want to find
 again.
 
+#### The three buttons
+
 "Join the Discord for support" opens the project's Discord in your browser. That is the fastest
 place to get help, and where releases and testing builds are announced.
 
@@ -449,7 +546,12 @@ Nothing on this tab changes anything - it reads no mods and writes no files.
 
 ## Hair
 
-Hair mods that ship one folder per race can be filed under the hair number that most races use. The controls are on the Sort tab, in the Hair group, next to Split hair by hair number: a priority race and a Midlander fallback. Both apply only while Split hair is on, and both reset each session. The Help tab explains each control and when it changes the result, so read it there rather than relying on this page.
+Hair mods that ship one folder per race can be filed under the hair number most races use. All
+three controls — Split hair by hair number, Priority race, and Midlander fallback — are on the Sort
+tab and are described under [Sort](#sort) above. Both extra controls apply only while Split hair is
+on, and both reset each session.
+
+Read the caveat at the bottom of this page before trusting the numbers on a library you care about.
 
 ## Typical workflows
 

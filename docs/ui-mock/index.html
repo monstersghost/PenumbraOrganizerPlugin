@@ -203,9 +203,9 @@
     <div class="body">
       <div class="row">
         <button>Refresh mod list</button>
-        <span class="dim">Last scan: 1 743 mods</span>
+        <span class="dim">1 743 mods loaded</span>
       </div>
-      <div class="label">Library</div>
+      <div class="label">Mods</div>
       <table>
         <tr><th style="width:26%">Name</th><th style="width:18%">Author</th><th>Current Path</th></tr>
         <tr><td>Aetheric Bob</td><td>Nyx</td><td>hair/115/Aetheric Bob</td></tr>
@@ -214,7 +214,7 @@
         <tr><td class="prot">Festive Mask</td><td>Rook</td><td>haloween/Festive Mask</td></tr>
         <tr><td>Short Layered</td><td>Nyx</td><td>hair/9/Short Layered</td></tr>
       </table>
-      <div class="label">Event log</div>
+      <div class="label">Live events (ModAdded / ModDeleted / ModMoved):</div>
       <div class="child log">
         <div>22:14:03  ModAdded      hs-Nightingale-1.0.4</div>
         <div>22:14:03  ModMoved      Bunny Ears -&gt; Gear/Head/Bunny Ears</div>
@@ -463,7 +463,7 @@
 
       <div class="sep"></div>
       <div>Manual assignment</div>
-      <div class="input mt-s"><span>Filter mods</span><span class="field">&nbsp;</span></div>
+      <div class="input mt-s"><span>Search mods</span><span class="field">&nbsp;</span></div>
       <div class="child mt-s" style="height:84px">
         <div class="row" style="gap:7px"><span class="cb on"></span><span>Aetheric Bob</span><span class="dim">hair/115/Aetheric Bob</span></div>
         <div class="row mt-s" style="gap:7px"><span class="cb"></span><span>Bunny Ears</span><span class="dim">Gear/Head/Bunny Ears</span></div>
@@ -549,7 +549,7 @@
     <div class="body">
       <div class="row">
         <button>Create Backup</button>
-        <span class="input"><span>Label</span><span class="field">before halloween cleanup</span></span>
+        <span class="input"><span>Label (optional)</span><span class="field">before halloween cleanup</span></span>
       </div>
       <table class="mt">
         <tr><th style="width:21%">Captured</th><th>Label</th><th style="width:12%">Mods</th><th style="width:16%"></th></tr>
@@ -558,6 +558,110 @@
         <tr><td>2026-11-01 18:44</td><td>Before Apply - 1 196 mods moved</td><td>1 702</td><td><span class="btn small">Restore</span> <span class="btn small">Delete</span></td></tr>
       </table>
       <div class="mt dim">Restore reproduces a snapshot's recorded paths exactly, whatever is protected now.</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================ SEARCH ============================ -->
+<section id="search">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab active">Search</div>
+      <div class="tab">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="row">
+        <button>Build/Refresh Index</button>
+        <span class="dim">1 743 mods, 48 912 changed items (Gear: 684)</span>
+      </div>
+      <div class="dim mt-s">Index built at 22:15:12</div>
+
+      <div class="input mt"><span>Mod name contains</span><span class="field">&nbsp;</span></div>
+      <div class="input mt-s"><span>Item contains</span><span class="field caret">emperor</span></div>
+
+      <div class="row mt-s"><span>Categories:</span>
+        <span class="row" style="gap:7px"><span class="cb on"></span>Gear</span>
+        <span class="row" style="gap:7px"><span class="cb on"></span>Hair</span>
+        <span class="row" style="gap:7px"><span class="cb"></span>NPC</span>
+        <span class="row" style="gap:7px"><span class="cb"></span>Animation</span>
+        <span class="row" style="gap:7px"><span class="cb"></span>Unknown</span>
+      </div>
+      <div class="row mt-s"><span>Slots:</span>
+        <span class="row" style="gap:7px"><span class="cb on"></span>Head</span>
+        <span class="row" style="gap:7px"><span class="cb on"></span>Body</span>
+        <span class="row" style="gap:7px"><span class="cb"></span>Feet</span>
+        <span class="row" style="gap:7px"><span class="cb"></span>Unresolved</span>
+      </div>
+
+      <div class="row mt" style="align-items:stretch; gap:10px">
+        <div class="child" style="flex:1; height:150px">
+          <div class="dim" style="margin-bottom:4px">Mods</div>
+          <div style="color:var(--accent)">Emperor's New Fit (Mira)</div>
+          <div class="mt-s">Imperial Coat (Rook)</div>
+          <div class="mt-s">Royal Set Redux (Nyx)</div>
+        </div>
+        <div class="child" style="flex:1; height:150px">
+          <div class="dim" style="margin-bottom:4px">Changed items</div>
+          <div>Emperor's New Gloves</div>
+          <div class="mt-s">Emperor's New Boots</div>
+          <div class="mt-s">Emperor's New Hat</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ TEMPLATES ============================ -->
+<section id="templates">
+  <div class="window">
+    <div class="titlebar">
+      <span class="collapse">&#9660;</span>
+      <span class="title">Penumbra Organizer v0.6.2.1</span>
+      <span class="spacer"></span>
+      <span class="icon">&lt;/&gt;</span><span class="icon">&#128172;</span><span class="icon">&#9749;</span>
+      <span class="icon sep">&#128204;</span><span class="icon">&#9881;</span><span class="icon">&#10005;</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab">Scan</div><div class="tab">Protect</div><div class="tab">Sort</div>
+      <div class="tab">Review Changes</div><div class="tab">History</div><div class="tab">Search</div>
+      <div class="tab active">Templates</div><div class="tab">Help</div>
+    </div>
+    <div class="tabstrip"></div>
+    <div class="body">
+      <div class="row">
+        <button>Import template file...</button>
+        <button>Open templates folder</button>
+        <button>Refresh list</button>
+      </div>
+      <div class="label">Templates</div>
+      <div class="child" style="height:76px">
+        <div style="color:var(--accent)">glamour-first.json</div>
+        <div class="mt-s">by Mira &#183; Gear first, then creator</div>
+      </div>
+      <div class="row mt">
+        <button>Preview against my library</button>
+        <button class="primary">Apply this template to my proposals</button>
+      </div>
+      <div class="mt-s">Matched 412 of your mods. 1 331 placed by the fallback grouping.</div>
+      <div class="child mt-s" style="height:116px">
+        <div class="trow"><span class="arrow">&#9660;</span><span class="name">Gear</span><span class="counts">(684 mods)</span></div>
+        <div class="trow indent-1"><span class="arrow">&#9654;</span><span class="name">Head</span><span class="counts">(96 mods)</span></div>
+        <div class="trow indent-1"><span class="arrow">&#9654;</span><span class="name">Body</span><span class="counts">(203 mods)</span></div>
+        <div class="trow"><span class="arrow">&#9654;</span><span class="name">Hair</span><span class="counts">(212 mods)</span></div>
+      </div>
+      <div class="sep"></div>
+      <button>Export my layout as a template...</button>
+      <div class="mt-s warn">A template lists your mod names, and anyone you send it to can read that list.</div>
     </div>
   </div>
 </section>

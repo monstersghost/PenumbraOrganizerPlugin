@@ -43,7 +43,8 @@ python docs/ui-mock/split.py
 3. Open each `docs/ui-mock/<screen>.html` at a viewport of **800 wide** and screenshot it. The mock
    is set to `width: 100%` up to 1120px, so at 800 it is captured 1:1 and the small text stays
    sharp; anything wider gets downscaled by the pane and smears.
-4. Crop the page background and save into `docs/images/<name>.png`:
+4. Crop the page background and save into `docs/images/<name>.png` (needs Pillow; run it with
+   plain `python`, since `-I` hides user site-packages and PIL will not import):
 
 ```bash
 python docs/ui-mock/crop.py <screenshot.jpg> docs/images/<name>.png
@@ -60,3 +61,10 @@ Current screenshots and their screens:
 | `images/sort.png` | `sort.html` |
 | `images/review-changes.png` | `review.html` |
 | `images/history.png` | `history.html` |
+| `images/search.png` | `search.html` |
+| `images/templates.png` | `templates.html` |
+
+## Gotcha
+
+The preview pane refuses to open a file once a lot of tabs are already open, with an error that
+looks like the file is missing. Close the old tabs and it works again.
