@@ -37,6 +37,9 @@ public sealed partial class MainWindow : Window, IDisposable
     // Set by a folder row's "Unprotect N inside" button; also gates that row's confirm modal.
     private string? _pendingUnprotectFolder;
     private bool _unprotectFolderPopupOpened;
+    // Mirrors Config.ExpandedProtectFolders, mutated in place by the folder tree as nodes open and
+    // close. Held here rather than read from the config each frame because the tree writes to it.
+    private readonly HashSet<string> _expandedProtectFolders;
     private string _manualFolderInput = string.Empty;
     private readonly HashSet<string> _selectedManualModIdentifiers = new(StringComparer.Ordinal);
     private string _manualAssignFilter = string.Empty;
@@ -152,6 +155,7 @@ public sealed partial class MainWindow : Window, IDisposable
         ];
 
         _plugin = plugin;
+        _expandedProtectFolders = new HashSet<string>(plugin.Config.ExpandedProtectFolders, StringComparer.Ordinal);
     }
 
     public void Dispose()
@@ -404,6 +408,23 @@ public sealed partial class MainWindow : Window, IDisposable
         }
 
         _historyCache = null;
+    }
+
+    private void SaveExpandedProtectFoldersSafely()
+    {
+        try
+        {
+            _plugin.Config.ExpandedProtectFolders = new HashSet<string>(_expandedProtectFolders, StringComparer.Ordinal);
+            _plugin.SaveConfig();
+        }
+        catch (Exception ex)
+        {
+            // Same stance as SaveProtectionStateSafely: a failed save of a UI preference must never
+            // take the window down mid-frame. Plugin.Log is static, and _lastError is the field
+            // that surfaces a failure in the window.
+            _lastError = $"Failed to save folder expansion: {ex.Message}";
+            Plugin.Log.Error(ex, "Failed to save Protect tab folder expansion.");
+        }
     }
 
     private void SaveProtectionStateSafely()

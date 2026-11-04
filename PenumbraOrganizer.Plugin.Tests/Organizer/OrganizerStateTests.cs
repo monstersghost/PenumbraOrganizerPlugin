@@ -986,7 +986,11 @@ public class OrganizerStateTests
         Assert.Equal(2, counts["NewMods"].Protected);
         Assert.Equal(2, counts["NewMods"].Freeable);
         Assert.Equal(1, counts["NewMods/Sub"].Protected);
-        Assert.DoesNotContain("Gear", counts.Keys);
+        // "Gear" now gets an entry so the Protect tab's tree can label it; what the old
+        // assertion was really pinning is that an unprotected mod contributes nothing to
+        // the protected counts, which this says directly.
+        Assert.Equal(0, counts["Gear"].Protected);
+        Assert.Equal(0, counts["Gear"].Freeable);
     }
 
 
@@ -1261,7 +1265,7 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         var row = MakeRow("a", "Boots", currentPath: "Gear/Feet/Boots");
 
-        state.LoadScan([row], new HashSet<string>(), new HashSet<string> { "Gear/Feet" });
+        state.LoadScan([row], new HashSet<string>(), new Dictionary<string, bool> { ["Gear/Feet"] = true });
 
         Assert.True(state.Mods.Single().Protected);
     }
@@ -1381,5 +1385,252 @@ public class OrganizerStateTests
         Assert.Equal(viaLoadScan.Mods[0].ProposedPath, viaReplace.Mods[0].ProposedPath);
         Assert.Equal(viaLoadScan.KnownFolders, viaReplace.KnownFolders);
         Assert.True(viaReplace.HasScanned);
+    }
+
+    // --- Folder exclude rules: "protect haloween, except haloween/animation" ---
+
+    [Fact]
+    public void SetFolderProtectionRule_ExcludeUnderProtectedAncestor_FreesOnlyThatSubtree()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("root", "Mask", currentPath: "haloween/Mask"),
+             MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance"),
+             MakeRow("deep", "Wave", currentPath: "haloween/animation/sub/Wave"),
+             // Under no rule at all. Without it, every row here sits under SOME rule, where
+             // "the folder layer protects" and "the folder layer does not exclude" agree - and
+             // a protection clause weakened from one to the other would pass this test.
+             MakeRow("outside", "Boots", currentPath: "Gear/Boots")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "root").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "deep").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "outside").Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_ProtectNestedUnderAnExclude_ReprotectsThatBranch()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance"),
+             MakeRow("keep", "Keep", currentPath: "haloween/animation/keep/Keep")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+        state.SetFolderProtectionRule("haloween/animation/keep", FolderProtectionRule.Protected);
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
+        Assert.True(state.Mods.Single(m => m.Identifier == "keep").Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_None_WithdrawsTheRuleAndInheritsAgain()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.None);
+
+        Assert.True(state.Mods.Single().Protected);
+        Assert.DoesNotContain("haloween/animation", state.FolderProtectionRules.Keys);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_Exclude_DoesNotFreeAHandTickedMod()
+    {
+        // An exclude cancels the FOLDER layer only. A tick is a per-mod choice the user made.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetProtected("anim", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void SetFolderProtectionRule_Exclude_DoesNotFreeAHeliosphereMod()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("anim", "Dance", heliosphere: true, currentPath: "haloween/animation/Dance")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void ProtectedFolders_ReportsOnlyProtectRules_NotExcludes()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.Contains("haloween", state.ProtectedFolders);
+        Assert.DoesNotContain("haloween/animation", state.ProtectedFolders);
+    }
+
+    [Fact]
+    public void ResolveFolderRule_ReportsOwnRuleAndItsSource()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+
+        Assert.Equal(
+            new OrganizerState.FolderRuleResolution(FolderProtectionRule.Protected, "haloween"),
+            state.ResolveFolderRule("haloween"));
+        // Inherited: the rule applies, and the source names the ancestor it came from.
+        Assert.Equal(
+            new OrganizerState.FolderRuleResolution(FolderProtectionRule.Protected, "haloween"),
+            state.ResolveFolderRule("haloween/animation"));
+        Assert.Equal(
+            new OrganizerState.FolderRuleResolution(FolderProtectionRule.None, null),
+            state.ResolveFolderRule("Gear"));
+    }
+
+    [Fact]
+    public void ReplaceScanAtomically_CarriesExcludeRulesThroughARescan()
+    {
+        var state = new OrganizerState();
+        var rules = new Dictionary<string, bool>(StringComparer.Ordinal)
+        {
+            ["haloween"] = true,
+            ["haloween/animation"] = false,
+        };
+
+        state.LoadScan(
+            [MakeRow("root", "Mask", currentPath: "haloween/Mask"),
+             MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")],
+            new HashSet<string>(),
+            rules);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "root").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "anim").Protected);
+        Assert.False(state.FolderProtectionRules["haloween/animation"]);
+    }
+
+    [Fact]
+    public void BuildProtectedModCountsByFolder_ExcludedFolder_CountsOnlyTheStragglersAsFreeable()
+    {
+        // The exclude already freed the folder-protected rows. What is left is a hand-ticked mod,
+        // which only "Unprotect N inside" can clear - so the tab must still offer it, for 1.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("plain", "Dance", currentPath: "haloween/animation/Dance"),
+             MakeRow("ticked", "Wave", currentPath: "haloween/animation/Wave")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetProtected("ticked", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        var counts = state.BuildProtectedModCountsByFolder();
+
+        Assert.Equal(1, counts["haloween/animation"].Protected);
+        Assert.Equal(1, counts["haloween/animation"].Freeable);
+        Assert.Equal(2, counts["haloween/animation"].Total);
+    }
+
+    [Fact]
+    public void BuildProtectedModCountsByFolder_ReportsTotalsForFoldersWithNothingProtected()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Dance", currentPath: "hair/01/Dance"),
+             MakeRow("b", "Wave", currentPath: "hair/01/Wave")],
+            new HashSet<string>());
+
+        var counts = state.BuildProtectedModCountsByFolder();
+
+        Assert.Equal(2, counts["hair"].Total);
+        Assert.Equal(2, counts["hair/01"].Total);
+        Assert.Equal(0, counts["hair"].Protected);
+    }
+
+    [Fact]
+    public void BuildProtectedModCountsByFolder_ProtectNestedUnderAnExclude_IsFreeableAtTheDeepestFolder()
+    {
+        // The masked ancestor is the trap: "haloween" protects, but the exclude below it means
+        // withdrawing the "keep" rule leaves the row excluded, not protected - so the deepest
+        // folder CAN free it and the tab must offer the action.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Keep", currentPath: "haloween/animation/keep/Keep")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+        state.SetFolderProtectionRule("haloween/animation/keep", FolderProtectionRule.Protected);
+
+        var counts = state.BuildProtectedModCountsByFolder();
+
+        Assert.Equal(1, counts["haloween/animation/keep"].Protected);
+        Assert.Equal(1, counts["haloween/animation/keep"].Freeable);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_InsideAnExcludedBranch_ClearsTicksAndLeavesTheAncestorAlone()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("root", "Mask", currentPath: "haloween/Mask"),
+             MakeRow("ticked", "Wave", currentPath: "haloween/animation/Wave")],
+            new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetProtected("ticked", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+
+        Assert.Equal(1, state.UnprotectFolderContents("haloween/animation"));
+        Assert.False(state.Mods.Single(m => m.Identifier == "ticked").Protected);
+        // The ancestor's rule is untouched, so its own mods stay protected.
+        Assert.True(state.Mods.Single(m => m.Identifier == "root").Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_KeepsAnExcludeRule_SoItDoesNotReprotectWhatItJustFreed()
+    {
+        // The action withdraws a PROTECT rule. Withdrawing an exclude would hand the branch back
+        // to the protected ancestor - it would re-protect every row the action is being asked to
+        // free, which is the exact opposite of the button's promise.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("anim", "Dance", currentPath: "haloween/animation/Dance")], new HashSet<string>());
+
+        state.SetFolderProtected("haloween", true);
+        state.SetFolderProtectionRule("haloween/animation", FolderProtectionRule.Excluded);
+        state.UnprotectFolderContents("haloween/animation");
+
+        Assert.False(state.FolderProtectionRules["haloween/animation"]);
+        Assert.False(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void UnprotectFolderContents_WithNoOwnRule_StillDoesNotEscapeAProtectedAncestor()
+    {
+        // The pinned rule from 0.6.1.2, restated against the new model: the button never overrides
+        // an ancestor on its own. Escaping an ancestor is what the tri-state exclude is for, and
+        // that takes a deliberate click on this folder's own box.
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Boots", currentPath: "Gear/Feet/Boots")], new HashSet<string>());
+
+        state.SetFolderProtected("Gear", true);
+        state.UnprotectFolderContents("Gear/Feet");
+
+        Assert.True(state.Mods.Single().Protected);
+        Assert.DoesNotContain("Gear/Feet", state.FolderProtectionRules.Keys);
     }
 }

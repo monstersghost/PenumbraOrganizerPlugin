@@ -5,11 +5,12 @@ namespace PenumbraOrganizer.Plugin.Tests;
 public class ConfigurationTests
 {
     [Fact]
-    public void DefaultConfiguration_HasVersionOneAndEmptyProtectedSet()
+    public void DefaultConfiguration_IsAtTheCurrentVersionWithAnEmptyProtectedSet()
     {
         var config = new Configuration();
 
-        Assert.Equal(1, config.Version);
+        Assert.Equal(Configuration.CurrentVersion, config.Version);
+        Assert.Equal(2, Configuration.CurrentVersion);
         Assert.Empty(config.ProtectedModIdentifiers);
     }
 
@@ -103,5 +104,126 @@ public class ConfigurationTests
         var json = System.Text.Json.JsonSerializer.Serialize(new Configuration { FirstRunTutorialSeen = true });
 
         Assert.True(System.Text.Json.JsonSerializer.Deserialize<Configuration>(json)!.FirstRunTutorialSeen);
+    }
+
+    [Fact]
+    public void MigrateToCurrentVersion_V1ProtectedFolders_BecomeProtectRules()
+    {
+        // An upgrading user must not have to re-tick anything: every v1 folder was a protect.
+        const string legacyJson =
+            """{"Version":1,"ProtectedModIdentifiers":["a"],"ProtectedFolderPaths":["Gear","haloween"]}""";
+
+        var config = System.Text.Json.JsonSerializer.Deserialize<Configuration>(legacyJson)!;
+        config.MigrateToCurrentVersion();
+
+        Assert.Equal(Configuration.CurrentVersion, config.Version);
+        Assert.True(config.FolderProtectionRules["Gear"]);
+        Assert.True(config.FolderProtectionRules["haloween"]);
+        // Deliberately still there. It is the mirror a pre-v2 build reads if the user rolls back,
+        // and SaveProtectionState keeps rewriting it from the live protect rules.
+        Assert.Equal(["Gear", "haloween"], config.ProtectedFolderPaths.OrderBy(f => f, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void MigrateToCurrentVersion_DoesNotOverwriteARuleWrittenByThisVersion()
+    {
+        // The legacy field is older than any rule map entry, so an exclude the user has since set
+        // must survive a migration that still sees that folder listed as protected.
+        const string json =
+            """
+            {"Version":1,"ProtectedFolderPaths":["haloween","haloween/animation"],
+             "FolderProtectionRules":{"haloween/animation":false}}
+            """;
+
+        var config = System.Text.Json.JsonSerializer.Deserialize<Configuration>(json)!;
+        config.MigrateToCurrentVersion();
+        config.MigrateToCurrentVersion();
+
+        Assert.True(config.FolderProtectionRules["haloween"]);
+        Assert.False(config.FolderProtectionRules["haloween/animation"]);
+        Assert.Equal(2, config.FolderProtectionRules.Count);
+    }
+
+    [Fact]
+    public void FolderProtectionRules_RoundTripThroughJson_IncludingExcludes()
+    {
+        var config = new Configuration
+        {
+            FolderProtectionRules = { ["haloween"] = true, ["haloween/animation"] = false },
+            ExpandedProtectFolders = { "haloween" },
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(config);
+        var roundTripped = System.Text.Json.JsonSerializer.Deserialize<Configuration>(json)!;
+
+        Assert.True(roundTripped.FolderProtectionRules["haloween"]);
+        Assert.False(roundTripped.FolderProtectionRules["haloween/animation"]);
+        Assert.Contains("haloween", roundTripped.ExpandedProtectFolders);
+    }
+
+    [Fact]
+    public void UpgradeRollbackReupgrade_KeepsEveryFolderProtectedOnEitherBuild()
+    {
+        // The round trip this plugin's release process actually produces: a tester opts into a
+        // testing build, goes back to stable, protects another folder there, and later updates
+        // again. A version-guarded migration dropped that last folder, because a pre-v2 build
+        // re-saves Version as 2 and the migration would then skip.
+        const string v1Json =
+            """{"Version":1,"ProtectedModIdentifiers":[],"ProtectedFolderPaths":["Gear"]}""";
+
+        // Upgrade.
+        var upgraded = System.Text.Json.JsonSerializer.Deserialize<Configuration>(v1Json)!;
+        upgraded.MigrateToCurrentVersion();
+        upgraded.FolderProtectionRules["Gear/Feet"] = false;
+        // What SaveProtectionState writes: the legacy mirror is the protect rules only.
+        upgraded.ProtectedFolderPaths = ["Gear"];
+
+        // Rolled back. The old build cannot read FolderProtectionRules, reads the mirror, and
+        // protects one more folder - then saves, carrying Version 2 and its own rules forward.
+        var rolledBack = System.Text.Json.JsonSerializer
+            .Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(upgraded))!;
+        Assert.Equal(["Gear"], rolledBack.ProtectedFolderPaths);
+        rolledBack.ProtectedFolderPaths.Add("Hats");
+
+        // Updated again.
+        var reupgraded = System.Text.Json.JsonSerializer
+            .Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(rolledBack))!;
+        reupgraded.MigrateToCurrentVersion();
+
+        Assert.True(reupgraded.FolderProtectionRules["Gear"]);
+        // Protected while on the old build, and not lost on the way back up.
+        Assert.True(reupgraded.FolderProtectionRules["Hats"]);
+        // The exclude set on the new build survives: the mirror never listed it, so TryAdd
+        // cannot overwrite it with a protect.
+        Assert.False(reupgraded.FolderProtectionRules["Gear/Feet"]);
+    }
+
+    [Fact]
+    public void DefaultConfiguration_HasNoExpandedProtectFolders()
+        => Assert.Empty(new Configuration().ExpandedProtectFolders);
+
+    [Fact]
+    public void UpgradePath_V1ProtectedFolder_StillProtectsItsModsAfterMigrationAndScan()
+    {
+        const string legacyJson =
+            """{"Version":1,"ProtectedModIdentifiers":[],"ProtectedFolderPaths":["Gear"]}""";
+        var config = System.Text.Json.JsonSerializer.Deserialize<Configuration>(legacyJson)!;
+        config.MigrateToCurrentVersion();
+
+        var inside = new OrganizerModRow
+        {
+            Identifier = "m1", Name = "Boots", Author = "A",
+            CurrentPath = "Gear/Boots", ProposedPath = "Gear/Boots",
+        };
+        var outside = new OrganizerModRow
+        {
+            Identifier = "m2", Name = "Hat", Author = "A",
+            CurrentPath = "Other/Hat", ProposedPath = "Other/Hat",
+        };
+        var state = new OrganizerState();
+        state.LoadScan([inside, outside], config.ProtectedModIdentifiers, config.FolderProtectionRules);
+
+        Assert.True(inside.Protected);
+        Assert.False(outside.Protected);
     }
 }

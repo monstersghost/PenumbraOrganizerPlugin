@@ -113,12 +113,17 @@
     {
       "id": "protect.folders",
       "title": "Protected folders",
-      "short": "Protecting a folder protects everything under it at any depth, including mods that land there later. Checking Gear also covers Gear/Feet and everything below it."
+      "short": "Protects every mod in a folder and its subfolders. Click a box to cycle protect, exclude, inherit, so one subfolder can stay free inside a protected one. Folders form a tree: click the arrow to open."
     },
     {
       "id": "protect.folder-unprotect-contents",
       "title": "Unprotect everything inside a folder",
       "short": "Clears protection from every mod in this folder - the mod's own tick, Protect all, this folder or Heliosphere alike. Use it to sort one folder and leave the rest protected."
+    },
+    {
+      "id": "protect.folder-rule-cycle",
+      "title": "Protect, exclude, or inherit",
+      "short": "Click a box to cycle protect, exclude, inherit. Dim = inherited from a parent; solid = set here. Exclude frees mods under a protected parent, except hand-ticked and Heliosphere mods."
     },
     {
       "id": "protect.mods",

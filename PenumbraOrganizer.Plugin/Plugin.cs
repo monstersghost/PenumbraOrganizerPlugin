@@ -63,10 +63,15 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
+        Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        // Before anything reads the folder rules: a v1 file carries its protected folders in the
+        // legacy field, and a scan that ran first would see no rules at all and unprotect them.
+        Config.MigrateToCurrentVersion();
+
+        // The window reads Config in its constructor, so it cannot be built before the config is
+        // loaded and migrated.
         _mainWindow = new MainWindow(this);
         WindowSystem.AddWindow(_mainWindow);
-
-        Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         // A config written before 0.6.0 has no FirstRunTutorialSeen, so it reads false and an
         // upgrading user gets the walkthrough once. That is intended - see Configuration's remarks.
@@ -403,7 +408,9 @@ public sealed class Plugin : IDalamudPlugin
     internal void SaveProtectionState()
     {
         Config.ProtectedModIdentifiers = OrganizerState.ProtectedModIdentifiers.ToHashSet();
-        Config.ProtectedFolderPaths = OrganizerState.ProtectedFolders.ToHashSet();
+        Config.FolderProtectionRules = OrganizerState.FolderProtectionRules
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        Config.ProtectedFolderPaths = OrganizerState.ProtectedFolders.ToHashSet(StringComparer.Ordinal);
         PluginInterface.SavePluginConfig(Config);
     }
 

@@ -48,6 +48,35 @@ public static class OrganizationCleanupPlanner
             parent.StartsWith(folder + "/", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The folder layer's verdict for <paramref name="currentPath"/>: the rule on the NEAREST
+    /// ruled ancestor of the mod's virtual parent, or <see cref="FolderProtectionRule.None"/> when
+    /// no ancestor carries one.
+    /// </summary>
+    /// <remarks>
+    /// This replaces an any-match over a set of protected folders. The set could only ever say
+    /// "protected", so protecting "haloween" made every descendant protected with no way to carve
+    /// out "haloween/animation" - which is how it was reported. Walking upward from the immediate
+    /// parent and returning the first rule found gives deepest-rule-wins for free, and keeps the
+    /// boundary-safe parent chain (GetVirtualParent), never a bare StartsWith.
+    /// </remarks>
+    /// <param name="folderRules">
+    /// Must be keyed with <see cref="StringComparer.Ordinal"/> and with normalized paths: the
+    /// lookup here inherits whatever comparer the caller built, so a case-insensitive one would
+    /// quietly widen every rule.
+    /// </param>
+    public static FolderProtectionRule ResolveFolderProtection(
+        string currentPath, IReadOnlyDictionary<string, bool> folderRules)
+    {
+        for (var folder = GetVirtualParent(currentPath); folder is not null; folder = GetVirtualParent(folder))
+        {
+            if (folderRules.TryGetValue(folder, out var isProtected))
+                return isProtected ? FolderProtectionRule.Protected : FolderProtectionRule.Excluded;
+        }
+
+        return FolderProtectionRule.None;
+    }
+
     public static (IReadOnlyList<string> PlainEmpty, IReadOnlyList<CustomizedFolder> CustomizedEmpty)
         DetectOrphaned(OrganizationJson data, IReadOnlySet<string> occupiedFolders)
     {

@@ -1,14 +1,37 @@
-using Dalamud.Configuration;
+﻿using Dalamud.Configuration;
 
 namespace PenumbraOrganizer.Plugin;
 
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    /// <summary>
+    /// 2: folder protection is a rule map (protect/exclude) rather than a set of protected
+    /// folders. <see cref="MigrateToCurrentVersion"/> carries a v1 file across.
+    /// </summary>
+    public const int CurrentVersion = 2;
+
+    public int Version { get; set; } = CurrentVersion;
 
     public HashSet<string> ProtectedModIdentifiers { get; set; } = [];
 
+    /// <summary>
+    /// Pre-v2 protected folders. <see cref="MigrateToCurrentVersion"/> reads it once and empties it.
+    /// It is then maintained as a write-only compatibility projection of the protect rules (excludes
+    /// are not representable), so a rollback to a pre-v2 build keeps its folder protection. The
+    /// version guard stops a v2 build ever reading it back.
+    /// </summary>
     public HashSet<string> ProtectedFolderPaths { get; set; } = [];
+
+    /// <summary>Folders whose node is open in the Protect tab's tree.</summary>
+    /// <remarks>
+    /// Persisted because the tree defaults to collapsed, and re-digging to the same hair subfolder
+    /// every session is the complaint the tree exists to answer. Holds paths that no longer exist
+    /// harmlessly: a path with no node is simply never consulted.
+    /// </remarks>
+    public HashSet<string> ExpandedProtectFolders { get; set; } = [];
+
+    /// <summary>Folder path -> true (protect) / false (exclude). Replaces ProtectedFolderPaths.</summary>
+    public Dictionary<string, bool> FolderProtectionRules { get; set; } = [];
 
     /// <summary>
     /// Every mod identifier any scan has ever resolved as Heliosphere-managed.
@@ -64,4 +87,34 @@ public sealed class Configuration : IPluginConfiguration
     /// not compile.
     /// </remarks>
     public const bool ScrapedNpcListFeatureEnabled = false;
+
+    /// <summary>
+    /// Brings a config loaded from disk up to <see cref="CurrentVersion"/>. Safe to call on a
+    /// fresh config (which is already current), and idempotent by way of the DATA rather than of
+    /// a version check.
+    /// </summary>
+    /// <remarks>
+    /// Every entry of <see cref="ProtectedFolderPaths"/> becomes a protect rule, which is exactly
+    /// what it meant, so behaviour after an upgrade is identical and nothing needs re-ticking.
+    /// TryAdd, not an assignment: a rule already in the map was written by this version and is
+    /// newer than the legacy field - notably an exclude, which the legacy field cannot express.
+    /// <para>
+    /// Deliberately NOT guarded on <see cref="Version"/>, and the legacy field is deliberately NOT
+    /// cleared. This plugin ships testing builds that users opt into and can roll back from, so
+    /// the round trip has to survive: a pre-v2 build keeps protecting folders because the legacy
+    /// field is still there, keeps writing that field itself, and re-saves Version as 2 - so a
+    /// version-guarded migration would skip on the way back up and drop every folder the user
+    /// protected while on the old build. Reading the field every time costs nothing, because
+    /// <c>SaveProtectionState</c> rewrites it from the live protect rules on every save, which
+    /// makes it a mirror rather than a second source of truth: a folder the user unprotects here
+    /// leaves both, and TryAdd can only ever re-add what the mirror still lists.
+    /// </para>
+    /// </remarks>
+    public void MigrateToCurrentVersion()
+    {
+        foreach (var folder in ProtectedFolderPaths)
+            FolderProtectionRules.TryAdd(folder, true);
+
+        Version = CurrentVersion;
+    }
 }

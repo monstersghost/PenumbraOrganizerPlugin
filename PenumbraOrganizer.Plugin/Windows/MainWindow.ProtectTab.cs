@@ -7,6 +7,7 @@ using Dalamud.Interface.Windowing;
 using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.LibrarySearch;
+using PenumbraOrganizer.Plugin.Organizer;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -70,15 +71,12 @@ public sealed partial class MainWindow
         ImGui.Spacing();
 
         var filter = _protectFilter.Trim();
-        var protectedFolders = _plugin.OrganizerState.ProtectedFolders.ToHashSet(StringComparer.Ordinal);
         var knownFolders = _plugin.OrganizerState.KnownFolders.ToHashSet(StringComparer.Ordinal);
-        var folderRows = knownFolders
-            .Union(protectedFolders, StringComparer.Ordinal)
-            .Where(f => filter.Length == 0 || f.Contains(filter, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f, StringComparer.Ordinal)
-            .ToList();
-
         var protectedCountsByFolder = _plugin.OrganizerState.BuildProtectedModCountsByFolder();
+        // Ruled folders are included even when empty, so a rule is never invisible: a folder whose
+        // mods have all moved away still shows its own tick and can be untangled.
+        var folderTree = FolderProtectionTree.Build(
+            knownFolders.Union(_plugin.OrganizerState.FolderProtectionRules.Keys, StringComparer.Ordinal));
 
         ImGui.TextUnformatted("Folders");
         Help.Tooltip(HelpTopics.ProtectFolders);
@@ -86,49 +84,22 @@ public sealed partial class MainWindow
         {
             if (folderChild)
             {
-                foreach (var folder in folderRows)
-                {
-                    var isExactlyProtected = protectedFolders.Contains(folder);
-                    var label = knownFolders.Contains(folder) ? folder : $"{folder} (currently empty)";
-                    var isChecked = isExactlyProtected;
-                    if (ImGui.Checkbox($"{label}##protect-folder-{folder}", ref isChecked))
+                var expansionChanged = FolderProtectionTree.Draw(
+                    folderTree,
+                    _plugin.OrganizerState.ResolveFolderRule,
+                    protectedCountsByFolder,
+                    knownFolders,
+                    filter,
+                    _expandedProtectFolders,
+                    (folder, rule) =>
                     {
-                        _plugin.OrganizerState.SetFolderProtected(folder, isChecked);
+                        _plugin.OrganizerState.SetFolderProtectionRule(folder, rule);
                         SaveProtectionStateSafely();
-                    }
+                    },
+                    folder => _pendingUnprotectFolder = folder);
 
-                    // Computed whether or not this folder is ticked itself: a ticked folder can
-                    // also sit under a protected ancestor, and that ancestor is what decides
-                    // whether the unprotect button below can do anything.
-                    var ancestor = protectedFolders.FirstOrDefault(f =>
-                        !f.Equals(folder, StringComparison.Ordinal)
-                        && folder.StartsWith(f + "/", StringComparison.Ordinal));
-                    // Shown for a ticked folder too, where it reads as "also": a protected
-                    // ancestor is why the unprotect button below is absent, and without the note
-                    // such a row would offer nothing with no reason given.
-                    if (ancestor is not null)
-                    {
-                        ImGui.SameLine();
-                        ImGui.TextDisabled(isExactlyProtected
-                            ? $"(also covered by protected folder \"{ancestor}\")"
-                            : $"(covered by protected folder \"{ancestor}\")");
-                    }
-
-                    // Unticking the checkbox above withdraws only this folder's own rule - a mod
-                    // ticked individually, or caught by "Toggle protect all" (which writes an
-                    // explicit entry for every mod and ticks no folder at all), stays protected.
-                    // That left "protect everything except this one folder" impossible, which is
-                    // how it was reported: Sort then says "apply to 0 mods". This is the explicit
-                    // way to clear a folder's contents, whichever source protected them.
-                    var counts = protectedCountsByFolder.GetValueOrDefault(folder);
-                    if (counts.Freeable > 0)
-                    {
-                        ImGui.SameLine();
-                        if (ImGui.SmallButton($"Unprotect {counts.Freeable} inside##protect-folder-clear-{folder}"))
-                            _pendingUnprotectFolder = folder;
-                        Help.Tooltip(HelpTopics.ProtectFolderUnprotectContents);
-                    }
-                }
+                if (expansionChanged)
+                    SaveExpandedProtectFoldersSafely();
             }
         }
 
@@ -231,12 +202,11 @@ public sealed partial class MainWindow
                         }
                         else
                         {
-                            var parent = Organizer.OrganizationCleanupPlanner.GetVirtualParent(mod.CurrentPath);
-                            var coveringFolder = parent is null
-                                ? null
-                                : protectedFolders.FirstOrDefault(f =>
-                                    parent.Equals(f, StringComparison.Ordinal) || parent.StartsWith(f + "/", StringComparison.Ordinal));
-                            ImGui.TextDisabled(coveringFolder is not null ? $"(via folder: {coveringFolder})" : "(protected)");
+                            var resolution = _plugin.OrganizerState.ResolveFolderRule(
+                                Organizer.OrganizationCleanupPlanner.GetVirtualParent(mod.CurrentPath));
+                            ImGui.TextDisabled(resolution.Rule == FolderProtectionRule.Protected
+                                ? $"(via folder: {resolution.Source})"
+                                : "(protected)");
                         }
                     }
                 }

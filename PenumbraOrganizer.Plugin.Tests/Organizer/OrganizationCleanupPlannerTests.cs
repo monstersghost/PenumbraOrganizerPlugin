@@ -231,4 +231,53 @@ public class OrganizationCleanupPlannerTests
         Assert.Equal(1, pruned.Version);
         Assert.Same(data.ExtensionData, pruned.ExtensionData);
     }
+
+    // --- ResolveFolderProtection: deepest rule on the parent chain wins ---
+
+    private static Dictionary<string, bool> Rules(params (string Folder, bool Protected)[] rules)
+        => rules.ToDictionary(r => r.Folder, r => r.Protected, StringComparer.Ordinal);
+
+    [Fact]
+    public void ResolveFolderProtection_NoRules_ReturnsNone()
+        => Assert.Equal(FolderProtectionRule.None, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "Gear/Feet/Boots", Rules()));
+
+    [Fact]
+    public void ResolveFolderProtection_RuleOnImmediateParent_Applies()
+        => Assert.Equal(FolderProtectionRule.Protected, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "Gear/Feet/Boots", Rules(("Gear/Feet", true))));
+
+    [Fact]
+    public void ResolveFolderProtection_RuleOnAncestor_InheritsDownward()
+        => Assert.Equal(FolderProtectionRule.Protected, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "Gear/Feet/Sub/Boots", Rules(("Gear", true))));
+
+    [Fact]
+    public void ResolveFolderProtection_ExcludeUnderProtect_DeepestWins()
+        => Assert.Equal(FolderProtectionRule.Excluded, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "haloween/animation/Dance", Rules(("haloween", true), ("haloween/animation", false))));
+
+    [Fact]
+    public void ResolveFolderProtection_ProtectUnderExclude_DeepestWins()
+        => Assert.Equal(FolderProtectionRule.Protected, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "haloween/animation/keep/Dance",
+            // No rule on "haloween" deliberately: with one, the outermost and deepest rules would
+            // both be Protected and this test would pass under a walk in either direction.
+            Rules(("haloween/animation", false), ("haloween/animation/keep", true))));
+
+    [Fact]
+    public void ResolveFolderProtection_ExcludeInheritsToDeeperDescendants()
+        => Assert.Equal(FolderProtectionRule.Excluded, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "haloween/animation/sub/deeper/Dance",
+            Rules(("haloween", true), ("haloween/animation", false))));
+
+    [Fact]
+    public void ResolveFolderProtection_RootLevelMod_ReturnsNone()
+        => Assert.Equal(FolderProtectionRule.None, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "LooseMod", Rules(("LooseMod", true))));
+
+    [Fact]
+    public void ResolveFolderProtection_SiblingWithSharedPrefix_DoesNotMatch()
+        => Assert.Equal(FolderProtectionRule.None, OrganizationCleanupPlanner.ResolveFolderProtection(
+            "BodyMods/Author/Mod", Rules(("Body", true))));
 }

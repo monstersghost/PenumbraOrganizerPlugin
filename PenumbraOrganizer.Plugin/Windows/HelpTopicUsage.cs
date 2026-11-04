@@ -22,6 +22,7 @@ public static class HelpTopicUsage
         HelpTopics.ProtectToggleHeliosphere,
         HelpTopics.ProtectFolders,
         HelpTopics.ProtectFolderUnprotectContents,
+        HelpTopics.ProtectFolderRuleCycle,
         HelpTopics.ProtectMods,
         HelpTopics.ProtectHeliosphereNote,
         HelpTopics.ProtectStrandedAtRoot,
