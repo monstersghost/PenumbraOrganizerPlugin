@@ -24,6 +24,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
 
     private NpcNameMatcher _npcNameMatcher = NpcNameMatcher.Empty;
     private BodyTypeMatcher _bodyTypeMatcher = BodyTypeMatcher.Empty;
+    private BodyPriority _defaultBodyPriority = BodyPriority.Default([]);
 
     /// <param name="useScrapedNpcNameList">
     /// Already the conjunction of the config flag and the compile-time feature gate - ScanJob
@@ -48,6 +49,12 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
     /// <summary> Framework thread reads this after the run completes. </summary>
     public IReadOnlyList<string> Warnings => _warnings;
 
+    /// <summary>
+    /// The labels of the body list this scan's matcher was built from. Published with the rows so the
+    /// Sort tab ranks exactly the bodies the evidence was matched against.
+    /// </summary>
+    public IReadOnlyList<string> BodyLabels { get; private set; } = [];
+
     public void Prepare(CancellationToken ct)
     {
         var result = NpcNameListStore.LoadForMatching(_configDirectory, _useScrapedNpcNameList);
@@ -62,6 +69,8 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         var bodyResult = BodyTypeListStore.LoadForMatching(_configDirectory);
         _warnings.AddRange(bodyResult.Warnings);
         _bodyTypeMatcher = BodyTypeListStore.BuildMatcher(bodyResult.Document);
+        BodyLabels = [.. bodyResult.Document.Bodies.Select(b => b.Label)];
+        _defaultBodyPriority = BodyPriority.Default(BodyLabels);
     }
 
     public OrganizerModRow? Process(ScanSeed item, CancellationToken ct)
@@ -71,15 +80,19 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         var modPath = new DirectoryInfo(item.ModDirectoryPath);
         var classification = ModTypeClassifier.Classify(item.Name, item.ChangedItemKeys, _npcNameMatcher);
 
-        // Disk I/O only for mods the changed-items rule already confirmed are Gear - every other
-        // category never touches disk for this.
+        // ONE walk of the mod's config for every row that needs any of it: slots for Gear, hair
+        // evidence for Hair, and body evidence for Gear and Body. A Gear mod is read once, not once
+        // per consumer. Null means the walk could not be trusted.
+        ModContent? content = null;
+        var walked = classification.Category is ModCategory.Gear or ModCategory.Hair or ModCategory.Body;
+        if (walked)
+            content = ModContentReader.Read(modPath);
+
         var gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable;
-        // Hoisted: the body-type gate below needs these slots too, to tell gear that is cut to a
-        // body's shape from a weapon or a ring that merely classifies as Gear.
         IReadOnlySet<EquipmentSlot>? equipmentSlots = null;
         if (classification.Category == ModCategory.Gear)
         {
-            equipmentSlots = ModEquipmentFileReader.ReadEquipmentSlots(modPath);
+            equipmentSlots = content?.Slots;
             classification = ModTypeClassifier.EnrichGearSubCategory(classification, equipmentSlots);
 
             gearSlotDiagnostic = equipmentSlots switch
@@ -92,33 +105,26 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             };
         }
 
-        // Disk I/O only for mods the changed-items rule already confirmed are Hair, matching the
-        // gear gate above - every other category never touches disk for this. No diagnostic
-        // counterpart to gearSlotDiagnostic on purpose: both readers share one walker and read the
-        // same files, so a library-wide read failure is already visible through the gear one.
         ModHairFileReader.HairEvidence? hairEvidence = null;
         if (classification.Category == ModCategory.Hair)
         {
-            hairEvidence = ModHairFileReader.ReadHairEvidence(modPath);
+            hairEvidence = content?.Hair;
             classification = ModTypeClassifier.EnrichHairSubCategory(classification, hairEvidence?.Flat);
         }
 
-        // The body a mod is for, from its NAME, and no disk read at all - unlike the gear and hair
-        // passes above. There is no structural signal to read: a garment made for Bibo+ replaces
-        // its own equipment set, not the body's models, and nothing in its files names the body.
-        // Proteus establishes this by mesh and UV correspondence against the body's own meshes,
-        // which is far more work than a sort should do.
-        //
-        // Gear and Body only, and for Gear only when the slots say the mod is cut to a body's
-        // shape - see ModTypeClassifier.BodyTypeApplies. That gate needs no extra disk read: the
-        // gear pass above already resolved these slots.
-        //
-        // It is what keeps a weapon out. A weapon mod classifies as Gear, carries no equipment
-        // slot, and would otherwise have its name searched for a body, filing an "Artemis Bow"
-        // under the Artemis body. Hats, earrings, necklaces, bracelets and rings go the same way.
-        var bodyType = ModTypeClassifier.BodyTypeApplies(classification.Category, equipmentSlots)
-            ? _bodyTypeMatcher.Match(item.Name)?.Label
-            : null;
+        // The body a mod is for. Tier 1 is what is INSIDE the mod (option groups, options, the
+        // first folder of its files), then its name, then the library folders above it - see
+        // BodyCandidateBuilder. The slot gate is unchanged and still decides WHETHER a body applies;
+        // it is what keeps a weapon, hat or ring from having its options searched for a body name.
+        // A match is a STATED intent, not a verified fact (see BodyTypeMatcher).
+        BodyCandidates? bodyCandidates = null;
+        string? bodyType = null;
+        if (ModTypeClassifier.BodyTypeApplies(classification.Category, equipmentSlots))
+        {
+            bodyCandidates = BodyCandidateBuilder.Build(
+                _bodyTypeMatcher, item.Name, item.CurrentPath, content, contentReadFailed: walked && content is null);
+            bodyType = BodyPriorityResolver.Resolve(bodyCandidates, _defaultBodyPriority)?.Label;
+        }
 
         return new OrganizerModRow
         {
@@ -132,6 +138,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             Category = classification.Category,
             SubCategory = classification.SubCategory,
             BodyType = bodyType,
+            BodyCandidates = bodyCandidates,
             HairFlat = hairEvidence?.Flat,
             HairByRaceCode = hairEvidence?.ByRaceCode,
             GearSlotDiagnostic = gearSlotDiagnostic,

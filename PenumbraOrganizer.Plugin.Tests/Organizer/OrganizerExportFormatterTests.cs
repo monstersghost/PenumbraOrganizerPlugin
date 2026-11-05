@@ -69,6 +69,36 @@ public class OrganizerExportFormatterTests
     }
 
     [Fact]
+    public void Format_BodyEvidence_IsEmittedWhenCandidatesExist()
+    {
+        var row = MakeRow("a", "Plain Corset", category: ModCategory.Gear, subCategory: "Top", bodyType: "Rue+");
+        var withEvidence = new OrganizerModRow
+        {
+            Identifier = row.Identifier, Name = row.Name, Author = row.Author,
+            CurrentPath = row.CurrentPath, ProposedPath = row.ProposedPath,
+            Category = row.Category, SubCategory = row.SubCategory, BodyType = "Rue+",
+            BodyCandidates = new BodyCandidates
+            {
+                Content = [new BodyCandidate("Rue+", BodyEvidenceSource.Option)],
+            },
+        };
+
+        var result = OrganizerExportFormatter.Format(
+            [withEvidence], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.Contains("BodyEvidence: content=[Rue+ (Option)] name=[] library=[] contentRead=ok", result);
+    }
+
+    [Fact]
+    public void Format_NoCandidates_EmitsNoBodyEvidenceLine()
+    {
+        var result = OrganizerExportFormatter.Format(
+            [MakeRow("a", "Mystery Mod")], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.DoesNotContain("BodyEvidence:", result);
+    }
+
+    [Fact]
     public void Format_BodyType_IsAlwaysEmitted()
     {
         // A body type is read from the mod's NAME, so it is the classification signal most likely

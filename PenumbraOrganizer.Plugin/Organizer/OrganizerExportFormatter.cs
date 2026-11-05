@@ -46,6 +46,11 @@ public static class OrganizerExportFormatter
             // is exactly as diagnostic as "it matched Bibo+" - a dump that showed only the hits
             // could not answer how many mods went unmatched.
             sb.AppendLine($"BodyType: {mod.BodyType ?? "(none)"}");
+            // Why this mod landed where it did: every candidate with its tier and source. The
+            // BodyType line above is the DEFAULT-order winner; a sort with another priority can pick
+            // a different candidate from this same list.
+            if (mod.BodyCandidates is { } candidates)
+                sb.AppendLine($"BodyEvidence: {candidates.Describe()}");
             if (mod.GearSlotDiagnostic != GearSlotDiagnostic.NotApplicable)
                 sb.AppendLine($"GearSlotDiagnostic: {mod.GearSlotDiagnostic}");
             sb.AppendLine($"HeliosphereManaged: {mod.HeliosphereManaged}");
