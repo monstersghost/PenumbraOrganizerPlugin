@@ -156,4 +156,42 @@ public class BodyPriorityTests
         Assert.True(moved != BodyPriority.Default(All));
         Assert.True(BodyPriority.Normalize(null, All) == BodyPriority.Default(All));
     }
+
+    [Fact]
+    public void MoveToTop_PutsTheLabelFirst_AndKeepsTheRestInOrder()
+    {
+        var p = BodyPriority.Default(All);
+
+        Assert.Equal(["TBSE", "Bibo+", "Rue+", "YAB"], p.MoveToTop("TBSE").Labels);
+        Assert.Equal(["YAB", "Bibo+", "Rue+", "TBSE"], p.MoveToTop("YAB").Labels);
+    }
+
+    [Fact]
+    public void MoveToTop_MatchesIgnoringCase_AndUsesTheCanonicalSpelling()
+    {
+        var p = BodyPriority.Default(All);
+
+        Assert.Equal(["Rue+", "Bibo+", "TBSE", "YAB"], p.MoveToTop("rue+").Labels);
+    }
+
+    [Fact]
+    public void MoveToTop_UnknownOrAlreadyFirst_ReturnsTheSameInstance()
+    {
+        var p = BodyPriority.Default(All);
+
+        Assert.Same(p, p.MoveToTop("Nope"));
+        Assert.Same(p, p.MoveToTop("Bibo+"));
+        Assert.Same(p, p.MoveToTop(""));
+    }
+
+    [Fact]
+    public void MoveToTop_DoesNotMutateTheOriginal_AndTheResultIsComparable()
+    {
+        var p = BodyPriority.Default(All);
+        var moved = p.MoveToTop("YAB");
+
+        Assert.Equal(All, p.Labels);
+        Assert.True(moved != p);
+        Assert.True(moved == BodyPriority.Normalize(["YAB"], All));
+    }
 }

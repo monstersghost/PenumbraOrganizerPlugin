@@ -88,6 +88,24 @@ public sealed class BodyPriority : IEquatable<BodyPriority>
 
     public BodyPriority MoveDown(int index) => Swap(index, index + 1);
 
+    /// <summary>
+    /// A snapshot with <paramref name="label"/> first and the rest in their existing order. The
+    /// First-choice body dropdown uses it: picking a body promotes it without disturbing how the
+    /// others rank. A label not in the list, or one that is already first, returns this instance.
+    /// </summary>
+    public BodyPriority MoveToTop(string label)
+    {
+        var index = Array.FindIndex(_labels, l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase));
+        if (index <= 0)
+            return this;
+
+        var copy = new string[_labels.Length];
+        copy[0] = _labels[index];
+        Array.Copy(_labels, 0, copy, 1, index);
+        Array.Copy(_labels, index + 1, copy, index + 1, _labels.Length - index - 1);
+        return new BodyPriority(copy);
+    }
+
     private BodyPriority Swap(int from, int to)
     {
         if (from < 0 || from >= _labels.Length || to < 0 || to >= _labels.Length)
