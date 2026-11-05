@@ -252,7 +252,7 @@ public sealed class SortPanel
         ImGui.BeginDisabled(!splitsApply);
         ImGui.Checkbox("Split gear and body mods by body type", ref _splitBody);
         ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitBody, splitsApply ? null : SplitsInapplicableReason);
+        Help.Tooltip(HelpTopics.SortSplitGearBody, splitsApply ? null : SplitsInapplicableReason);
 
         DrawBodyPriority(config, saveConfig, bodyLabels, splitsApply);
 

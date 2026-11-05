@@ -166,9 +166,19 @@
       "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
     },
     {
-      "id": "sort.split-body",
-      "title": "Split body by body type",
-      "short": "Files gear and body mods under the body they were made for, as Gear/Bibo+/Top. Read from the mod's options and files, then its name, then its folder. If none names one, no body subfolder is added."
+      "id": "sort.split-gear-body",
+      "title": "Split gear by body type",
+      "short": "Files gear under the body it was made for, as Gear/Bibo+/... Read from the mod's options and files, then its name, then its folder. If none names a body, no body subfolder is added."
+    },
+    {
+      "id": "sort.split-body-mods",
+      "title": "Split body mods by body type",
+      "short": "Body mods are body replacers (Rue+, YAB...) and SFW variants filed under Body. This groups them under Body/<body>/. Leave it off if you keep one mod per body."
+    },
+    {
+      "id": "sort.first-choice-body",
+      "title": "First-choice body",
+      "short": "Your main body. A mod that supports several bodies is filed under this one when it offers it. The others follow the order in the full list below."
     },
     {
       "id": "sort.body-priority",
@@ -232,8 +242,13 @@
     },
     {
       "id": "review.workbook-destinations",
-      "title": "Workbook destinations",
-      "short": "Which folder layout the exported spreadsheet should suggest. This affects only the exported file, not the proposed paths shown above."
+      "title": "Group workbook by",
+      "short": "How the exported workbook groups mods into suggested folders. This affects only the exported file, not the proposed paths shown above."
+    },
+    {
+      "id": "review.diagnostics",
+      "title": "Diagnostics",
+      "short": "Troubleshooting tools: export the review as text, open the config file, or create a diagnostic dump to share when something looks wrong."
     },
     {
       "id": "review.export-workbook",
