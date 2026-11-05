@@ -183,12 +183,12 @@
     {
       "id": "sort.split-hair",
       "title": "Split hair by hair number",
-      "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115. A mod covering several numbers, or whose files could not be read, stays in Hair. Hair/9 sorts after Hair/115."
+      "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115, padded to three digits (Hair/002) so Penumbra lists them in order. Several numbers or unreadable files: stays in Hair."
     },
     {
       "id": "sort.split-gear-body",
       "title": "Split gear by body type",
-      "short": "Files gear under the body it was made for, as Gear/Bibo+/... Read from the mod's options and files, then its name, then its folder. If none names a body, no body subfolder is added."
+      "short": "Files gear under the body it was made for, as Gear/Bibo+/... With the slot split also on: 00. Sets, 01.-09. slots, then numbered bodies from 10, in Body priority order. No body found: no body folder."
     },
     {
       "id": "sort.split-body-mods",

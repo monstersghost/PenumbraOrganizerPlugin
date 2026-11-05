@@ -274,7 +274,8 @@ it ticked, as it is by default.
 replaces, such as `Hair/115`, when the mod targets exactly one number. A mod that targets two or
 more numbers, or whose files could not be read, stays directly in `Hair`, as does every hair mod
 while this is off. The numbers come from the mod's own configuration, not its name. It is off by
-default. Penumbra sorts folders as text, so `Hair/9` appears after `Hair/115`; that is expected.
+default. Folder numbers are padded to three digits (`Hair/002`, `Hair/053`, `Hair/185`) so Penumbra,
+which sorts folders as text, lists them in numeric order. Numbers of 1000 or more are not padded.
 
 Two controls appear under it, and both apply only while Split hair is on:
 
@@ -291,6 +292,21 @@ folder; a race with two hair numbers in the same mod never picks one.
 as `Gear/Bibo+/Top`. The body comes before the equipment slot, so everything made for one body sits
 together instead of being spread across the nine slot folders. It is off by default. The slot split
 is separate: turn that off and you get `Gear/Bibo+` with nothing below it.
+
+**Numbered gear folders.** With both gear splits on, `Gear/` is numbered so nothing sits loose:
+`00. Sets` (outfits and gear with no single slot), `01. Head`, `02. Top`, `03. Hands`, `04. Legs`,
+`05. Feet`, `06. Ears`, `07. Neck`, `08. Wrists`, `09. Rings`, then one folder per body from `10.`,
+in Body priority order, such as `10. Rue+` and `11. Bibo+`. Only bodies that have gear get a folder,
+and each holds the same numbered slot folders (`10. Rue+/02. Top`). Reordering Body priority, or a
+body gaining or losing gear, renumbers the body folders. With only one of the two splits on, the
+layout is as before, without numbers.
+
+What moves and what stops matching after you update:
+
+- a) The first sort after updating moves gear and hair folders once. History restores the old layout.
+- b) Template `folderLabels` keyed to the old subfolders (`Gear/Legs`, `Gear/Bibo+`, `Hair/2`) stop matching. A key on `Gear` itself still renames the root.
+- c) A hair mod protected at `Hair/2` stays there, beside the new `Hair/002`.
+- d) Folder protection rules naming the old gear folders no longer match the renamed ones.
 
 **Split body mods by body type** does the same for the body replacers themselves, filing each under
 its own body name, such as `Body/Rue+`. It is a separate checkbox so you can split one kind and not
