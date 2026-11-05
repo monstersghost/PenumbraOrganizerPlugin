@@ -13,6 +13,15 @@ public sealed class OrganizerModRow
     public required string ProposedPath { get; set; }
     public bool Protected { get; set; }
     public bool HeliosphereManaged { get; init; }
+
+    /// <summary>
+    /// How this mod relates to Proteus: made by it, its own managed mod, or neither. Detected from the
+    /// author and directory name the scan already has, so it costs no disk read.
+    /// </summary>
+    public ProteusRole ProteusRole { get; init; } = ProteusRole.None;
+
+    /// <summary>Managed by a tool whose mods get a saved mode: Heliosphere, or made by Proteus.</summary>
+    public bool IsToolManaged => HeliosphereManaged || ProteusRole != ProteusRole.None;
     public ModCategory? Category { get; init; }
     public string? SubCategory { get; init; }
 
