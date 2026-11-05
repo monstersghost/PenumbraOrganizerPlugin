@@ -1,4 +1,4 @@
-# Unreleased: numbered gear folders and padded hair
+# 0.6.4.0 (testing build) - numbered gear folders and padded hair
 
 With both **Split gear by equipment slot** and **Split gear by body type** on, `Gear/` is laid out as
 `00. Sets`, `01. Head` to `09. Rings`, then numbered body folders from `10.` in Body priority order

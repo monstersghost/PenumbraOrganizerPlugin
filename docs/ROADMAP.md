@@ -14,7 +14,7 @@ below unless a phase explicitly says otherwise.
   window; templates carrying the hair and body splits and respecting tool modes; fixes for "Protect
   all, then Unprotect Heliosphere" and for a mod blocking the folder it should sit in. Numbered gear
   folders (`00. Sets`, `01.`-`09.` slots, bodies from `10.`) when both gear splits are on, and
-  three-digit hair folders (`Hair/002`); see `docs/RELEASE_NOTES_UNRELEASED.md`. See
+  three-digit hair folders (`Hair/002`); see `docs/RELEASE_NOTES_0.6.4.0.md`. See
   `docs/HANDOFF_2026-11-05_BODY_UX_TOOLS.md`. Not yet released: the Help tab's PDF button 404s until
   a tag that contains the PDF exists, so test it on that release build.
 - **Still to do:** the first-run tutorial rewrite with on-screen highlights; retake the guide's
