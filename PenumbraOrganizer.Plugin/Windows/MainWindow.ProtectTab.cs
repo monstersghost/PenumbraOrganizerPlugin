@@ -83,7 +83,7 @@ public sealed partial class MainWindow
                         _plugin.OrganizerState.SetFolderProtectionRule(folder, rule);
                         SaveProtectionStateSafely();
                     },
-                    folder => _pendingUnprotectFolder = folder);
+                    folder => { Plugin.Log.Information($"[diag] Unprotect-inside clicked: {folder}"); _pendingUnprotectFolder = folder; });
 
                 if (expansionChanged)
                     SaveExpandedProtectFoldersSafely();
@@ -106,6 +106,7 @@ public sealed partial class MainWindow
         {
             if (!_unprotectFolderPopupOpened)
             {
+                Plugin.Log.Information($"[diag] OpenPopup for {requestedFolder}");
                 ImGui.OpenPopup(UnprotectFolderPopupTitle);
                 _unprotectFolderPopupOpened = true;
             }
@@ -123,7 +124,8 @@ public sealed partial class MainWindow
 
                 if (ImGui.Button("Yes, unprotect them"))
                 {
-                    _plugin.OrganizerState.UnprotectFolderContents(requestedFolder);
+                    var freed = _plugin.OrganizerState.UnprotectFolderContents(requestedFolder);
+                    Plugin.Log.Information($"[diag] Yes clicked; freed {freed} in {requestedFolder}");
                     SaveProtectionStateSafely();
                     // Closed here, inside the popup, where CloseCurrentPopup is meaningful - the
                     // field reset alone would only stop the block being submitted next frame.
@@ -140,6 +142,7 @@ public sealed partial class MainWindow
             }
             else
             {
+                Plugin.Log.Information("[diag] BeginPopupModal returned false; clearing pending");
                 // Dismissed by Escape or a click outside, which never runs the buttons above.
                 // ImGui has already closed it, so there is nothing here but the state to clear.
                 ClearPendingUnprotectFolder();
