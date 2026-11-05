@@ -405,10 +405,22 @@ public class ModTypeClassifierTests
     }
 
     [Fact]
-    public void GetFolder_HairWithANumber_NestsUnderHair()
+    public void GetFolder_HairWithANumber_NestsUnderHairPaddedToThreeDigits()
     {
         Assert.Equal("Hair/115", ModTypeFolders.GetFolder(ModCategory.Hair, "115"));
-        Assert.Equal("Hair/9", ModTypeFolders.GetFolder(ModCategory.Hair, "9"));
+        Assert.Equal("Hair/009", ModTypeFolders.GetFolder(ModCategory.Hair, "9"));
+        Assert.Equal("Hair/002", ModTypeFolders.GetFolder(ModCategory.Hair, "2"));
+        Assert.Equal("Hair/053", ModTypeFolders.GetFolder(ModCategory.Hair, "53"));
+        Assert.Equal("Hair/999", ModTypeFolders.GetFolder(ModCategory.Hair, "999"));
+    }
+
+    [Fact]
+    public void GetFolder_HairNumberOfAThousandOrMore_IsWrittenUnpadded_AcceptedLimitation()
+    {
+        // The hair reader accepts 1..9999. Three digits is the approved format, so 1000 and above
+        // are written as is and would sort before 185 as text. Pinned so the limit is visible; the
+        // fix, if a real number that large turns up, is padding to four digits.
+        Assert.Equal("Hair/1000", ModTypeFolders.GetFolder(ModCategory.Hair, "1000"));
         Assert.Equal("Hair/9999", ModTypeFolders.GetFolder(ModCategory.Hair, "9999"));
     }
 
@@ -615,7 +627,7 @@ public class ModTypeClassifierTests
 
         var result = ModTypeClassifier.EnrichHairSubCategory(baseResult, new HashSet<int> { 9 });
 
-        Assert.Equal("Hair/9", ModTypeFolders.GetFolder(ModCategory.Hair, result.SubCategory));
+        Assert.Equal("Hair/009", ModTypeFolders.GetFolder(ModCategory.Hair, result.SubCategory));
     }
 
     [Theory]
