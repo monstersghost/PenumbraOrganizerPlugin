@@ -106,9 +106,24 @@
       "short": "Protects every mod if any are unprotected; when all are protected, the button reads Unprotect all and clears them. A protected mod keeps its current folder through every Sort and Apply."
     },
     {
-      "id": "protect.toggle-heliosphere",
-      "title": "Protect / Unprotect Heliosphere mods",
-      "short": "Protects or unprotects (the button names which) every Heliosphere-managed mod at once. Unprotecting lasts this session only - the next Scan re-protects them, since Heliosphere owns where they live."
+      "id": "protect.heliosphere-mode",
+      "title": "Heliosphere mods",
+      "short": "Protected: never moved. Sort inside their folder: moved only beneath the folder they sit in. Treat as normal: sorted like any other mod. Saved between sessions."
+    },
+    {
+      "id": "protect.proteus-mode",
+      "title": "Proteus mods",
+      "short": "Mods Proteus made. Protected: never moved. Sort inside their folder: moved only beneath the folder they sit in. Treat as normal: sorted like any other mod. Saved between sessions."
+    },
+    {
+      "id": "protect.proteus-managed-root",
+      "title": "Proteus managed mod at the root",
+      "short": "Proteus's own working mod. Kept protected by default. Tick this to place it at the top level of Penumbra's mod list on the next sort; moving it does not affect Proteus."
+    },
+    {
+      "id": "protect.proteus-note",
+      "title": "Proteus mod",
+      "short": "Made by Proteus. It is protected because Proteus mods are set to Protected; change that in the Proteus mods dropdown above."
     },
     {
       "id": "protect.folders",

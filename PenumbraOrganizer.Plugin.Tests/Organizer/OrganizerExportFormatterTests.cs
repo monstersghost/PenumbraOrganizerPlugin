@@ -225,4 +225,24 @@ public class OrganizerExportFormatterTests
         Assert.Contains("StagedBody: YAB (Content/Option)", second);
         Assert.Contains("ProposedPath: Gear/YAB/Top/Succubus", second);
     }
+
+    [Fact]
+    public void Format_ManagedBy_NamesTheToolOrNone()
+    {
+        static OrganizerModRow R(string id, bool hs, ProteusRole role) => new()
+        {
+            Identifier = id, Name = id, Author = "A", CurrentPath = "p/" + id, ProposedPath = "p/" + id,
+            HeliosphereManaged = hs, ProteusRole = role,
+        };
+        var review = new ReviewResult([], new Dictionary<string, List<string>>());
+
+        var text = OrganizerExportFormatter.Format(
+            [R("h", true, ProteusRole.None), R("m", false, ProteusRole.Made),
+             R("x", false, ProteusRole.Managed), R("n", false, ProteusRole.None)], review);
+
+        Assert.Contains("ManagedBy: Heliosphere", text);
+        Assert.Contains("ManagedBy: Proteus", text);
+        Assert.Contains("ManagedBy: ProteusManaged", text);
+        Assert.Contains("ManagedBy: (none)", text);
+    }
 }

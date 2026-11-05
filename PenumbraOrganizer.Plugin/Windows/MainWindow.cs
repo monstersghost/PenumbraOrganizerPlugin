@@ -537,6 +537,8 @@ public sealed partial class MainWindow : Window, IDisposable
         sb.AppendLine($"Mods scanned: {mods.Count}");
         sb.AppendLine($"Protected: {mods.Count(m => m.Protected)}");
         sb.AppendLine($"Heliosphere-managed: {mods.Count(m => m.HeliosphereManaged)}");
+        sb.AppendLine($"Proteus-made: {mods.Count(m => m.ProteusRole == Organizer.ProteusRole.Made)}");
+        sb.AppendLine($"Proteus managed mod: {mods.Count(m => m.ProteusRole == Organizer.ProteusRole.Managed)}");
         var validation = _plugin.OrganizerState.Validate();
         sb.AppendLine(
             $"Validation: {validation.ProtectedViolations.Count} protected violations, {validation.PathCollisions.Count} path collisions");
