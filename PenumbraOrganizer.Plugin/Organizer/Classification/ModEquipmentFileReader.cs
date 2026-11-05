@@ -31,7 +31,7 @@ public static class ModEquipmentFileReader
     public static int CountConfigFiles(DirectoryInfo modDirectory) =>
         ModConfigFileWalker.CountConfigFiles(modDirectory);
 
-    private static void CollectFromFileKey(string path, HashSet<EquipmentSlot> slots)
+    internal static void CollectFromFileKey(string path, HashSet<EquipmentSlot> slots)
     {
         // Already '/'-normalised by the walker.
         if (!path.StartsWith("chara/equipment/", StringComparison.OrdinalIgnoreCase)
@@ -43,7 +43,7 @@ public static class ModEquipmentFileReader
             slots.Add(slot);
     }
 
-    private static void CollectFromManipulation(JsonElement item, HashSet<EquipmentSlot> slots)
+    internal static void CollectFromManipulation(JsonElement item, HashSet<EquipmentSlot> slots)
     {
         if (item.ValueKind != JsonValueKind.Object)
             return;
