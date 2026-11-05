@@ -638,13 +638,29 @@ public sealed class OrganizerState
         foreach (var row in _mods.Values.Where(m => !m.Protected))
         {
             var (primary, secondary) = folderSelector(row);
-            row.ProposedPath = BuildPath(primary, secondary, row.Name);
+            row.ProposedPath = ToolAdjustedPath(row, BuildPath(primary, secondary, row.Name));
             touched.Add(row);
             count++;
         }
 
         FinishProposals(touched);
         return count;
+    }
+
+    // The two tool-specific placements, applied AFTER the normal path is built and BEFORE collision
+    // disambiguation, so the tail sees the final path. Only unprotected rows reach here.
+    private string ToolAdjustedPath(OrganizerModRow row, string builtPath)
+    {
+        if (row.ProteusRole == ProteusRole.Managed)
+            return _toolPolicy.ProteusManagedAtRoot ? PenumbraPathSemantics.FixName(row.Name) : builtPath;
+
+        var mode = row.ProteusRole == ProteusRole.Made ? _toolPolicy.Proteus
+            : row.HeliosphereManaged ? _toolPolicy.Heliosphere
+            : ToolMode.Normal;
+
+        return mode == ToolMode.SortInside
+            ? ToolFolders.ApplyAnchor(row.CurrentPath, builtPath)
+            : builtPath;
     }
 
     private static string BuildPath(string? primaryFolder, string? secondaryFolder, string name)
