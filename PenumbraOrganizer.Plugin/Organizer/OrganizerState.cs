@@ -617,7 +617,9 @@ public sealed class OrganizerState
             if (!plan.DestinationFolders.TryGetValue(row.Identifier, out var folder))
                 continue;
 
-            row.ProposedPath = BuildPath(folder, null, row.Name);
+            // The same tool placement a sort applies, so a template cannot move a Heliosphere or
+            // Proteus mod out of the folder its mode says to keep it in.
+            row.ProposedPath = ToolAdjustedPath(row, BuildPath(folder, null, row.Name));
             row.StagedBodyResolution = null;
             touched.Add(row);
         }

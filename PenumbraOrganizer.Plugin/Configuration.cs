@@ -100,6 +100,11 @@ public sealed class Configuration : IPluginConfiguration
     public bool SortSplitGearBody { get; set; }
     public bool SortSplitBodyMods { get; set; }
 
+    /// <summary>The template creator's fallback grouping (a <c>SortStrategy</c> name) and its two splits.</summary>
+    public string? TemplateExportGrouping { get; set; }
+    public bool TemplateExportSplitGear { get; set; }
+    public bool TemplateExportSplitNpc { get; set; } = true;
+
     /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
     public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;
 

@@ -161,4 +161,44 @@ public class OrganizerStateApplyTemplateTests
         Assert.Equal("Gear/A", state.Mods.Single(m => m.Identifier == "id1").ProposedPath);
         Assert.Equal("B", state.Mods.Single(m => m.Identifier == "id2").ProposedPath);
     }
+
+    private static OrganizerState StateWithPolicy(ToolPolicy policy, params OrganizerModRow[] rows)
+    {
+        var state = new OrganizerState();
+        state.SetToolPolicy(policy);
+        state.LoadScan(rows, new HashSet<string>());
+        return state;
+    }
+
+    [Fact]
+    public void ApplyTemplate_SortInsideTool_MatchedRowStaysUnderItsToolFolder()
+    {
+        var row = Row("hs-1", "Bibo+ Medieval", currentPath: "Heliosphere/Bibo+ Medieval");
+        row = new OrganizerModRow
+        {
+            Identifier = row.Identifier, Name = row.Name, Author = row.Author, CurrentPath = row.CurrentPath,
+            ProposedPath = row.ProposedPath, Category = row.Category, HeliosphereManaged = true,
+        };
+        var state = StateWithPolicy(new ToolPolicy(ToolMode.SortInside, ToolMode.Protected, false), row);
+
+        Apply(state, Template(entries: new() { ["bibo+ medieval"] = "Characters/Nyx" }));
+
+        Assert.Equal("Heliosphere/Characters/Nyx/Bibo+ Medieval", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void ApplyTemplate_ManagedProteusMod_GoesToTheRootWhenAsked()
+    {
+        var plain = Row("Proteus", "Proteus", currentPath: "Proteus Upscales/Proteus");
+        var row = new OrganizerModRow
+        {
+            Identifier = plain.Identifier, Name = plain.Name, Author = plain.Author, CurrentPath = plain.CurrentPath,
+            ProposedPath = plain.ProposedPath, Category = plain.Category, ProteusRole = ProteusRole.Managed,
+        };
+        var state = StateWithPolicy(new ToolPolicy(ToolMode.Protected, ToolMode.Protected, true), row);
+
+        Apply(state, Template(entries: new() { ["proteus"] = "Tools" }));
+
+        Assert.Equal("Proteus", state.Mods.Single().ProposedPath);
+    }
 }

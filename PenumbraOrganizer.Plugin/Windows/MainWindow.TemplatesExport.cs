@@ -62,6 +62,10 @@ public sealed partial class MainWindow
             if (ImGui.Button("Export my layout as a template..."))
             {
                 BeginTemplateExport();
+                var config = _plugin.Config;
+                _exportGroupingIndex = SortPanel.GroupingIndexFor(config.TemplateExportGrouping);
+                _exportSplitGear = config.TemplateExportSplitGear;
+                _exportSplitNpc = config.TemplateExportSplitNpc;
                 _exportOpen = true;
             }
             ImGui.EndDisabled();
@@ -148,7 +152,10 @@ public sealed partial class MainWindow
 
         var labels = SortPanel.Groupings.Select(g => g.Label).ToArray();
         if (ImGui.Combo("Fallback grouping", ref _exportGroupingIndex, labels, labels.Length))
+        {
             MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
         Help.Tooltip(HelpTopics.TemplatesExportFallback);
 
         // Both splits are inert for Creator-only grouping, which never consults the mod's type.
@@ -156,10 +163,27 @@ public sealed partial class MainWindow
 
         ImGui.BeginDisabled(!splitsApply);
         if (ImGui.Checkbox("Split gear by equipment slot", ref _exportSplitGear))
+        {
             MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
         if (ImGui.Checkbox("Split NPC mods by kind", ref _exportSplitNpc))
+        {
             MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
         ImGui.EndDisabled();
+    }
+
+    // Kept between sessions: the same setup is wanted every time a layout is shared.
+    private void SaveExportFallbackChoices()
+    {
+        var index = Math.Clamp(_exportGroupingIndex, 0, SortPanel.Groupings.Length - 1);
+        var config = _plugin.Config;
+        config.TemplateExportGrouping = SortPanel.Groupings[index].Strategy.ToString();
+        config.TemplateExportSplitGear = _exportSplitGear;
+        config.TemplateExportSplitNpc = _exportSplitNpc;
+        _plugin.SaveConfig();
     }
 
     private TemplateFallback CurrentExportFallback()
