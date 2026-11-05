@@ -151,6 +151,7 @@ public sealed class OrganizerState
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
         BodyLabels = bodyLabels;
+        StagedBodyPriority = null;
         HasScanned = true;
         ScanGeneration++;
     }
@@ -481,6 +482,7 @@ public sealed class OrganizerState
             return false;
 
         row.ProposedPath = proposedPath;
+        row.StagedBodyResolution = null;
         return true;
     }
 
@@ -573,8 +575,12 @@ public sealed class OrganizerState
                 continue;
 
             row.ProposedPath = BuildPath(folder, null, row.Name);
+            row.StagedBodyResolution = null;
             touched.Add(row);
         }
+
+        // The staged record describes the last SORT; a template re-pathed rows without a body split.
+        StagedBodyPriority = null;
 
         FinishProposals(touched);
         return plan.Report;

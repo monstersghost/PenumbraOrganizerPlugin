@@ -11,6 +11,15 @@ public class BodyPriorityTests
         Assert.Equal(All, BodyPriority.Default(All).Labels);
 
     [Fact]
+    public void Repair_NullSaved_IsTheDefaultAndNeedsNoSave()
+    {
+        var result = BodyPriority.Repair(null, All, out var needsSave);
+
+        Assert.Equal(All, result.Labels);
+        Assert.False(needsSave);
+    }
+
+    [Fact]
     public void Normalize_NullOrEmptySaved_FallsBackToDefault()
     {
         Assert.Equal(All, BodyPriority.Normalize(null, All).Labels);

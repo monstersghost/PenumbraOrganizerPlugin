@@ -35,10 +35,10 @@ public sealed class BodyPriority : IEquatable<BodyPriority>
     /// body would keep its old rank in the file and regain it if it ever returned.
     /// </summary>
     public static BodyPriority Repair(
-        IReadOnlyList<string> saved, IEnumerable<string> allLabels, out bool needsSave)
+        IReadOnlyList<string>? saved, IEnumerable<string> allLabels, out bool needsSave)
     {
         var result = Normalize(saved, allLabels);
-        needsSave = saved.Count > 0 && !saved.SequenceEqual(result._labels, StringComparer.Ordinal);
+        needsSave = saved is { Count: > 0 } && !saved.SequenceEqual(result._labels, StringComparer.Ordinal);
         return result;
     }
 

@@ -282,12 +282,13 @@ public class ScanProcessorTests
     }
 
     [Fact]
-    public void Process_UnreadableConfig_FallsBackToNameAndFlagsTheFailure()
+    public void Process_UnreadableConfig_GetsReadFailureAndNoBodyEvidence()
     {
         var row = ProcessGearWithConfig("Bibo+ Dress", "{ not json");
 
         Assert.Equal(GearSlotDiagnostic.ReadFailure, row.GearSlotDiagnostic);
         Assert.Null(row.BodyType);
+        Assert.Null(row.BodyCandidates);
     }
 
     [Fact]

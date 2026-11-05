@@ -96,5 +96,7 @@ Body is now read from the mod's options and files (tier 1), then its name, then 
 - [ ] Confirm the Review tab shows the moves before anything is applied.
 - [ ] To see why a mod landed where it did, copy the diagnostic dump and read its `BodyEvidence:`
       line (candidates by tier); after a sort also `StagedBody:` and the "Body priority used for
-      the last sort" header. A Body mod whose config could not be read shows `ContentReadFailed`
-      and falls back to its name.
+      the last sort" header. A Body mod whose config could not be read shows `contentRead=FAILED` in its
+      `BodyEvidence:` line and falls back to its name. In practice this appears only on Body-category
+      rows, because a Gear mod whose config cannot be read has no equipment slots, so the slot gate
+      already skips body detection for it.

@@ -2,6 +2,7 @@ using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer;
 
@@ -243,5 +244,56 @@ public class OrganizerStateSortBodyTests
             bodyPriority: BodyPriority.Default(Bodies));
 
         Assert.Equal("Gear/Bibo+/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
+    }
+
+    [Fact]
+    public void LoadScan_AfterASortWithAPriority_ClearsTheStagedPriorityAndTheExportLine()
+    {
+        var state = WithMultiBodyMod();
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+            bodyPriority: BodyPriority.Default(Bodies));
+        Assert.NotNull(state.StagedBodyPriority);
+
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "multi", Name = "Succubus Lifestyle", Author = "Ann",
+                CurrentPath = "Succubus Lifestyle", ProposedPath = "Succubus Lifestyle",
+                Category = ModCategory.Gear, SubCategory = "Top", BodyType = "YAB" },
+        ], new HashSet<string>());
+
+        Assert.Null(state.StagedBodyPriority);
+        var export = OrganizerExportFormatter.Format(state.Mods, state.Validate(), state.StagedBodyPriority);
+        Assert.DoesNotContain("Body priority used for the last sort", export);
+    }
+
+    [Fact]
+    public void ApplyTemplate_AfterASortWithAPriority_ClearsTheTouchedRowsAndThePriority()
+    {
+        var state = WithMultiBodyMod();
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+            bodyPriority: BodyPriority.Default(Bodies));
+        Assert.NotNull(state.Mods.Single().StagedBodyResolution);
+
+        var template = new ValidatedOrganizationTemplate(
+            "T", "A", null, new TemplateFallback(SortStrategy.TypeOnly, false, true),
+            new Dictionary<string, string>(), [], new Dictionary<string, string> { ["succubus lifestyle"] = "Looks" });
+        state.ApplyTemplate(TemplatePlanner.Plan(template, state.Mods, Canon));
+
+        Assert.StartsWith("Looks/", state.Mods.Single().ProposedPath);
+        Assert.Null(state.Mods.Single().StagedBodyResolution);
+        Assert.Null(state.StagedBodyPriority);
+    }
+
+    [Fact]
+    public void AssignManual_ClearsThatRowsStagedResolutionButNotThePriority()
+    {
+        var state = WithMultiBodyMod();
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+            bodyPriority: BodyPriority.Default(Bodies));
+
+        Assert.True(state.AssignManual("multi", "Manual/Spot"));
+
+        Assert.Null(state.Mods.Single().StagedBodyResolution);
+        Assert.NotNull(state.StagedBodyPriority);
     }
 }
