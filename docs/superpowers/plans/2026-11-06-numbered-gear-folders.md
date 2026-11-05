@@ -468,7 +468,7 @@ and add `gearLayout: gearLayout` to the `Select` call.
 **Interfaces:**
 - Consumes: `SortFolderSelectors.BuildGearLayout` and `Select(..., gearLayout:)` (Task 3); `ModNameNormalizer.Normalize`; `template.EntriesByNormalizedName`; the existing `bodyPriority` parameter of `Plan`.
 
-- [ ] **Step 1: Write the failing tests** (append to `TemplatePlannerTests`; its `Row(...)` helper already takes `bodyType`, and `Template(...)` takes no splits, so build the template directly):
+- [ ] **Step 1: Write the failing tests** (append to `TemplatePlannerTests`, adding `using PenumbraOrganizer.Plugin.Organizer.BodyTypes;` at the top; its `Row(...)` helper already takes `bodyType`, and `Template(...)` takes no splits, so build the template directly):
 
 ```csharp
     private static ValidatedOrganizationTemplate GearBothSplits(Dictionary<string, string>? entries = null,
@@ -490,13 +490,16 @@ and add `gearLayout: gearLayout` to the `Select` call.
     [Fact]
     public void Plan_FallbackNumbers_IgnoreBodiesThatOnlyExplicitEntriesPlace()
     {
-        // The Rue+ mod is placed by an explicit entry, so it never reaches the fallback. Counting it
-        // would hand Rue+ the number 10 and start the fallback's Bibo+ at 11 with a gap.
+        // The Rue+ mod is placed by an explicit entry, so it never reaches the fallback. With Rue+
+        // ranked FIRST, counting its row wrongly would hand Rue+ the number 10 and push the
+        // fallback's Bibo+ to 11 (a gap). Without a priority Bibo+ would sort first anyway and the
+        // test could not fail, so the priority is supplied on purpose.
         var explicitRow = Row("e1", "Explicit Dress", ModCategory.Gear, "Top", bodyType: "Rue+");
         var fallbackRow = Row("f1", "Fallback Dress", ModCategory.Gear, "Top", bodyType: "Bibo+");
         var template = GearBothSplits(entries: new() { ["explicit dress"] = "Chosen" });
+        var rueFirst = BodyPriority.Normalize(["Rue+"], ["Rue+", "Bibo+"]);
 
-        var plan = TemplatePlanner.Plan(template, [explicitRow, fallbackRow], Same);
+        var plan = TemplatePlanner.Plan(template, [explicitRow, fallbackRow], Same, bodyPriority: rueFirst);
 
         Assert.Equal("Chosen", plan.DestinationFolders["e1"]);
         Assert.Equal("Gear/10. Bibo+/02. Top", plan.DestinationFolders["f1"]);
@@ -522,7 +525,7 @@ and add `gearLayout: gearLayout` to the `Select` call.
         // Numbering for the numbered gear layout comes from the rows the FALLBACK will place: an
         // explicit template entry bypasses the fallback, so counting its rows would let a body that
         // only explicit entries use take a number and leave gaps in the fallback's.
-        var fallbackRows = rows.Where(r =>
+        var fallbackEligibleRows = rows.Where(r =>
         {
             if (r.Protected)
                 return false;
@@ -530,7 +533,7 @@ and add `gearLayout: gearLayout` to the `Select` call.
             return !(key.Length > 0 && template.EntriesByNormalizedName.ContainsKey(key));
         });
         var gearLayout = SortFolderSelectors.BuildGearLayout(
-            fallbackRows, template.Fallback.SplitGear, template.Fallback.SplitGearBody, bodyPriority);
+            fallbackEligibleRows, template.Fallback.SplitGear, template.Fallback.SplitGearBody, bodyPriority);
 ```
 and pass `gearLayout: gearLayout` in the `SortFolderSelectors.Select(...)` call inside the loop (with the existing named arguments).
 
@@ -549,7 +552,7 @@ and pass `gearLayout: gearLayout` in the `SortFolderSelectors.Select(...)` call 
 
 - [ ] **Step 1: Help text.** Update the `short` of the gear-body-split topic to say that with the slot split also on, gear is laid out as `00. Sets`, `01.`-`09.` slots, then numbered bodies; update the hair topic to say folders are three digits (`Hair/002`). Keep every `short` at most 200 characters with no newline (a test enforces it).
 
-- [ ] **Step 2: Docs.** In `HOW_SORTING_WORKS.md` add a section "Numbered gear folders" with the layout diagram from the spec and the rule (both gear splits on; numbers by Body priority; `00. Sets`). In `USER_GUIDE.md` update the splits text: the layout, that reordering Body priority renumbers body folders, hair three-digit padding, and the one-time move with History restore. In `ROADMAP.md` add the change to the unreleased list.
+- [ ] **Step 2: Docs and migration notes.** The user-facing documentation MUST carry the migration effects, not only the layout. Create `docs/RELEASE_NOTES_UNRELEASED.md` (renamed to the version at release time) with a "What moves and what stops matching" section stating: (a) the first sort after updating moves gear and hair folders once, and History restores the old layout; (b) template `folderLabels` keyed to the old subfolders (`Gear/Legs`, `Gear/Bibo+`, `Hair/2`) stop matching, while a key on `Gear` itself still renames the root; (c) a hair mod protected at `Hair/2` stays there beside the new `Hair/002`; (d) folder protection rules naming the old gear folders no longer match the renamed ones; (e) workbooks exported earlier use the old names; (f) reordering Body priority, or gaining or losing gear for a body, renumbers the body folders and moves those mods once; (g) hair numbers of 1000 or more are not padded (accepted limitation). Repeat (a)-(d) in the user guide's Sort section. In `HOW_SORTING_WORKS.md` add a section "Numbered gear folders" with the layout diagram from the spec and the rule (both gear splits on; numbers by Body priority; `00. Sets`). In `USER_GUIDE.md` update the splits text: the layout, that reordering Body priority renumbers body folders, hair three-digit padding, and the one-time move with History restore. In `ROADMAP.md` add the change to the unreleased list.
 
 - [ ] **Step 3: Checklist.** Create `docs/testing/2026-11-06-numbered-gear-checklist.md`:
 

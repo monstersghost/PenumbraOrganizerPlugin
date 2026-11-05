@@ -74,8 +74,8 @@ is padding to four digits, which moves hair folders once more.
   renames the root of `Gear/10. Rue+/02. Top` (tested). Keys written against the old unnumbered
   subfolders (`Gear/Legs`) simply no longer match, as noted below. Because the template planner's fallback uses the same selector, templates inherit the
   layout with no extra code, once the planner builds a layout from its rows.
-- **`OrganizerState.Sort`** builds the layout (when both gear flags are on and a body priority was
-  supplied) before the per-row loop and passes it to `Select`.
+- **`OrganizerState.Sort`** builds the layout whenever both gear flags are on (with or without a
+  body priority; see "No priority supplied" above) before the per-row loop and passes it to `Select`.
 - **`TemplatePlanner`** builds its layout from the **fallback-eligible rows only**: unprotected rows
   that no template entry matched. Rows an explicit entry places never reach the selector, so
   counting them would let a body used only by explicit matches consume a number and leave the
