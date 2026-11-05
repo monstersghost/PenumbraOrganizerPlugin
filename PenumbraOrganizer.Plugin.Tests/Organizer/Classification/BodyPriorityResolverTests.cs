@@ -97,4 +97,27 @@ public class BodyPriorityResolverTests
         Assert.Equal("Alpha", BodyPriorityResolver.Resolve(a, Order())!.Label);
         Assert.Equal("Alpha", BodyPriorityResolver.Resolve(b, Order())!.Label);
     }
+
+    [Fact]
+    public void BodyMod_NameOutranksContent_BecauseItsOwnNameSaysWhichBodyItIs()
+    {
+        // "Yet Another Body+" ships a Bibo+ compatibility option group; it is still a YAB mod.
+        var candidates = new BodyCandidates
+        {
+            Content = [C("Bibo+")],
+            Name = [C("YAB", BodyEvidenceSource.Name)],
+        };
+
+        var r = BodyPriorityResolver.Resolve(candidates, Order("Bibo+"), nameFirst: true)!;
+
+        Assert.Equal(new BodyResolution("YAB", BodyEvidenceTier.Name, BodyEvidenceSource.Name), r);
+    }
+
+    [Fact]
+    public void BodyMod_WithNoNameEvidence_StillFallsBackToContent()
+    {
+        var candidates = new BodyCandidates { Content = [C("Bibo+")] };
+
+        Assert.Equal("Bibo+", BodyPriorityResolver.Resolve(candidates, Order(), nameFirst: true)!.Label);
+    }
 }

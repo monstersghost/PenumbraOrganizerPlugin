@@ -74,6 +74,24 @@ public static class ApplyPlanner
         var steps = new List<ApplyStep>();
         var groupId = 0;
 
+        // A mod sitting at a path that another move needs as a FOLDER ("Body/Bibo+" the mod, while
+        // the sort files mods under "Body/Bibo+/..."). Mods and folders share one namespace, so
+        // nothing can move beneath that path until the mod has left it. Each such mod parks at a
+        // temporary path first, then goes straight to its real target - which may itself be inside
+        // the folder it just freed - and everything else follows.
+        var blockers = moves
+            .Where(m => moves.Any(o => o.TargetPath.StartsWith(m.CurrentPath + "/", StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(m => m.Identifier, StringComparer.Ordinal)
+            .ToList();
+        foreach (var blocker in blockers)
+        {
+            visited.Add(blocker.CurrentPath);
+            byCurrentPath.Remove(blocker.CurrentPath);
+            steps.Add(new ApplyStep(blocker.Identifier, temporaryPathFactory(blocker), IsTemporary: true, GroupId: groupId));
+            steps.Add(new ApplyStep(blocker.Identifier, blocker.TargetPath, IsTemporary: false, GroupId: groupId));
+            groupId++;
+        }
+
         foreach (var start in moves.OrderBy(m => m.Identifier, StringComparer.Ordinal))
         {
             if (visited.Contains(start.CurrentPath))

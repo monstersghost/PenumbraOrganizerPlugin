@@ -13,13 +13,25 @@ public sealed record BodyResolution(string Label, BodyEvidenceTier Tier, BodyEvi
 /// </summary>
 public static class BodyPriorityResolver
 {
-    public static BodyResolution? Resolve(BodyCandidates? candidates, BodyPriority priority)
+    public static BodyResolution? Resolve(
+        BodyCandidates? candidates, BodyPriority priority, bool nameFirst = false)
     {
         if (candidates is null)
             return null;
 
         // A later tier is consulted only when every earlier one found nothing. User settings win
         // INSIDE a tier by rank; they do not let a noisy library path override clear content.
+        //
+        // nameFirst is for a Body-category mod, whose own title says which body it IS. Its option
+        // groups name the bodies it is merely COMPATIBLE with ("Yet Another Body+" ships a Bibo+
+        // group), so there the name outranks the content.
+        if (nameFirst)
+        {
+            return Pick(candidates.Name, BodyEvidenceTier.Name, priority)
+                ?? Pick(candidates.Content, BodyEvidenceTier.Content, priority)
+                ?? Pick(candidates.LibraryPath, BodyEvidenceTier.LibraryPath, priority);
+        }
+
         return Pick(candidates.Content, BodyEvidenceTier.Content, priority)
             ?? Pick(candidates.Name, BodyEvidenceTier.Name, priority)
             ?? Pick(candidates.LibraryPath, BodyEvidenceTier.LibraryPath, priority);

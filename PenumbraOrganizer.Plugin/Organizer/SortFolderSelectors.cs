@@ -138,7 +138,7 @@ public static class SortFolderSelectors
 
     private static string? ResolveBody(OrganizerModRow row, BodyPriority? priority) =>
         priority is not null && row.BodyCandidates is not null
-            ? BodyPriorityResolver.Resolve(row.BodyCandidates, priority)?.Label
+            ? BodyPriorityResolver.Resolve(row.BodyCandidates, priority, nameFirst: row.Category == ModCategory.Body)?.Label
             : row.BodyType;
 
     // Single dynamic segments (creator names) mirror Penumbra's FixName so what we propose is
