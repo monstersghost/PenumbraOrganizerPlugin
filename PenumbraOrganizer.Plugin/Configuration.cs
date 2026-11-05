@@ -90,6 +90,42 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>The Midlander hair fallback. A set-once preference.</summary>
     public bool MidlanderFallback { get; set; }
 
+    /// <summary>The Sort tab's Group by, as a <c>SortStrategy</c> name; null means the default.</summary>
+    public string? SortGrouping { get; set; }
+
+    /// <summary>The Sort tab's split checkboxes, kept between sessions.</summary>
+    public bool SortSplitGear { get; set; }
+    public bool SortSplitNpc { get; set; } = true;
+    public bool SortSplitHair { get; set; }
+    public bool SortSplitGearBody { get; set; }
+    public bool SortSplitBodyMods { get; set; }
+
+    /// <summary>The template creator's fallback grouping (a <c>SortStrategy</c> name) and its two splits.</summary>
+    public string? TemplateExportGrouping { get; set; }
+    public bool TemplateExportSplitGear { get; set; }
+    public bool TemplateExportSplitNpc { get; set; } = true;
+    public bool TemplateExportSplitHair { get; set; }
+    public bool TemplateExportSplitGearBody { get; set; }
+    public bool TemplateExportSplitBodyMods { get; set; }
+
+    /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
+    public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;
+
+    /// <summary>What the sorter does with mods Proteus made. Protected until the user says otherwise.</summary>
+    public Organizer.ToolMode ProteusMode { get; set; } = Organizer.ToolMode.Protected;
+
+    /// <summary>
+    /// Place Proteus's own managed mod at the root instead of keeping it protected. It is plumbing the
+    /// user did not choose, so it is protected by default and outside the three modes.
+    /// </summary>
+    public bool ProteusManagedAtRoot { get; set; }
+
+    /// <summary>The three settings above, with an unknown stored mode read as Protected.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Organizer.ToolPolicy ToolPolicy =>
+        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot);
+
     /// <summary>
     /// 0.6.0 ships with the scraped list unavailable: the crash whose correlation motivated this
     /// work has not been reproduced, so nothing may load a 20,000-name list yet. Flipping this to

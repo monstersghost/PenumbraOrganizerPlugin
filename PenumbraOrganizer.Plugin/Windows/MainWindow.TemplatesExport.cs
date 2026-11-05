@@ -38,6 +38,9 @@ public sealed partial class MainWindow
     private int _exportGroupingIndex = SortPanel.DefaultGroupingIndex;
     private bool _exportSplitGear;
     private bool _exportSplitNpc = true;
+    private bool _exportSplitHair;
+    private bool _exportSplitGearBody;
+    private bool _exportSplitBodyMods;
     private string _exportFilter = string.Empty;
     private string? _exportStatus;
 
@@ -62,6 +65,13 @@ public sealed partial class MainWindow
             if (ImGui.Button("Export my layout as a template..."))
             {
                 BeginTemplateExport();
+                var config = _plugin.Config;
+                _exportGroupingIndex = SortPanel.GroupingIndexFor(config.TemplateExportGrouping);
+                _exportSplitGear = config.TemplateExportSplitGear;
+                _exportSplitNpc = config.TemplateExportSplitNpc;
+                _exportSplitHair = config.TemplateExportSplitHair;
+                _exportSplitGearBody = config.TemplateExportSplitGearBody;
+                _exportSplitBodyMods = config.TemplateExportSplitBodyMods;
                 _exportOpen = true;
             }
             ImGui.EndDisabled();
@@ -148,7 +158,10 @@ public sealed partial class MainWindow
 
         var labels = SortPanel.Groupings.Select(g => g.Label).ToArray();
         if (ImGui.Combo("Fallback grouping", ref _exportGroupingIndex, labels, labels.Length))
+        {
             MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
         Help.Tooltip(HelpTopics.TemplatesExportFallback);
 
         // Both splits are inert for Creator-only grouping, which never consults the mod's type.
@@ -156,10 +169,46 @@ public sealed partial class MainWindow
 
         ImGui.BeginDisabled(!splitsApply);
         if (ImGui.Checkbox("Split gear by equipment slot", ref _exportSplitGear))
+        {
             MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
         if (ImGui.Checkbox("Split NPC mods by kind", ref _exportSplitNpc))
+        {
             MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        if (ImGui.Checkbox("Split hair by hair number", ref _exportSplitHair))
+        {
+            MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        if (ImGui.Checkbox("Split gear by body type", ref _exportSplitGearBody))
+        {
+            MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        if (ImGui.Checkbox("Split body mods by body type", ref _exportSplitBodyMods))
+        {
+            MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        ImGui.TextDisabled("Hair and body splits use the importer's own hair race and body priority.");
         ImGui.EndDisabled();
+    }
+
+    // Kept between sessions: the same setup is wanted every time a layout is shared.
+    private void SaveExportFallbackChoices()
+    {
+        var index = Math.Clamp(_exportGroupingIndex, 0, SortPanel.Groupings.Length - 1);
+        var config = _plugin.Config;
+        config.TemplateExportGrouping = SortPanel.Groupings[index].Strategy.ToString();
+        config.TemplateExportSplitGear = _exportSplitGear;
+        config.TemplateExportSplitNpc = _exportSplitNpc;
+        config.TemplateExportSplitHair = _exportSplitHair;
+        config.TemplateExportSplitGearBody = _exportSplitGearBody;
+        config.TemplateExportSplitBodyMods = _exportSplitBodyMods;
+        _plugin.SaveConfig();
     }
 
     private TemplateFallback CurrentExportFallback()
@@ -169,7 +218,7 @@ public sealed partial class MainWindow
         var index = Math.Clamp(_exportGroupingIndex, 0, SortPanel.Groupings.Length - 1);
         return ToTemplateFallback(
             new SortSelection(SortPanel.Groupings[index].Strategy, _exportSplitGear, _exportSplitNpc,
-                SplitHair: false)); // templates are saved on disk without a hair setting, so hair stays flat here
+                _exportSplitHair, SplitGearBody: _exportSplitGearBody, SplitBodyMods: _exportSplitBodyMods));
     }
 
     /// <summary>
@@ -187,7 +236,8 @@ public sealed partial class MainWindow
     /// see it otherwise. Same reason <see cref="SortSelection"/> itself is public.
     /// </remarks>
     public static TemplateFallback ToTemplateFallback(SortSelection selection) =>
-        new(selection.Strategy, selection.SplitGear, selection.SplitNpc);
+        new(selection.Strategy, selection.SplitGear, selection.SplitNpc,
+            selection.SplitHair, selection.SplitGearBody, selection.SplitBodyMods);
 
     private void DrawTemplateExportFolders()
     {
@@ -368,7 +418,10 @@ public sealed partial class MainWindow
 
             // The new file belongs in the list above without needing a manual refresh.
             _templateListing = _plugin.TemplateStore.List();
-            _exportStatus = $"Saved as {fileName}.";
+            // Saving finishes the job: close the creator and report on the list screen.
+            _exportOpen = false;
+            _exportStatus = null;
+            _templateStatus = $"Saved as {fileName}.";
             _lastError = null;
         }
         catch (Exception ex)

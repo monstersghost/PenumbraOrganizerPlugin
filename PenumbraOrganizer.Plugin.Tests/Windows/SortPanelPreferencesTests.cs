@@ -146,4 +146,28 @@ public class SortPanelPreferencesTests
 
         Assert.Equal("Rue+", SortPanel.FirstChoice(repaired!));
     }
+
+    [Fact]
+    public void GroupingIndexFor_KnownStrategyName_FindsItsIndex() =>
+        Assert.Equal(1, SortPanel.GroupingIndexFor("TypeOnly"));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("NoSuchStrategy")]
+    public void GroupingIndexFor_MissingOrUnknown_IsTheDefault(string? saved) =>
+        Assert.Equal(SortPanel.DefaultGroupingIndex, SortPanel.GroupingIndexFor(saved));
+
+    [Fact]
+    public void SortChoices_DefaultToTheSessionDefaults()
+    {
+        var config = new Configuration();
+
+        Assert.Null(config.SortGrouping);
+        Assert.True(config.SortSplitNpc);
+        Assert.False(config.SortSplitGear);
+        Assert.False(config.SortSplitHair);
+        Assert.False(config.SortSplitGearBody);
+        Assert.False(config.SortSplitBodyMods);
+    }
 }

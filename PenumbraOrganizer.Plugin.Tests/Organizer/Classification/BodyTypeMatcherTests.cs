@@ -16,6 +16,12 @@ public class BodyTypeMatcherTests
         return BodyTypeListStore.BuildMatcher(parse.Data!);
     }
 
+    [Theory]
+    [InlineData("Yet Another Body+")]
+    [InlineData("[HS] Yet Another Body+ (Skeleton)")]
+    public void Match_YetAnotherBodyPlus_IsYab(string name) =>
+        Assert.Equal("YAB", Bundled().Match(name)?.Label);
+
     [Fact]
     public void Match_Empty_IsNull() => Assert.Null(BodyTypeMatcher.Empty.Match("Bibo+ Body"));
 

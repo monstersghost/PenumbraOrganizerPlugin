@@ -29,23 +29,7 @@ public sealed partial class MainWindow
         }
         Help.Tooltip(HelpTopics.ProtectToggleAll);
 
-        ImGui.SameLine();
-        var allHeliosphereProtected = _plugin.OrganizerState.Mods
-            .Where(m => m.HeliosphereManaged)
-            .All(m => m.Protected);
-        if (ImGui.Button($"{ProtectToggleLabels.Heliosphere(allHeliosphereProtected)}##toggle-protect-heliosphere"))
-        {
-            _plugin.OrganizerState.SetHeliosphereProtection(!allHeliosphereProtected);
-            SaveProtectionStateSafely();
-        }
-        Help.Tooltip(HelpTopics.ProtectToggleHeliosphere);
-
-        var heliosphereMods = _plugin.OrganizerState.Mods.Where(m => m.HeliosphereManaged).ToList();
-        if (heliosphereMods.Count > 0)
-        {
-            ImGui.SameLine();
-            ImGui.TextDisabled($"({heliosphereMods.Count(m => m.Protected)}/{heliosphereMods.Count} Heliosphere mods protected)");
-        }
+        DrawToolModes();
 
         // A protected mod sitting at the library root is stuck there permanently: protection means
         // the plugin never proposes a path for it, so no amount of sorting will file it away. That is
@@ -174,7 +158,7 @@ public sealed partial class MainWindow
                 // Heliosphere-managed mods first (stable within each group) - they're almost
                 // always already protected and are the ones users check on most, per feedback.
                 // Folders above are deliberately untouched by this ordering.
-                foreach (var mod in _plugin.OrganizerState.Mods.OrderByDescending(m => m.HeliosphereManaged))
+                foreach (var mod in _plugin.OrganizerState.Mods.OrderByDescending(m => m.IsToolManaged))
                 {
                     if (filter.Length > 0
                         && !mod.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
@@ -193,12 +177,11 @@ public sealed partial class MainWindow
                     if (mod.Protected && !explicitIdentifiers.Contains(mod.Identifier))
                     {
                         ImGui.SameLine();
-                        if (mod.HeliosphereManaged)
+                        if (mod.IsToolManaged)
                         {
-                            // Inside the loop: ImGui binds IsItemHovered to the last submitted item,
-                            // so one topic serves every row and the call has to sit with its row.
-                            ImGui.TextDisabled("(Heliosphere)");
-                            Help.Tooltip(HelpTopics.ProtectHeliosphereNote);
+                            var proteusMod = mod.ProteusRole != ProteusRole.None;
+                            ImGui.TextDisabled(proteusMod ? "(Proteus)" : "(Heliosphere)");
+                            Help.Tooltip(proteusMod ? HelpTopics.ProtectProteusNote : HelpTopics.ProtectHeliosphereNote);
                         }
                         else
                         {
@@ -210,6 +193,64 @@ public sealed partial class MainWindow
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // One mode dropdown per tool, each shown only while the library has that tool's mods. The mode is
+    // a saved setting (Configuration), pushed into the state; a per-mod untick below is separate.
+    private void DrawToolModes()
+    {
+        var mods = _plugin.OrganizerState.Mods;
+        var heliosphere = mods.Count(m => m.HeliosphereManaged && m.ProteusRole == ProteusRole.None);
+        var proteus = mods.Count(m => m.ProteusRole == ProteusRole.Made);
+        var managedExists = mods.Any(m => m.ProteusRole == ProteusRole.Managed);
+        var gateOpen = CurrentGates().CanStageProposals;
+        var config = _plugin.Config;
+
+        if (heliosphere > 0)
+        {
+            var index = ToolModeLabels.IndexOf(config.HeliosphereMode);
+            ImGui.BeginDisabled(!gateOpen);
+            ImGui.SetNextItemWidth(220);
+            var changed = ImGui.Combo($"Heliosphere mods ({heliosphere})##heliosphere-mode",
+                ref index, [.. ToolModeLabels.All], ToolModeLabels.All.Count);
+            ImGui.EndDisabled();
+            Help.Tooltip(HelpTopics.ProtectHeliosphereMode, gateOpen ? null : ActivityGateReason);
+            if (changed)
+            {
+                config.HeliosphereMode = ToolModeLabels.FromIndex(index);
+                _plugin.ApplyToolPolicy();
+            }
+        }
+
+        if (proteus > 0)
+        {
+            var index = ToolModeLabels.IndexOf(config.ProteusMode);
+            ImGui.BeginDisabled(!gateOpen);
+            ImGui.SetNextItemWidth(220);
+            var changed = ImGui.Combo($"Proteus mods ({proteus})##proteus-mode",
+                ref index, [.. ToolModeLabels.All], ToolModeLabels.All.Count);
+            ImGui.EndDisabled();
+            Help.Tooltip(HelpTopics.ProtectProteusMode, gateOpen ? null : ActivityGateReason);
+            if (changed)
+            {
+                config.ProteusMode = ToolModeLabels.FromIndex(index);
+                _plugin.ApplyToolPolicy();
+            }
+        }
+
+        if (managedExists)
+        {
+            var atRoot = config.ProteusManagedAtRoot;
+            ImGui.BeginDisabled(!gateOpen);
+            var changed = ImGui.Checkbox("Place the Proteus managed mod at the root##proteus-managed-root", ref atRoot);
+            ImGui.EndDisabled();
+            Help.Tooltip(HelpTopics.ProtectProteusManagedRoot, gateOpen ? null : ActivityGateReason);
+            if (changed)
+            {
+                config.ProteusManagedAtRoot = atRoot;
+                _plugin.ApplyToolPolicy();
             }
         }
     }

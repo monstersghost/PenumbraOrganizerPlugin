@@ -135,6 +135,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             ProposedPath = item.CurrentPath,
             HeliosphereManaged = HeliosphereDetector.IsHeliosphereManaged(
                 item.Identifier, modPath, item.Name, _knownHeliosphereIdentifiers),
+            ProteusRole = ProteusDetector.Classify(item.Identifier, item.Author),
             Category = classification.Category,
             SubCategory = classification.SubCategory,
             BodyType = bodyType,

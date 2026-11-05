@@ -6,6 +6,13 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 
 public static class OrganizerExportFormatter
 {
+    private static string ManagedBy(OrganizerModRow mod) => mod.ProteusRole switch
+    {
+        ProteusRole.Managed => "ProteusManaged",
+        ProteusRole.Made => "Proteus",
+        _ => mod.HeliosphereManaged ? "Heliosphere" : "(none)",
+    };
+
     public static string Format(IReadOnlyList<OrganizerModRow> mods, ReviewResult validation,
                                 BodyPriority? stagedBodyPriority = null)
     {
@@ -60,6 +67,7 @@ public static class OrganizerExportFormatter
             if (mod.GearSlotDiagnostic != GearSlotDiagnostic.NotApplicable)
                 sb.AppendLine($"GearSlotDiagnostic: {mod.GearSlotDiagnostic}");
             sb.AppendLine($"HeliosphereManaged: {mod.HeliosphereManaged}");
+            sb.AppendLine($"ManagedBy: {ManagedBy(mod)}");
             sb.AppendLine($"Protected: {mod.Protected}");
             sb.AppendLine($"CurrentPath: {mod.CurrentPath}");
             sb.AppendLine($"ProposedPath: {mod.ProposedPath}");

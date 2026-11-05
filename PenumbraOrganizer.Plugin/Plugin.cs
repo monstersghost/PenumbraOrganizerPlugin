@@ -76,6 +76,8 @@ public sealed class Plugin : IDalamudPlugin
         // Before anything reads the folder rules: a v1 file carries its protected folders in the
         // legacy field, and a scan that ran first would see no rules at all and unprotect them.
         Config.MigrateToCurrentVersion();
+        // Before any scan can publish: ReplaceScanAtomically derives each row's protection from the policy.
+        OrganizerState.SetToolPolicy(Config.ToolPolicy);
 
         // The window reads Config in its constructor, so it cannot be built before the config is
         // loaded and migrated.
@@ -402,6 +404,13 @@ public sealed class Plugin : IDalamudPlugin
     /// OrganizerState into the config before writing.
     /// </summary>
     internal void SaveConfig() => PluginInterface.SavePluginConfig(Config);
+
+    /// <summary>Pushes the saved tool modes into the organizer state and saves them.</summary>
+    internal void ApplyToolPolicy()
+    {
+        OrganizerState.SetToolPolicy(Config.ToolPolicy);
+        PluginInterface.SavePluginConfig(Config);
+    }
 
     // Written the moment the walkthrough is dismissed rather than at shutdown: a crash before the
     // next clean exit would otherwise show it again, which is the failure users actually report.

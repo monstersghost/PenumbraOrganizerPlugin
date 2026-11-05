@@ -199,6 +199,27 @@ public class ApplyPlannerTests
     }
 
     [Fact]
+    public void OrderMovesForApply_ModSittingWhereAFolderIsNeeded_ParksFirstAndDependentsFollow()
+    {
+        // The mod "Bibo+" occupies Body/Bibo+, and the sort wants a FOLDER of that name holding it
+        // and its neighbours. Penumbra gives mods and folders one namespace, so the mod has to leave
+        // that path before anything can move beneath it.
+        var blocker = new ModMove("Bibo+", "Body/Bibo+", "Body/Bibo+/Bibo+");
+        var neighbour = new ModMove("Other", "Body/Other", "Body/Bibo+/Other");
+
+        var steps = ApplyPlanner.OrderMovesForApply(
+            [neighbour, blocker], m => m.CurrentPath + "__tmp");
+
+        Assert.Equal(
+            [
+                new ApplyStep("Bibo+", "Body/Bibo+__tmp", IsTemporary: true, GroupId: 0),
+                new ApplyStep("Bibo+", "Body/Bibo+/Bibo+", IsTemporary: false, GroupId: 0),
+                new ApplyStep("Other", "Body/Bibo+/Other", IsTemporary: false, GroupId: 1),
+            ],
+            steps);
+    }
+
+    [Fact]
     public void OrderMovesForApply_EmptyInput_ReturnsEmpty()
     {
         var result = ApplyPlanner.OrderMovesForApply([]);

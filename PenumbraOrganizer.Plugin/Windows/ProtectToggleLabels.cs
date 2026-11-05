@@ -8,7 +8,4 @@ namespace PenumbraOrganizer.Plugin.Windows;
 public static class ProtectToggleLabels
 {
     public static string All(bool allProtected) => allProtected ? "Unprotect all" : "Protect all";
-
-    public static string Heliosphere(bool allProtected) =>
-        allProtected ? "Unprotect Heliosphere mods" : "Protect Heliosphere mods";
 }

@@ -319,4 +319,47 @@ public class ScanProcessorTests
         Assert.Null(row.HairFlat);
         Assert.Null(row.HairByRaceCode);
     }
+
+    private static OrganizerModRow ProcessWith(string identifier, string? author)
+    {
+        var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var seed = new ScanSeed(identifier, "Some Mod", author ?? "", "Gear/Some Mod", missing, []);
+        return NewProcessor().Process(seed, CancellationToken.None)!;
+    }
+
+    [Fact]
+    public void Process_AModAuthoredByProteus_IsMadeByProteus()
+    {
+        var row = ProcessWith(identifier: "refit-abc", author: "Proteus");
+
+        Assert.Equal(ProteusRole.Made, row.ProteusRole);
+        Assert.True(row.IsToolManaged);
+    }
+
+    [Fact]
+    public void Process_TheProteusManagedDirectory_IsTheManagedMod()
+    {
+        var row = ProcessWith(identifier: "Proteus", author: "Proteus");
+
+        Assert.Equal(ProteusRole.Managed, row.ProteusRole);
+    }
+
+    [Fact]
+    public void Process_AnOrdinaryMod_HasNoProteusRole_AndIsNotToolManaged()
+    {
+        var row = ProcessWith(identifier: "some-mod", author: "Solona");
+
+        Assert.Equal(ProteusRole.None, row.ProteusRole);
+        Assert.False(row.IsToolManaged);
+    }
+
+    [Fact]
+    public void Process_AHeliosphereMod_IsToolManagedButNotAProteusMod()
+    {
+        var row = ProcessWith(identifier: "hs-Aeonium-1.1.9-aa-bb", author: "Solona");
+
+        Assert.True(row.HeliosphereManaged);
+        Assert.Equal(ProteusRole.None, row.ProteusRole);
+        Assert.True(row.IsToolManaged);
+    }
 }

@@ -201,7 +201,9 @@ public static class TemplateCodec
         // No validation needed on the two flags: bool has no invalid value, and an explicit JSON
         // null against a non-nullable bool is a deserialization failure already reported as
         // MalformedJson. Absent means the model's default.
-        var fallback = new TemplateFallback(strategy, document.FallbackSplitGear, document.FallbackSplitNpc);
+        var fallback = new TemplateFallback(
+            strategy, document.FallbackSplitGear, document.FallbackSplitNpc,
+            document.FallbackSplitHair, document.FallbackSplitGearBody, document.FallbackSplitBodyMods);
 
         if (rawEntries.Count > TemplateLimits.MaxEntries)
             return TemplateDecodeResult.Fail(TemplateDecodeError.LimitExceeded, $"Entries: {rawEntries.Count}.");

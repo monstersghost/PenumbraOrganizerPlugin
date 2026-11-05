@@ -104,7 +104,10 @@ public static class HelpTab
         new(HelpTopics.HelpTabProtect,
         [
             HelpTopics.ProtectToggleAll,
-            HelpTopics.ProtectToggleHeliosphere,
+            HelpTopics.ProtectHeliosphereMode,
+            HelpTopics.ProtectProteusMode,
+            HelpTopics.ProtectProteusManagedRoot,
+            HelpTopics.ProtectProteusNote,
             HelpTopics.ProtectFolders,
             HelpTopics.ProtectFolderUnprotectContents,
             HelpTopics.ProtectFolderRuleCycle,

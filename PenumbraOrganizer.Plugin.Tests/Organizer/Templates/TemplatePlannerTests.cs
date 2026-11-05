@@ -8,7 +8,8 @@ public class TemplatePlannerTests
 {
     private static OrganizerModRow Row(
         string identifier, string name, ModCategory? category = ModCategory.Gear,
-        string? subCategory = null, string author = "Tsar", bool isProtected = false) => new()
+        string? subCategory = null, string author = "Tsar", bool isProtected = false,
+        string? bodyType = null) => new()
     {
         Identifier = identifier,
         Name = name,
@@ -18,6 +19,7 @@ public class TemplatePlannerTests
         Category = category,
         SubCategory = subCategory,
         Protected = isProtected,
+        BodyType = bodyType,
     };
 
     // Defaults reproduce the old ModType strategy: type only, gear flattened, NPC split.
@@ -185,5 +187,29 @@ public class TemplatePlannerTests
             Template(entries: new() { ["bibo+ medieval"] = "Characters/Nyx" }), [row], Same);
 
         Assert.Equal(originalProposed, row.ProposedPath);
+    }
+
+    [Fact]
+    public void Plan_FallbackBodySplit_FilesGearUnderTheBodyFromTheImportersPriority()
+    {
+        var gear = Row("g1", "Cool Dress", ModCategory.Gear, "Top", bodyType: "Bibo+");
+        var template = new ValidatedOrganizationTemplate(
+            "T", "A", null,
+            new TemplateFallback(SortStrategy.TypeOnly, SplitGear: true, SplitNpc: true, SplitGearBody: true),
+            new Dictionary<string, string>(), [], new Dictionary<string, string>());
+
+        var plan = TemplatePlanner.Plan(template, [gear], Same);
+
+        Assert.Equal("Gear/Bibo+/Top", plan.DestinationFolders["g1"]);
+    }
+
+    [Fact]
+    public void Plan_FallbackWithoutBodySplit_LeavesBodyOut()
+    {
+        var gear = Row("g1", "Cool Dress", ModCategory.Gear, "Top", bodyType: "Bibo+");
+
+        var plan = TemplatePlanner.Plan(Template(splitGear: true), [gear], Same);
+
+        Assert.Equal("Gear/Top", plan.DestinationFolders["g1"]);
     }
 }
