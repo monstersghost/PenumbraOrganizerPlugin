@@ -403,4 +403,29 @@ public class OrganizerStateSortBodyTests
         state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: false, bodyPriority: p);
         Assert.Null(state.StagedBodyPriority);
     }
+
+    [Fact]
+    public void Sort_BodyMod_StagedResolutionAgreesWithThePathItWasFiledUnder()
+    {
+        // "Yet Another Body+" carries a Bibo+ option group but its own name says YAB. The folder uses
+        // the name-first rule for Body mods; the diagnostic record must describe the same choice.
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "yab", Name = "Yet Another Body+", Author = "Aleks",
+                CurrentPath = "Body/Yet Another Body+", ProposedPath = "Body/Yet Another Body+",
+                Category = ModCategory.Body, BodyType = "Bibo+",
+                BodyCandidates = new BodyCandidates
+                {
+                    Content = [new BodyCandidate("Bibo+", BodyEvidenceSource.Option)],
+                    Name = [new BodyCandidate("YAB", BodyEvidenceSource.Name)],
+                } },
+        ], new HashSet<string>());
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: true,
+            bodyPriority: BodyPriority.Normalize(["Bibo+"], Bodies));
+
+        Assert.Equal("Body/YAB/Yet Another Body+", PathOf(state, "yab"));
+        Assert.Equal("YAB", state.Mods.Single().StagedBodyResolution!.Label);
+    }
 }

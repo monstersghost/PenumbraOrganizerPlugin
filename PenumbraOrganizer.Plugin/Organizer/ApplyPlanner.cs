@@ -69,62 +69,80 @@ public static class ApplyPlanner
     {
         temporaryPathFactory ??= m => $"{m.CurrentPath}__organizer_apply_tmp__{Guid.NewGuid():N}";
 
-        var byCurrentPath = moves.ToDictionary(m => m.CurrentPath, StringComparer.OrdinalIgnoreCase);
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var steps = new List<ApplyStep>();
-        var groupId = 0;
-
         // A mod sitting at a path that another move needs as a FOLDER ("Body/Bibo+" the mod, while
         // the sort files mods under "Body/Bibo+/..."). Mods and folders share one namespace, so
-        // nothing can move beneath that path until the mod has left it. Each such mod parks at a
-        // temporary path first, then goes straight to its real target - which may itself be inside
-        // the folder it just freed - and everything else follows.
+        // nothing can move beneath that path until the mod has left it. Every such mod parks at a
+        // temporary path first. All parking happens up front, in the first group, so that no
+        // blocker's final move can run while another blocker still sits where a folder is needed.
         var blockers = moves
             .Where(m => moves.Any(o => o.TargetPath.StartsWith(m.CurrentPath + "/", StringComparison.OrdinalIgnoreCase)))
             .OrderBy(m => m.Identifier, StringComparer.Ordinal)
             .ToList();
-        foreach (var blocker in blockers)
-        {
-            visited.Add(blocker.CurrentPath);
-            byCurrentPath.Remove(blocker.CurrentPath);
-            steps.Add(new ApplyStep(blocker.Identifier, temporaryPathFactory(blocker), IsTemporary: true, GroupId: groupId));
-            steps.Add(new ApplyStep(blocker.Identifier, blocker.TargetPath, IsTemporary: false, GroupId: groupId));
-            groupId++;
-        }
+        var parkedAt = blockers.ToDictionary(m => m.Identifier, temporaryPathFactory, StringComparer.Ordinal);
+
+        // From here a parked blocker "is" at its temp path: its original path is free, which is also
+        // what breaks any cycle it would have been part of.
+        string EffectiveCurrent(ModMove m) => parkedAt.TryGetValue(m.Identifier, out var temp) ? temp : m.CurrentPath;
+
+        var byCurrentPath = moves.ToDictionary(EffectiveCurrent, StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var components = new List<(List<ModMove> Chain, bool IsCycle)>();
 
         foreach (var start in moves.OrderBy(m => m.Identifier, StringComparer.Ordinal))
         {
-            if (visited.Contains(start.CurrentPath))
+            if (visited.Contains(EffectiveCurrent(start)))
                 continue;
 
             var chain = new List<ModMove>();
             ModMove? cursor = start;
-            while (cursor is not null && visited.Add(cursor.CurrentPath))
+            while (cursor is not null && visited.Add(EffectiveCurrent(cursor)))
             {
                 chain.Add(cursor);
                 byCurrentPath.TryGetValue(cursor.TargetPath, out cursor);
             }
 
-            // Each emitted component appends its steps as one contiguous block, then bumps groupId -
-            // so GroupIds are 0-based and every group occupies a contiguous StepIndex range once these
-            // steps are numbered by OperationPlan (design doc section 3).
-            //
             // `cursor` is non-null only if it looped back into an already-visited path. Given the
             // uniqueness guarantees above, that path can only be this chain's own start (no other
             // chain's target can coincide with it) - so a non-null cursor here always means a cycle.
-            if (cursor is null)
+            components.Add((chain, cursor is not null));
+        }
+
+        var steps = new List<ApplyStep>();
+        var groupId = 0;
+
+        // Each component's steps are one contiguous block with one GroupId (design doc section 3).
+        // Components that contain a blocker, and every parking step, form group 0.
+        void Emit((List<ModMove> Chain, bool IsCycle) component, int group)
+        {
+            var chain = component.Chain;
+            if (!component.IsCycle)
             {
                 for (var i = chain.Count - 1; i >= 0; i--)
-                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath, IsTemporary: false, GroupId: groupId));
-            }
-            else
-            {
-                steps.Add(new ApplyStep(chain[0].Identifier, temporaryPathFactory(chain[0]), IsTemporary: true, GroupId: groupId));
-                for (var i = chain.Count - 1; i >= 1; i--)
-                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath, IsTemporary: false, GroupId: groupId));
-                steps.Add(new ApplyStep(chain[0].Identifier, chain[0].TargetPath, IsTemporary: false, GroupId: groupId));
+                    steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath, IsTemporary: false, GroupId: group));
+                return;
             }
 
+            steps.Add(new ApplyStep(chain[0].Identifier, temporaryPathFactory(chain[0]), IsTemporary: true, GroupId: group));
+            for (var i = chain.Count - 1; i >= 1; i--)
+                steps.Add(new ApplyStep(chain[i].Identifier, chain[i].TargetPath, IsTemporary: false, GroupId: group));
+            steps.Add(new ApplyStep(chain[0].Identifier, chain[0].TargetPath, IsTemporary: false, GroupId: group));
+        }
+
+        if (blockers.Count > 0)
+        {
+            foreach (var blocker in blockers)
+                steps.Add(new ApplyStep(blocker.Identifier, parkedAt[blocker.Identifier], IsTemporary: true, GroupId: groupId));
+
+            foreach (var component in components.Where(c => c.Chain.Any(m => parkedAt.ContainsKey(m.Identifier))))
+                Emit(component, groupId);
+
+            groupId++;
+            components = [.. components.Where(c => !c.Chain.Any(m => parkedAt.ContainsKey(m.Identifier)))];
+        }
+
+        foreach (var component in components)
+        {
+            Emit(component, groupId);
             groupId++;
         }
 

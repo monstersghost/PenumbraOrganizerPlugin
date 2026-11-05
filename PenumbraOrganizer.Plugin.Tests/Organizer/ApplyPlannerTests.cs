@@ -220,6 +220,46 @@ public class ApplyPlannerTests
     }
 
     [Fact]
+    public void OrderMovesForApply_BlockerWhoseTargetIsStillOccupied_WaitsForTheOccupantToLeave()
+    {
+        // A sits at X and wants Y; B sits at Y and wants X/B. A is a blocker (X must become a folder),
+        // but its final target Y is occupied until B leaves. A must park, B must move into the freed
+        // folder, and only then may A take Y - never A->Y while B is still there.
+        var a = new ModMove("A", "X", "Y");
+        var b = new ModMove("B", "Y", "X/B");
+
+        var steps = ApplyPlanner.OrderMovesForApply([a, b], m => m.CurrentPath + "__tmp");
+
+        Assert.Equal(
+            [
+                new ApplyStep("A", "X__tmp", IsTemporary: true, GroupId: 0),
+                new ApplyStep("B", "X/B", IsTemporary: false, GroupId: 0),
+                new ApplyStep("A", "Y", IsTemporary: false, GroupId: 0),
+            ],
+            steps);
+    }
+
+    [Fact]
+    public void OrderMovesForApply_SeveralBlockers_AllParkBeforeAnythingFinishes()
+    {
+        var a = new ModMove("A", "P", "P/A");
+        var b = new ModMove("B", "Q", "Q/B");
+        var pNeighbour = new ModMove("N1", "Other1", "P/N1");
+        var qNeighbour = new ModMove("N2", "Other2", "Q/N2");
+
+        var steps = ApplyPlanner.OrderMovesForApply(
+            [pNeighbour, qNeighbour, b, a], m => m.CurrentPath + "__tmp");
+
+        var firstFinal = steps.ToList().FindIndex(s => !s.IsTemporary);
+        Assert.Equal(2, steps.Take(firstFinal).Count(s => s.IsTemporary));
+        Assert.Equal(2, steps.Count(s => s.IsTemporary));
+        Assert.Equal(steps.Count(s => s.IsTemporary) + 4, steps.Count);
+        // Every temp step shares a group with its own final move.
+        foreach (var id in new[] { "A", "B" })
+            Assert.Single(steps.Where(s => s.Identifier == id).Select(s => s.GroupId).Distinct());
+    }
+
+    [Fact]
     public void OrderMovesForApply_EmptyInput_ReturnsEmpty()
     {
         var result = ApplyPlanner.OrderMovesForApply([]);

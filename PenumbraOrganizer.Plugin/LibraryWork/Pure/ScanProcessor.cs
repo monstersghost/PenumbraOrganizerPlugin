@@ -123,7 +123,8 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         {
             bodyCandidates = BodyCandidateBuilder.Build(
                 _bodyTypeMatcher, item.Name, item.CurrentPath, content, contentReadFailed: walked && content is null);
-            bodyType = BodyPriorityResolver.Resolve(bodyCandidates, _defaultBodyPriority)?.Label;
+            bodyType = BodyPriorityResolver.Resolve(
+                bodyCandidates, _defaultBodyPriority, nameFirst: classification.Category == ModCategory.Body)?.Label;
         }
 
         return new OrganizerModRow

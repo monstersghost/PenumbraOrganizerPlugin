@@ -590,7 +590,7 @@ public sealed class OrganizerState
             var applies = row.Category == ModCategory.Gear ? splitGearBody
                 : row.Category == ModCategory.Body && splitBodyMods;
             row.StagedBodyResolution = applies && bodyPriority is not null
-                ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority)
+                ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority, nameFirst: row.Category == ModCategory.Body)
                 : null;
         }
 
