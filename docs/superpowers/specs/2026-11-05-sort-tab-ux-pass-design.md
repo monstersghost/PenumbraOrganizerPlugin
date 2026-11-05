@@ -1,6 +1,6 @@
 # Sort and Review tab UX pass, with a two-checkbox body split
 
-Status: design, revised after review (2026-11-05), awaiting author sign-off. Inputs: the author's
+Status: design, revised after review (2026-11-05), approved by the author to plan. Inputs: the author's
 in-game screen recording and screenshots of 2026-11-05, a design critique of the Sort tab and a
 glance critique of the other tabs. Builds on body detection from mod content (a55ca2a / 522d168).
 
@@ -24,10 +24,10 @@ body split flag becomes per category.
 7. One body checkbox becomes two, and the body-mods one gets a `(?)` explanation.
 8. A quick pick above the body priority list ("My main body" in the author's words).
 9. A little spacing around Reset to default.
+10. The Body priority section is **always present, collapsed**, rather than hidden until a body box
+    is ticked (confirmed by the author on 2026-11-05).
 
 **Proposed by the agent, not yet confirmed (each is a one-line change)**
-- The Body priority section is **always present, collapsed**, rather than hidden until a body box is
-  ticked. (An earlier draft hid it; the author's stated layout supports always present.)
 - Expansion state of the two collapsible sections is per session (they start collapsed each time).
 - The quick-pick label is "**First-choice body**", because it sets a sorting preference, not which
   body the character uses.
