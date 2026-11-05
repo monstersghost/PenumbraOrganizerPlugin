@@ -1,6 +1,6 @@
 # 0.6.3.0 - Body types from the mod itself, a calmer Sort tab, and Heliosphere and Proteus modes
 
-This release finds each mod's body type from what is inside the mod, remembers your Sort settings,
+**This is a big one.** This release finds each mod's body type from what is inside the mod, remembers your Sort settings,
 lets you decide what happens to Heliosphere and Proteus mods, and tells you which mods an Apply
 could not move.
 
