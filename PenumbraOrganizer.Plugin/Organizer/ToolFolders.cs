@@ -19,6 +19,9 @@ public static class ToolFolders
         [.. Enum.GetNames<ModCategory>(), "Animation and VFX", "Review"],
         StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Whether a top-level folder name is one the sorter itself creates (case-insensitive).</summary>
+    public static bool IsSorterFolder(string folderName) => SorterFolders.Contains(folderName);
+
     public static string ApplyAnchor(string currentPath, string normalPath)
     {
         var slash = currentPath.IndexOf('/');

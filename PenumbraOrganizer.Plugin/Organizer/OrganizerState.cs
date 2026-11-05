@@ -26,10 +26,10 @@ public sealed class OrganizerState
     // choice, for every Heliosphere mod at once, whether or not it had anything to do with that
     // folder.
     //
-    // Deliberately NOT persisted and deliberately cleared by ReplaceScanAtomically: the documented
-    // contract is that Heliosphere mods are re-protected on every scan no matter how the toggle was
-    // last left, because Heliosphere owns their location. This makes the override survive unrelated
-    // UI actions, not survive a scan.
+    // Deliberately NOT persisted and deliberately cleared by ReplaceScanAtomically: a per-mod untick
+    // lasts for the session, not across a scan. This makes the override survive unrelated UI actions,
+    // not survive a scan. The saved per-tool MODE (ToolPolicy) is what persists across scans; with
+    // the default Protected mode a rescan re-protects every tool-managed mod.
     private HashSet<string> _toolUnprotectOverrides = new(StringComparer.Ordinal);
 
     private ToolPolicy _toolPolicy = ToolPolicy.Default;
@@ -131,8 +131,8 @@ public sealed class OrganizerState
         var replacementFolderRules = previouslyProtectedFolderRules is null
             ? new Dictionary<string, bool>(StringComparer.Ordinal)
             : new Dictionary<string, bool>(previouslyProtectedFolderRules, StringComparer.Ordinal);
-        // A scan re-asserts Heliosphere protection unconditionally, so this session's overrides end
-        // here. Built as a replacement like everything else so a throw below leaves them untouched.
+        // A scan ends this session's per-mod overrides (the saved tool modes are untouched). Built as a
+        // replacement like everything else so a throw below leaves them untouched.
         var replacementToolOverrides = new HashSet<string>(StringComparer.Ordinal);
 
         var replacementMods = new Dictionary<string, OrganizerModRow>();
@@ -195,7 +195,9 @@ public sealed class OrganizerState
     // changed nothing. A protected FOLDER still wins, as it does for every other unprotect.
     public void SetHeliosphereProtection(bool value)
     {
-        foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
+        // A mod that is both Heliosphere-managed and Proteus-made follows the Proteus mode, so this
+        // Heliosphere action leaves it alone.
+        foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged && m.ProteusRole == ProteusRole.None))
         {
             SetToolOverride(row.Identifier, unprotected: !value);
             if (!value)
