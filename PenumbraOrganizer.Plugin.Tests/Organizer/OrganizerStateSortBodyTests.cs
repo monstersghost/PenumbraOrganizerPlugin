@@ -494,4 +494,24 @@ public class OrganizerStateSortBodyTests
         Assert.Equal("Gear/Rue+/rue-top", PathOf(state, "rue-top"));
         Assert.Equal("Gear/head", PathOf(state, "head"));
     }
+
+    [Fact]
+    public void Sort_AProtectedGearRow_DoesNotConsumeABodyNumber()
+    {
+        // Bibo+ is ranked first but its only gear mod is protected and will not move, so the one
+        // body being placed (Rue+) must still be 10, not 11.
+        OrganizerModRow G(string id, string body) => new()
+        {
+            Identifier = id, Name = id, Author = "A", CurrentPath = id, ProposedPath = id,
+            Category = ModCategory.Gear, SubCategory = "Top", BodyType = body,
+        };
+        var state = new OrganizerState();
+        state.LoadScan([G("prot", "Bibo+"), G("free", "Rue+")], new HashSet<string> { "prot" });
+
+        state.Sort(SortStrategy.TypeOnly, true, true, false, Canon, splitGearBody: true, splitBodyMods: false,
+            bodyPriority: BodyPriority.Normalize(["Bibo+", "Rue+"], Bodies));
+
+        Assert.Equal("Gear/10. Rue+/02. Top/free", PathOf(state, "free"));
+        Assert.Equal("prot", PathOf(state, "prot"));
+    }
 }

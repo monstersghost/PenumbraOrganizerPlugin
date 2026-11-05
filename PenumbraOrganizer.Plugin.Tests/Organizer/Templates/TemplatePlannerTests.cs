@@ -258,4 +258,16 @@ public class TemplatePlannerTests
 
         Assert.Equal("Equipment/10. Rue+/02. Top", plan.DestinationFolders["g1"]);
     }
+
+    [Fact]
+    public void Plan_FallbackNumbers_IgnoreProtectedRows()
+    {
+        var protectedRow = Row("p1", "Protected Dress", ModCategory.Gear, "Top", isProtected: true, bodyType: "Rue+");
+        var fallbackRow = Row("f1", "Fallback Dress", ModCategory.Gear, "Top", bodyType: "Bibo+");
+        var rueFirst = BodyPriority.Normalize(["Rue+"], ["Rue+", "Bibo+"]);
+
+        var plan = TemplatePlanner.Plan(GearBothSplits(), [protectedRow, fallbackRow], Same, bodyPriority: rueFirst);
+
+        Assert.Equal("Gear/10. Bibo+/02. Top", plan.DestinationFolders["f1"]);
+    }
 }
