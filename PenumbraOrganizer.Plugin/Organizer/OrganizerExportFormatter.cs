@@ -1,11 +1,13 @@
 using System.Text;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Organizer;
 
 public static class OrganizerExportFormatter
 {
-    public static string Format(IReadOnlyList<OrganizerModRow> mods, ReviewResult validation)
+    public static string Format(IReadOnlyList<OrganizerModRow> mods, ReviewResult validation,
+                                BodyPriority? stagedBodyPriority = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("=== Penumbra Organizer Export ===");
@@ -13,6 +15,8 @@ public static class OrganizerExportFormatter
         sb.AppendLine($"Total mods: {mods.Count}");
         sb.AppendLine($"Protected: {mods.Count(m => m.Protected)}");
         sb.AppendLine($"Collisions: {validation.PathCollisions.Count}");
+        if (stagedBodyPriority is not null)
+            sb.AppendLine($"Body priority used for the last sort: {string.Join(" > ", stagedBodyPriority.Labels)}");
 
         // Only shown when at least one Gear mod exists - added after a tester report where 0 of
         // ~1500 Gear mods got a subcategory, to distinguish "config files failed to read" from
@@ -46,6 +50,13 @@ public static class OrganizerExportFormatter
             // is exactly as diagnostic as "it matched Bibo+" - a dump that showed only the hits
             // could not answer how many mods went unmatched.
             sb.AppendLine($"BodyType: {mod.BodyType ?? "(none)"}");
+            // Why this mod landed where it did: every candidate with its tier and source. The
+            // BodyType line above is the DEFAULT-order winner; a sort with another priority can pick
+            // a different candidate from this same list.
+            if (mod.BodyCandidates is { } candidates)
+                sb.AppendLine($"BodyEvidence: {candidates.Describe()}");
+            if (mod.StagedBodyResolution is { } staged)
+                sb.AppendLine($"StagedBody: {staged.Label} ({staged.Tier}/{staged.Source})");
             if (mod.GearSlotDiagnostic != GearSlotDiagnostic.NotApplicable)
                 sb.AppendLine($"GearSlotDiagnostic: {mod.GearSlotDiagnostic}");
             sb.AppendLine($"HeliosphereManaged: {mod.HeliosphereManaged}");

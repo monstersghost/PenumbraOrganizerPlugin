@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Tests.Organizer;
@@ -66,6 +67,36 @@ public class OrganizerExportFormatterTests
         Assert.Contains("Category: (none)", result);
         Assert.Contains("SubCategory: (none)", result);
         Assert.Contains("BodyType: (none)", result);
+    }
+
+    [Fact]
+    public void Format_BodyEvidence_IsEmittedWhenCandidatesExist()
+    {
+        var row = MakeRow("a", "Plain Corset", category: ModCategory.Gear, subCategory: "Top", bodyType: "Rue+");
+        var withEvidence = new OrganizerModRow
+        {
+            Identifier = row.Identifier, Name = row.Name, Author = row.Author,
+            CurrentPath = row.CurrentPath, ProposedPath = row.ProposedPath,
+            Category = row.Category, SubCategory = row.SubCategory, BodyType = "Rue+",
+            BodyCandidates = new BodyCandidates
+            {
+                Content = [new BodyCandidate("Rue+", BodyEvidenceSource.Option)],
+            },
+        };
+
+        var result = OrganizerExportFormatter.Format(
+            [withEvidence], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.Contains("BodyEvidence: content=[Rue+ (Option)] name=[] library=[] contentRead=ok", result);
+    }
+
+    [Fact]
+    public void Format_NoCandidates_EmitsNoBodyEvidenceLine()
+    {
+        var result = OrganizerExportFormatter.Format(
+            [MakeRow("a", "Mystery Mod")], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.DoesNotContain("BodyEvidence:", result);
     }
 
     [Fact]
@@ -157,5 +188,41 @@ public class OrganizerExportFormatterTests
         Assert.Contains("Total mods: 3", result);
         Assert.Contains("Protected: 1", result);
         Assert.Contains("Collisions: 1", result);
+    }
+
+    [Fact]
+    public void Format_AfterTwoSortsWithDifferentPriorities_ExplainsEachProposal()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "m", Name = "Succubus", Author = "Ann",
+                CurrentPath = "Succubus", ProposedPath = "Succubus",
+                Category = ModCategory.Gear, SubCategory = "Top", BodyType = "YAB",
+                BodyCandidates = new BodyCandidates
+                {
+                    Content = [new BodyCandidate("YAB", BodyEvidenceSource.Option),
+                               new BodyCandidate("Rue+", BodyEvidenceSource.Option)],
+                } },
+        ], new HashSet<string>());
+        var bodies = new[] { "YAB", "Rue+" };
+        var review = new ReviewResult([], new Dictionary<string, List<string>>());
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitBody: true,
+            bodyPriority: BodyPriority.Normalize(["Rue+"], bodies));
+        var first = OrganizerExportFormatter.Format([.. state.Mods], review, state.StagedBodyPriority);
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitBody: true,
+            bodyPriority: BodyPriority.Normalize(["YAB"], bodies));
+        var second = OrganizerExportFormatter.Format([.. state.Mods], review, state.StagedBodyPriority);
+
+        Assert.Contains("Body priority used for the last sort: Rue+ > YAB", first);
+        Assert.Contains("StagedBody: Rue+ (Content/Option)", first);
+        Assert.Contains("ProposedPath: Gear/Rue+/Top/Succubus", first);
+        Assert.Contains("BodyType: YAB", first);
+
+        Assert.Contains("Body priority used for the last sort: YAB > Rue+", second);
+        Assert.Contains("StagedBody: YAB (Content/Option)", second);
+        Assert.Contains("ProposedPath: Gear/YAB/Top/Succubus", second);
     }
 }

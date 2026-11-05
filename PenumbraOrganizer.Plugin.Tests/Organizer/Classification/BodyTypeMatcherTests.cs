@@ -247,4 +247,64 @@ public class BodyTypeMatcherTests
         // If this ever needs tightening, the bare aliases are what to drop.
         Assert.Equal("Rue+", Bundled().Match("Rue de la Paix")?.Label);
     }
+
+    [Fact]
+    public void MatchAll_ReturnsEveryDistinctBodyNamed()
+    {
+        var matcher = new BodyTypeMatcher([Entry("Bibo+", "bibo+", "bibo"), Entry("YAB", "yab", "yab+")]);
+
+        var labels = matcher.MatchAll("Heartbeat for Bibo & YAB+");
+
+        Assert.Equal(["Bibo+", "YAB"], labels.OrderBy(l => l, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public void MatchAll_SameBodyTwice_ReportsItOnce()
+    {
+        var matcher = new BodyTypeMatcher([Entry("Bibo+", "bibo+", "bibo")]);
+
+        Assert.Equal(["Bibo+"], matcher.MatchAll("Bibo+ and bibo outfit"));
+    }
+
+    [Fact]
+    public void MatchAll_ShorterAliasInsideALongerOne_IsNotReportedAsASecondBody()
+    {
+        // "AB Eve" must not also read as the body whose alias is just "eve".
+        var matcher = new BodyTypeMatcher([Entry("AB Eve", "ab eve"), Entry("Eve", "eve")]);
+
+        Assert.Equal(["AB Eve"], matcher.MatchAll("AB Eve Top"));
+        Assert.Equal(["Eve"], matcher.MatchAll("Eve Top"));
+    }
+
+    [Fact]
+    public void MatchAll_RepeatedLongAlias_ClaimsEveryOccurrence()
+    {
+        // The second "AB Eve" must not leak a standalone "Eve" once the first one claimed its span.
+        var matcher = new BodyTypeMatcher([Entry("AB Eve", "ab eve"), Entry("Eve", "eve")]);
+
+        Assert.Equal(["AB Eve"], matcher.MatchAll("AB Eve top / AB Eve bottom"));
+        Assert.Equal(["AB Eve", "Eve"], matcher.MatchAll("AB Eve top / Eve bottom").OrderBy(l => l, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public void MatchAll_SeveralAliasesOfOneBody_ClaimTheirOwnSpansAndReportItOnce()
+    {
+        // "bibo" and "bibo+" are both Bibo+; the longer claims its span, the shorter then matches
+        // only an UNclaimed word, and the body is still reported once.
+        var matcher = new BodyTypeMatcher([Entry("Bibo+", "bibo+", "bibo"), Entry("Bibo Plus Extra", "bibo plus")]);
+
+        Assert.Equal(["Bibo Plus Extra", "Bibo+"], matcher.MatchAll("Bibo plus dress for Bibo+ and bibo")
+            .OrderByDescending(l => l.Length).ToArray());
+        Assert.Equal(["Bibo+"], matcher.MatchAll("bibo+ bibo bibo+"));
+    }
+
+    [Fact]
+    public void MatchAll_NoTokensOrNoMatch_IsEmpty()
+    {
+        var matcher = new BodyTypeMatcher([Entry("Bibo+", "bibo+")]);
+
+        Assert.Empty(matcher.MatchAll(""));
+        Assert.Empty(matcher.MatchAll("Plain Robe"));
+        Assert.Empty(BodyTypeMatcher.Empty.MatchAll("Bibo+"));
+    }
 }

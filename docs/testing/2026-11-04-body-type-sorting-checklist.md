@@ -81,3 +81,22 @@ a stage dominated by reading mod configs from disk. That measurement was on Linu
 - [ ] On a large real library, confirm the scan does not take noticeably longer with the body list
       in play than it did before. Windows real-time antivirus scanning many small config reads is
       the most likely source of a difference the off-game measurement would not show.
+
+## Content detection and priority
+
+Body is now read from the mod's options and files (tier 1), then its name, then its library folder.
+
+- [ ] Rescan and compare the per-body counts with the previous build. Expect some mods that filed
+      by name before to move; confirm each move is explained by the mod's options.
+- [ ] Sort `[TPM] Succubus Lifestyle (YAB - Rue)` and `Heartbeat for Bibo & YAB+` under two
+      different Body priority orders, re-sorting WITHOUT a rescan. Each should follow the order.
+- [ ] Reorder the priority, restart the game, and confirm the order persisted (also the hair
+      priority race and Midlander fallback).
+- [ ] Find a mod with no body in its name and confirm it is filed from its options or files.
+- [ ] Confirm the Review tab shows the moves before anything is applied.
+- [ ] To see why a mod landed where it did, copy the diagnostic dump and read its `BodyEvidence:`
+      line (candidates by tier); after a sort also `StagedBody:` and the "Body priority used for
+      the last sort" header. A Body mod whose config could not be read shows `contentRead=FAILED` in its
+      `BodyEvidence:` line and falls back to its name. In practice this appears only on Body-category
+      rows, because a Gear mod whose config cannot be read has no equipment slots, so the slot gate
+      already skips body detection for it.

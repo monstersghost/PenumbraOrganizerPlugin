@@ -2,6 +2,24 @@ using System.Text.Json;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Classification;
 
+/// <summary>Whether a reported name belongs to an option group or to one option within it.</summary>
+public enum ConfigNameKind { Group, Option }
+
+/// <summary>What a walk reports. Every member is optional; an unset one is simply not called.</summary>
+/// <remarks>
+/// <see cref="OnFileKey"/> receives game paths (the keys of a Files object). <see cref="OnFileValue"/>
+/// receives the mod-relative replacement paths (the values). Both are '/'-normalised. Names are the
+/// option groups' and options' own, and never the mod's title: the root of meta.json and of
+/// default_mod.json carries a name that is not one.
+/// </remarks>
+public sealed class ConfigVisitor
+{
+    public Action<string>? OnFileKey { get; init; }
+    public Action<string>? OnFileValue { get; init; }
+    public Action<JsonElement>? OnManipulation { get; init; }
+    public Action<ConfigNameKind, string>? OnName { get; init; }
+}
+
 /// <summary>
 /// Walks a mod's Penumbra config JSON, handing each declared game path and each meta manipulation
 /// to a callback.
@@ -33,7 +51,11 @@ public static class ModConfigFileWalker
     public static bool TryWalk(
         DirectoryInfo modDirectory,
         Action<string> onFileKey,
-        Action<JsonElement> onManipulation)
+        Action<JsonElement> onManipulation) =>
+        TryWalk(modDirectory, new ConfigVisitor { OnFileKey = onFileKey, OnManipulation = onManipulation });
+
+    /// <inheritdoc cref="TryWalk(DirectoryInfo, Action{string}, Action{JsonElement})"/>
+    public static bool TryWalk(DirectoryInfo modDirectory, ConfigVisitor visitor)
     {
         if (!modDirectory.Exists)
             return true;
@@ -54,7 +76,12 @@ public static class ModConfigFileWalker
             {
                 using var stream = File.OpenRead(file.FullName);
                 using var document = JsonDocument.Parse(stream);
-                WalkElement(document.RootElement, onFileKey, onManipulation);
+                // Only a group_*.json ROOT is a group. meta.json's root is the mod itself and
+                // default_mod.json's is the default option's container; neither name is a selection.
+                var rootRole = file.Name.StartsWith("group_", StringComparison.OrdinalIgnoreCase)
+                    ? ElementRole.Group
+                    : ElementRole.None;
+                WalkElement(document.RootElement, visitor, rootRole);
             }
             catch (Exception ex) when (IsExpectedFileSystemException(ex) || ex is JsonException)
             {
@@ -109,56 +136,62 @@ public static class ModConfigFileWalker
         ex is IOException or UnauthorizedAccessException; // UnauthorizedAccessException does NOT
                                                           // derive from IOException in .NET
 
-    private static void WalkElement(
-        JsonElement element,
-        Action<string> onFileKey,
-        Action<JsonElement> onManipulation)
+    private enum ElementRole { None, Group, Option }
+
+    private static void WalkElement(JsonElement element, ConfigVisitor visitor, ElementRole role)
     {
         if (element.ValueKind != JsonValueKind.Object)
             return; // guards every TryGetProperty call below against a non-object element
 
+        if (role != ElementRole.None
+            && visitor.OnName is { } onName
+            && element.TryGetProperty("Name", out var nameProp)
+            && nameProp.ValueKind == JsonValueKind.String
+            && nameProp.GetString() is { Length: > 0 } name)
+            onName(role == ElementRole.Group ? ConfigNameKind.Group : ConfigNameKind.Option, name);
+
         if (element.TryGetProperty("Files", out var files) && files.ValueKind == JsonValueKind.Object)
         {
             // Normalised here rather than in each reader: every consumer wants '/' separators, and
-            // Penumbra writes some keys with '\'.
+            // Penumbra writes some keys and values with '\'.
             foreach (var entry in files.EnumerateObject())
-                onFileKey(entry.Name.Replace('\\', '/'));
+            {
+                visitor.OnFileKey?.Invoke(entry.Name.Replace('\\', '/'));
+                if (visitor.OnFileValue is { } onValue
+                    && entry.Value.ValueKind == JsonValueKind.String
+                    && entry.Value.GetString() is { } value)
+                    onValue(value.Replace('\\', '/'));
+            }
         }
 
-        if (element.TryGetProperty("Manipulations", out var manipulations)
+        if (visitor.OnManipulation is { } onManipulation
+            && element.TryGetProperty("Manipulations", out var manipulations)
             && manipulations.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in manipulations.EnumerateArray())
                 onManipulation(item);
         }
 
-        WalkChildArray(element, "Options", onFileKey, onManipulation);
-        WalkChildArray(element, "Containers", onFileKey, onManipulation);
+        WalkChildArray(element, "Options", visitor, ElementRole.Option);
+        WalkChildArray(element, "Containers", visitor, ElementRole.Option);
 
-        // Penumbra 1.7.0's meta.json shape: the mod's default option's Files/Manipulations live
-        // nested one level under "DefaultData" (an object, not an array like Options/Containers),
-        // and every group that used to be its own group_*.json file is now one entry in a
-        // top-level "Groups" array - each group entry has the same Options/Containers shape
-        // already handled above, so recursing into it needs no further special-casing.
+        // Penumbra 1.7.0's meta.json shape: the default option's Files/Manipulations live nested
+        // one level under "DefaultData" (an object, not an array), and every group that used to be
+        // its own group_*.json file is one entry in a top-level "Groups" array.
         if (element.TryGetProperty("DefaultData", out var defaultData)
             && defaultData.ValueKind == JsonValueKind.Object)
-            WalkElement(defaultData, onFileKey, onManipulation);
-        WalkChildArray(element, "Groups", onFileKey, onManipulation);
+            WalkElement(defaultData, visitor, ElementRole.None);
+        WalkChildArray(element, "Groups", visitor, ElementRole.Group);
     }
 
     private static void WalkChildArray(
-        JsonElement element,
-        string propertyName,
-        Action<string> onFileKey,
-        Action<JsonElement> onManipulation)
+        JsonElement element, string propertyName, ConfigVisitor visitor, ElementRole childRole)
     {
         if (!element.TryGetProperty(propertyName, out var children) || children.ValueKind != JsonValueKind.Array)
             return;
 
-        // Genuinely recursive (calls WalkElement, not just the Files/Manipulations step) - real
-        // mods checked across ~2,280 combined mods never nest beyond one level, but this doesn't
-        // silently stop early if a future/unusual mod does.
+        // Genuinely recursive, so a future/unusual nesting is not silently dropped.
         foreach (var child in children.EnumerateArray())
-            WalkElement(child, onFileKey, onManipulation);
+            WalkElement(child, visitor, childRole);
     }
 }

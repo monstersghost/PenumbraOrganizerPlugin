@@ -226,4 +226,30 @@ public class ConfigurationTests
         Assert.True(inside.Protected);
         Assert.False(outside.Protected);
     }
+
+    [Fact]
+    public void SortPreferences_DefaultToEmptyAndNone()
+    {
+        var config = new Configuration();
+
+        Assert.Empty(config.BodyPriority);
+        Assert.Null(config.HairRaceCode);
+        Assert.False(config.MidlanderFallback);
+    }
+
+    [Fact]
+    public void SortPreferences_RoundTripThroughJson_AndAnOldConfigWithoutThemLoadsClean()
+    {
+        var config = new Configuration { HairRaceCode = "1801", MidlanderFallback = true };
+        config.BodyPriority.AddRange(["Rue+", "TBSE"]);
+
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<Configuration>(
+            System.Text.Json.JsonSerializer.Serialize(config))!;
+        Assert.Equal(["Rue+", "TBSE"], loaded.BodyPriority);
+        Assert.Equal("1801", loaded.HairRaceCode);
+        Assert.True(loaded.MidlanderFallback);
+
+        var old = System.Text.Json.JsonSerializer.Deserialize<Configuration>("""{"Version":2}""")!;
+        Assert.Empty(old.BodyPriority);
+    }
 }

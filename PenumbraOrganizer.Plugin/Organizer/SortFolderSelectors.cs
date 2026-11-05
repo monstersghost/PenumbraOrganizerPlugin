@@ -1,3 +1,4 @@
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
@@ -39,7 +40,8 @@ public static class SortFolderSelectors
         Func<string, string>? renameFolder = null,
         bool splitHair = false,
         HairPriority? hairPriority = null,
-        bool splitBody = false)
+        bool splitBody = false,
+        BodyPriority? bodyPriority = null)
     {
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
@@ -60,7 +62,7 @@ public static class SortFolderSelectors
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
             // Not flattened the way the three above are: a body type is its own segment on the row,
             // never a value in SubCategory, so turning the split off is simply not passing it.
-            return TypeFolder(row.Category, sub, renameFolder, splitBody ? row.BodyType : null);
+            return TypeFolder(row.Category, sub, renameFolder, splitBody ? ResolveBody(row, bodyPriority) : null);
         }
 
         return strategy switch
@@ -119,6 +121,14 @@ public static class SortFolderSelectors
         // deliberate throw for a nonsense (category, subcategory) pairing.
         return renameFolder is null ? folder : renameFolder(folder);
     }
+
+    // The live priority beats the stored default only when the row has candidates to rank. A row
+    // built without them (an imported workbook, an older scan, most tests) keeps its BodyType, so
+    // adding the priority changes no existing result.
+    private static string? ResolveBody(OrganizerModRow row, BodyPriority? priority) =>
+        priority is not null && row.BodyCandidates is not null
+            ? BodyPriorityResolver.Resolve(row.BodyCandidates, priority)?.Label
+            : row.BodyType;
 
     // Single dynamic segments (creator names) mirror Penumbra's FixName so what we propose is
     // what Penumbra will actually store. Multi-level type folders must NOT be FixName'd — that

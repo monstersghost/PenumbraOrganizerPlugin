@@ -77,6 +77,20 @@ public sealed class Configuration : IPluginConfiguration
     public bool UseScrapedNpcNameList { get; set; }
 
     /// <summary>
+    /// The user's body ranking, first is highest. Set once and left: most people use one body per
+    /// character, so unlike the sort strategy this is a preference, not a per-sort choice. Repaired
+    /// against the current body list on load by <c>BodyPriority.Normalize</c>, so a stale entry or a
+    /// body added by a later release never breaks it.
+    /// </summary>
+    public List<string> BodyPriority { get; set; } = [];
+
+    /// <summary>The hair priority race code ("1801"), or null for None. A set-once preference.</summary>
+    public string? HairRaceCode { get; set; }
+
+    /// <summary>The Midlander hair fallback. A set-once preference.</summary>
+    public bool MidlanderFallback { get; set; }
+
+    /// <summary>
     /// 0.6.0 ships with the scraped list unavailable: the crash whose correlation motivated this
     /// work has not been reproduced, so nothing may load a 20,000-name list yet. Flipping this to
     /// true is a deliberate release decision made after that verification, not a config edit.

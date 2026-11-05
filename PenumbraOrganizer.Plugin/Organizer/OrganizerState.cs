@@ -1,4 +1,5 @@
 using PenumbraOrganizer.Core.Classification;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
@@ -33,6 +34,9 @@ public sealed class OrganizerState
 
     public IReadOnlyList<OrganizerModRow> Mods =>
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>The body priority the last sort used, or null when it had the body split off.</summary>
+    public BodyPriority? StagedBodyPriority { get; private set; }
 
     public bool HasScanned { get; private set; }
 
@@ -81,8 +85,24 @@ public sealed class OrganizerState
     public void LoadScan(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null,
+        IReadOnlyList<string>? bodyLabels = null) =>
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules, bodyLabels);
+
+    // Overload so the body labels can be passed third, as the labels travel WITH the rows. The
+    // labels parameter is required here so a two-argument call stays unambiguous.
+    public void LoadScan(
+        IEnumerable<OrganizerModRow> scanned,
+        IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlyList<string>? bodyLabels,
         IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null) =>
-        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules);
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules, bodyLabels);
+
+    /// <summary>
+    /// The body labels of the scan that produced the current rows; null until a scan has published.
+    /// They travel with the rows so the evidence and the priority ranking it share one snapshot.
+    /// </summary>
+    public IReadOnlyList<string>? BodyLabels { get; private set; }
 
     /// <summary>
     /// Whole-state replacement that either fully happens or does not happen at all. Every
@@ -93,7 +113,8 @@ public sealed class OrganizerState
     public void ReplaceScanAtomically(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
-        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null)
+        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null,
+        IReadOnlyList<string>? bodyLabels = null)
     {
         var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
         var replacementFolderRules = previouslyProtectedFolderRules is null
@@ -129,6 +150,8 @@ public sealed class OrganizerState
         _heliosphereUnprotectOverrides = replacementHeliosphereOverrides;
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
+        BodyLabels = bodyLabels;
+        StagedBodyPriority = null;
         HasScanned = true;
         ScanGeneration++;
     }
@@ -459,6 +482,7 @@ public sealed class OrganizerState
             return false;
 
         row.ProposedPath = proposedPath;
+        row.StagedBodyResolution = null;
         return true;
     }
 
@@ -516,10 +540,22 @@ public sealed class OrganizerState
     /// </summary>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
                     Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
-                    bool splitBody = false) =>
-        Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
-                                               splitHair: splitHair, hairPriority: hairPriority,
-                                               splitBody: splitBody));
+                    bool splitBody = false, BodyPriority? bodyPriority = null)
+    {
+        // Recorded BEFORE the paths are computed, from the same inputs, so the explanation and the
+        // proposal cannot disagree. Cleared when the split is off so a stale one never lingers.
+        StagedBodyPriority = splitBody ? bodyPriority : null;
+        foreach (var row in Mods)
+        {
+            row.StagedBodyResolution = splitBody && bodyPriority is not null
+                ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority)
+                : null;
+        }
+
+        return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
+                                                      splitHair: splitHair, hairPriority: hairPriority,
+                                                      splitBody: splitBody, bodyPriority: bodyPriority));
+    }
 
     /// <summary>
     /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes
@@ -539,8 +575,12 @@ public sealed class OrganizerState
                 continue;
 
             row.ProposedPath = BuildPath(folder, null, row.Name);
+            row.StagedBodyResolution = null;
             touched.Add(row);
         }
+
+        // The staged record describes the last SORT; a template re-pathed rows without a body split.
+        StagedBodyPriority = null;
 
         FinishProposals(touched);
         return plan.Report;

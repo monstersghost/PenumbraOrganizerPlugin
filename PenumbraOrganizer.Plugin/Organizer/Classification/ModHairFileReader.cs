@@ -59,6 +59,11 @@ public static class ModHairFileReader
         if (!ok)
             return null;
 
+        return Freeze(flat, byRace);
+    }
+
+    internal static HairEvidence Freeze(HashSet<int> flat, Dictionary<string, HashSet<int>> byRace)
+    {
         var frozen = byRace.ToDictionary(
             pair => pair.Key,
             pair => (IReadOnlySet<int>)pair.Value,
@@ -70,7 +75,7 @@ public static class ModHairFileReader
     public static IReadOnlySet<int>? ReadHairNumbers(DirectoryInfo modDirectory) =>
         ReadHairEvidence(modDirectory)?.Flat;
 
-    private static void CollectFromFileKey(
+    internal static void CollectFromFileKey(
         string path, HashSet<int> flat, Dictionary<string, HashSet<int>> byRace)
     {
         // Already '/'-normalised by the walker.
@@ -104,7 +109,7 @@ public static class ModHairFileReader
             flat.Add(number);
     }
 
-    private static void CollectFromManipulation(JsonElement item, HashSet<int> flat)
+    internal static void CollectFromManipulation(JsonElement item, HashSet<int> flat)
     {
         if (item.ValueKind != JsonValueKind.Object)
             return;

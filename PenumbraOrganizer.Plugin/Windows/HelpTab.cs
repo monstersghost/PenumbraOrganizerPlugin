@@ -119,6 +119,7 @@ public static class HelpTab
             HelpTopics.SortSplitNpc,
             HelpTopics.SortSplitHair,
             HelpTopics.SortSplitBody,
+            HelpTopics.SortBodyPriority,
             HelpTopics.SortPriorityRace,
             HelpTopics.SortMidlanderFallback,
             HelpTopics.SortHairResolution,

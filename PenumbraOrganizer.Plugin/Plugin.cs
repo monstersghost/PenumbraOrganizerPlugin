@@ -44,6 +44,12 @@ public sealed class Plugin : IDalamudPlugin
         LibraryIndexError = null;
     }
     internal Configuration Config = null!;
+
+    /// <summary>
+    /// The shipped body labels, loaded once. Only the pre-scan fallback so the Body priority section
+    /// is usable on a fresh load; after a scan the published snapshot on OrganizerState always wins.
+    /// </summary>
+    public IReadOnlyList<string> BundledBodyLabels { get; }
     private readonly WorkbookWorkflowService _workbookService;
     private readonly HttpClient _npcHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
@@ -64,6 +70,9 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        BundledBodyLabels =
+            [.. Organizer.BodyTypes.BodyTypeListStore.LoadForMatching(PluginInterface.ConfigDirectory.FullName)
+                .Document.Bodies.Select(b => b.Label)];
         // Before anything reads the folder rules: a v1 file carries its protected folders in the
         // legacy field, and a scan that ran first would see no rules at all and unprotect them.
         Config.MigrateToCurrentVersion();
@@ -505,7 +514,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string ExportReview()
     {
-        var content = Organizer.OrganizerExportFormatter.Format(OrganizerState.Mods, OrganizerState.Validate());
+        var content = Organizer.OrganizerExportFormatter.Format(OrganizerState.Mods, OrganizerState.Validate(), OrganizerState.StagedBodyPriority);
         var path = Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-export.txt");
         Directory.CreateDirectory(PluginInterface.ConfigDirectory.FullName);
         File.WriteAllText(path, content);

@@ -240,6 +240,78 @@ public class ScanProcessorTests
         Assert.Equal(new HashSet<int> { 3, 108 }, row.HairFlat!.ToHashSet());
     }
 
+    private static OrganizerModRow ProcessGearWithConfig(string name, string configJson)
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"), configJson);
+            return NewProcessor().Process(Seed(dir.FullName, name, "Ala Mhigan Gown"), CancellationToken.None)!;
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Process_GearWithNoBodyInName_ButBodyInOptions_GetsItFromContent()
+    {
+        var row = ProcessGearWithConfig("Plain Corset", """
+            {"DefaultData":{"Files":{"chara/equipment/e0001/model/c0101e0001_top.mdl":"x.mdl"},"Manipulations":[]},
+             "Groups":[{"Name":"Body","Options":[{"Name":"Bibo+"},{"Name":"TBSE"}]}]}
+            """);
+
+        Assert.NotNull(row.BodyCandidates);
+        Assert.Equal(["Bibo+", "TBSE"], row.BodyCandidates!.Content.Select(c => c.Label).Order());
+        Assert.Equal("Bibo+", row.BodyType);
+        Assert.Empty(row.BodyCandidates.Name);
+    }
+
+    [Fact]
+    public void Process_GearWithBodyOnlyInName_StillFilesByName()
+    {
+        var row = ProcessGearWithConfig("Bibo+ Medieval Dress", """
+            {"DefaultData":{"Files":{"chara/equipment/e0001/model/c0101e0001_top.mdl":"x.mdl"},"Manipulations":[]}}
+            """);
+
+        Assert.Equal("Bibo+", row.BodyType);
+        Assert.Empty(row.BodyCandidates!.Content);
+        Assert.Equal(["Bibo+"], row.BodyCandidates.Name.Select(c => c.Label));
+    }
+
+    [Fact]
+    public void Process_UnreadableConfig_GetsReadFailureAndNoBodyEvidence()
+    {
+        var row = ProcessGearWithConfig("Bibo+ Dress", "{ not json");
+
+        Assert.Equal(GearSlotDiagnostic.ReadFailure, row.GearSlotDiagnostic);
+        Assert.Null(row.BodyType);
+        Assert.Null(row.BodyCandidates);
+    }
+
+    [Fact]
+    public void Process_WeaponInOptionsNamedAfterABody_IsNotSearched()
+    {
+        var row = ProcessGearWithConfig("Artemis Bow", """
+            {"DefaultData":{"Files":{"chara/weapon/w1001/obj/body/b0001/model/w1001b0001.mdl":"x.mdl"},"Manipulations":[]},
+             "Groups":[{"Name":"Look","Options":[{"Name":"Artemis"}]}]}
+            """);
+
+        Assert.Null(row.BodyType);
+        Assert.Null(row.BodyCandidates);
+    }
+
+    [Fact]
+    public void Prepare_PublishesTheLabelsOfTheListItBuiltItsMatcherFrom()
+    {
+        var processor = NewProcessor();
+
+        Assert.Contains("Bibo+", processor.BodyLabels);
+        Assert.Equal(processor.BodyLabels.Count, processor.BodyLabels.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
     [Fact]
     public void NonHairRow_CarriesNoHairEvidence()
     {

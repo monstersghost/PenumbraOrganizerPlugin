@@ -89,6 +89,49 @@ public sealed class BodyTypeMatcher
         return null;
     }
 
+    /// <summary>
+    /// Every distinct body <paramref name="text"/> names. Same alias list, boundary rule and
+    /// longest-alias-first order as <see cref="Match"/>; the difference is that it keeps going.
+    /// </summary>
+    /// <remarks>
+    /// Every accepted occurrence claims its tokens, and an occurrence that overlaps a span a longer
+    /// alias already claimed is skipped, so a body whose alias is a word of another body's alias
+    /// ("eve" in "ab eve") is not reported as a second body - including from a REPEAT of the long
+    /// alias, which is why the scan does not stop at an alias's first match. Only the returned
+    /// labels are deduplicated.
+    /// </remarks>
+    public IReadOnlyList<string> MatchAll(string text)
+    {
+        var tokens = Tokenize(Normalize(text));
+        if (tokens.Length == 0)
+            return [];
+
+        var claimed = new bool[tokens.Length];
+        var labels = new List<string>();
+
+        foreach (var alias in _aliases)
+        {
+            for (var start = 0; start + alias.Tokens.Length <= tokens.Length; start++)
+            {
+                if (!MatchesAt(tokens, start, alias.Tokens))
+                    continue;
+
+                var overlaps = false;
+                for (var i = start; i < start + alias.Tokens.Length; i++)
+                    overlaps |= claimed[i];
+                if (overlaps)
+                    continue;
+
+                for (var i = start; i < start + alias.Tokens.Length; i++)
+                    claimed[i] = true;
+                if (!labels.Contains(alias.Label))
+                    labels.Add(alias.Label);
+            }
+        }
+
+        return labels;
+    }
+
     private static bool MatchesAt(string[] modTokens, int start, string[] aliasTokens)
     {
         for (var i = 0; i < aliasTokens.Length; i++)
