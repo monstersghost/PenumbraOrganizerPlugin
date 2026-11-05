@@ -73,7 +73,7 @@ plugin's own **Help** tab.
 
 Found a bug, hit unexpected behavior, or have a feature idea?
 
-* **[Join the Discord](https://discord.gg/NHssF8ux6B)** - the fastest way to get help, and where
+* **[Join the Discord](https://discord.gg/cAeUjMvvXz)** - the fastest way to get help, and where
   releases and testing builds are announced.
 * Or [open a GitHub issue](https://github.com/monstersghost/PenumbraOrganizerPlugin/issues).
 

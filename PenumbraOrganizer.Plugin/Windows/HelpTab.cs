@@ -66,7 +66,7 @@ public static class HelpTab
     /// Unlike <see cref="GuideUrl"/> this is NOT version-pinned and must not be: an older build
     /// pointing at a still-valid invite is exactly what you want.
     /// </remarks>
-    public const string DiscordUrl = "https://discord.gg/NHssF8ux6B";
+    public const string DiscordUrl = "https://discord.gg/cAeUjMvvXz";
 
     /// <summary>
     /// The repository root, for the title bar's GitHub button. The front door, deliberately, rather
