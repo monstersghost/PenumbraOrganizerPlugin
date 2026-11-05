@@ -40,7 +40,8 @@ public static class SortFolderSelectors
         Func<string, string>? renameFolder = null,
         bool splitHair = false,
         HairPriority? hairPriority = null,
-        bool splitBody = false,
+        bool splitGearBody = false,
+        bool splitBodyMods = false,
         BodyPriority? bodyPriority = null)
     {
         string? Creator() =>
@@ -62,7 +63,8 @@ public static class SortFolderSelectors
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
             // Not flattened the way the three above are: a body type is its own segment on the row,
             // never a value in SubCategory, so turning the split off is simply not passing it.
-            return TypeFolder(row.Category, sub, renameFolder, splitBody ? ResolveBody(row, bodyPriority) : null);
+            return TypeFolder(row.Category, sub, renameFolder,
+                BodyFor(row, splitGearBody, splitBodyMods, bodyPriority));
         }
 
         return strategy switch
@@ -125,6 +127,15 @@ public static class SortFolderSelectors
     // The live priority beats the stored default only when the row has candidates to rank. A row
     // built without them (an imported workbook, an older scan, most tests) keeps its BodyType, so
     // adding the priority changes no existing result.
+    // A row's body segment is used only when ITS category's flag is on. Gear and Body are the only
+    // categories that ever carry one (ModTypeClassifier.BodyTypeApplies), so no other category can
+    // reach ResolveBody.
+    private static string? BodyFor(
+        OrganizerModRow row, bool splitGearBody, bool splitBodyMods, BodyPriority? priority) =>
+        (row.Category == ModCategory.Gear && splitGearBody) || (row.Category == ModCategory.Body && splitBodyMods)
+            ? ResolveBody(row, priority)
+            : null;
+
     private static string? ResolveBody(OrganizerModRow row, BodyPriority? priority) =>
         priority is not null && row.BodyCandidates is not null
             ? BodyPriorityResolver.Resolve(row.BodyCandidates, priority)?.Label

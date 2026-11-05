@@ -172,11 +172,18 @@ public sealed class OrganizerState
     // Still a transient override re-asserted on the next Scan - that part is unchanged. What
     // changed is where it lives: in _heliosphereUnprotectOverrides rather than only on row.Protected,
     // so a later recompute triggered by an unrelated control cannot silently reverse it.
+    //
+    // Unprotecting ALSO clears each row's explicit protection. "Protect all" marks every mod as
+    // explicitly protected, Heliosphere ones included, and an explicit protection beats the override
+    // (see IsEffectivelyProtected), so without this "Unprotect Heliosphere mods" after "Protect all"
+    // changed nothing. A protected FOLDER still wins, as it does for every other unprotect.
     public void SetHeliosphereProtection(bool value)
     {
         foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
         {
             SetHeliosphereOverride(row.Identifier, unprotected: !value);
+            if (!value)
+                _protectedModIdentifiers.Remove(row.Identifier);
             row.Protected = IsEffectivelyProtectedFull(row);
         }
     }
@@ -530,26 +537,30 @@ public sealed class OrganizerState
         Sort(strategy, splitGear, splitNpc, splitHair: false, canonicalizeCreator);
 
     /// <summary>
-    /// The sort with the hair and body splits and the optional race priority. With no priority and
+    /// The sort with the hair and two body splits and the optional race priority. With no priority and
     /// both splits off, this is the same folder selection as the four-argument overload.
     /// </summary>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
                     Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
-                    bool splitBody = false, BodyPriority? bodyPriority = null)
+                    bool splitGearBody = false, bool splitBodyMods = false, BodyPriority? bodyPriority = null)
     {
         // Recorded BEFORE the paths are computed, from the same inputs, so the explanation and the
-        // proposal cannot disagree. Cleared when the split is off so a stale one never lingers.
-        StagedBodyPriority = splitBody ? bodyPriority : null;
+        // proposal cannot disagree. A resolution is kept only for rows whose own category's flag is
+        // on, and cleared otherwise so a stale one never lingers.
+        StagedBodyPriority = splitGearBody || splitBodyMods ? bodyPriority : null;
         foreach (var row in Mods)
         {
-            row.StagedBodyResolution = splitBody && bodyPriority is not null
+            var applies = row.Category == ModCategory.Gear ? splitGearBody
+                : row.Category == ModCategory.Body && splitBodyMods;
+            row.StagedBodyResolution = applies && bodyPriority is not null
                 ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority)
                 : null;
         }
 
         return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
                                                       splitHair: splitHair, hairPriority: hairPriority,
-                                                      splitBody: splitBody, bodyPriority: bodyPriority));
+                                                      splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
+                                                      bodyPriority: bodyPriority));
     }
 
     /// <summary>

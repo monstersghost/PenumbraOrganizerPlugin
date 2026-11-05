@@ -21,21 +21,21 @@ public sealed partial class MainWindow
         if (!tab)
             return;
 
-        if (ImGui.Button("Toggle protect all"))
+        var allProtected = _plugin.OrganizerState.Mods.All(m => m.Protected);
+        if (ImGui.Button($"{ProtectToggleLabels.All(allProtected)}##toggle-protect-all"))
         {
-            var allProtected = _plugin.OrganizerState.Mods.All(m => m.Protected);
             _plugin.OrganizerState.SetAllProtection(!allProtected);
             SaveProtectionStateSafely();
         }
         Help.Tooltip(HelpTopics.ProtectToggleAll);
 
         ImGui.SameLine();
-        if (ImGui.Button("Toggle Heliosphere protection"))
+        var allHeliosphereProtected = _plugin.OrganizerState.Mods
+            .Where(m => m.HeliosphereManaged)
+            .All(m => m.Protected);
+        if (ImGui.Button($"{ProtectToggleLabels.Heliosphere(allHeliosphereProtected)}##toggle-protect-heliosphere"))
         {
-            var allProtected = _plugin.OrganizerState.Mods
-                .Where(m => m.HeliosphereManaged)
-                .All(m => m.Protected);
-            _plugin.OrganizerState.SetHeliosphereProtection(!allProtected);
+            _plugin.OrganizerState.SetHeliosphereProtection(!allHeliosphereProtected);
             SaveProtectionStateSafely();
         }
         Help.Tooltip(HelpTopics.ProtectToggleHeliosphere);

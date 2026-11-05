@@ -66,7 +66,7 @@ public static class HelpTab
     /// Unlike <see cref="GuideUrl"/> this is NOT version-pinned and must not be: an older build
     /// pointing at a still-valid invite is exactly what you want.
     /// </remarks>
-    public const string DiscordUrl = "https://discord.gg/NHssF8ux6B";
+    public const string DiscordUrl = "https://discord.gg/cAeUjMvvXz";
 
     /// <summary>
     /// The repository root, for the title bar's GitHub button. The front door, deliberately, rather
@@ -118,7 +118,9 @@ public static class HelpTab
             HelpTopics.SortSplitGear,
             HelpTopics.SortSplitNpc,
             HelpTopics.SortSplitHair,
-            HelpTopics.SortSplitBody,
+            HelpTopics.SortSplitGearBody,
+            HelpTopics.SortSplitBodyMods,
+            HelpTopics.SortFirstChoiceBody,
             HelpTopics.SortBodyPriority,
             HelpTopics.SortPriorityRace,
             HelpTopics.SortMidlanderFallback,
@@ -127,7 +129,6 @@ public static class HelpTab
             HelpTopics.SortHelpButton,
             HelpTopics.SortScrapedNpcList,
             HelpTopics.SortRefreshNpcList,
-            HelpTopics.SortImportWorkbook,
             HelpTopics.SortManualAssign,
         ]),
         new(HelpTopics.HelpTabReview,
@@ -137,11 +138,13 @@ public static class HelpTab
             HelpTopics.ReviewExport,
             HelpTopics.ReviewWorkbookDestinations,
             HelpTopics.ReviewExportWorkbook,
+            HelpTopics.SortImportWorkbook,
             HelpTopics.ReviewRereadOrganizationJson,
             HelpTopics.ReviewCleanUpFolders,
             HelpTopics.ReviewRollbackFolderCleanup,
             HelpTopics.ReviewShowConfigFile,
             HelpTopics.ReviewDiagnosticDump,
+            HelpTopics.ReviewDiagnostics,
         ]),
         new(HelpTopics.HelpTabHistory,
         [

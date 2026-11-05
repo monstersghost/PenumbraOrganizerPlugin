@@ -43,12 +43,14 @@ public sealed partial class MainWindow
         PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: false);
 
         ImGui.Spacing();
-        // On the label, not the child: a scrolling child is not a hoverable item, so the heading is
-        // the only thing IsItemHovered can bind to here.
-        ImGui.Text("Live events (ModAdded / ModDeleted / ModMoved):");
+        // Collapsed by default: the log is empty most of the time, and an always-open 150 px box
+        // took about a third of the window. The count is in the label; the "###" id keeps the open
+        // state when the count changes.
+        var eventsOpen = ImGui.CollapsingHeader($"Live events ({_eventLog.Lines.Count})###scan-events");
         Help.Tooltip(HelpTopics.ScanEventLog);
-        using (var child = ImRaii.Child("EventLog", new Vector2(0, 150), border: true))
+        if (eventsOpen)
         {
+            using var child = ImRaii.Child("EventLog", new Vector2(0, 150), border: true);
             if (child)
                 foreach (var line in _eventLog.Lines)
                     ImGui.TextUnformatted(line);

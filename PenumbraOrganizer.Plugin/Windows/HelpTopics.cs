@@ -51,7 +51,9 @@ public static class HelpTopics
     public static readonly HelpTopic SortSplitGear = new("sort.split-gear");
     public static readonly HelpTopic SortSplitNpc = new("sort.split-npc");
     public static readonly HelpTopic SortSplitHair = new("sort.split-hair");
-    public static readonly HelpTopic SortSplitBody = new("sort.split-body");
+    public static readonly HelpTopic SortSplitGearBody = new("sort.split-gear-body");
+    public static readonly HelpTopic SortSplitBodyMods = new("sort.split-body-mods");
+    public static readonly HelpTopic SortFirstChoiceBody = new("sort.first-choice-body");
     public static readonly HelpTopic SortBodyPriority = new("sort.body-priority");
     public static readonly HelpTopic SortPriorityRace = new("sort.priority-race");
     public static readonly HelpTopic SortMidlanderFallback = new("sort.midlander-fallback");
@@ -82,6 +84,7 @@ public static class HelpTopics
     public static readonly HelpTopic ReviewExport = new("review.export");
     public static readonly HelpTopic ReviewShowConfigFile = new("review.show-config-file");
     public static readonly HelpTopic ReviewDiagnosticDump = new("review.diagnostic-dump");
+    public static readonly HelpTopic ReviewDiagnostics = new("review.diagnostics");
     public static readonly HelpTopic ReviewWorkbookDestinations = new("review.workbook-destinations");
     public static readonly HelpTopic ReviewExportWorkbook = new("review.export-workbook");
     public static readonly HelpTopic ReviewProtectAndSkip = new("review.protect-and-skip");

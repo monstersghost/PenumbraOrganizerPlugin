@@ -208,11 +208,11 @@ public class OrganizerExportFormatterTests
         var bodies = new[] { "YAB", "Rue+" };
         var review = new ReviewResult([], new Dictionary<string, List<string>>());
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Normalize(["Rue+"], bodies));
         var first = OrganizerExportFormatter.Format([.. state.Mods], review, state.StagedBodyPriority);
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Normalize(["YAB"], bodies));
         var second = OrganizerExportFormatter.Format([.. state.Mods], review, state.StagedBodyPriority);
 

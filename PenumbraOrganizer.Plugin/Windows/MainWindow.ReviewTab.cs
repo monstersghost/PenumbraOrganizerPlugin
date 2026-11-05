@@ -33,52 +33,7 @@ public sealed partial class MainWindow
         PathTreeView.Draw(_plugin.OrganizerState.Mods, showProposedColumn: true);
 
         ImGui.Spacing();
-        if (ImGui.Button("Export"))
-            _lastExportPath = _plugin.ExportReview();
-        Help.Tooltip(HelpTopics.ReviewExport);
-
-        ImGui.SameLine();
-        if (ImGui.Button("Show Config File"))
-            OpenConfigFile();
-        Help.Tooltip(HelpTopics.ReviewShowConfigFile);
-
-        ImGui.SameLine();
-        if (ImGui.Button("Create Diagnostic Dump"))
-            _lastDiagnosticDumpPath = CreateDiagnosticDump();
-        Help.Tooltip(HelpTopics.ReviewDiagnosticDump);
-
-        // File paths are unbounded in length (depend on the user's own Windows profile/folder
-        // depth) - wrapped, and with any action button on its own line below rather than chained
-        // via SameLine, so a long path can never push a button past the window edge.
-        if (_lastExportPath is not null)
-            ImGui.TextWrapped($"Exported to: {_lastExportPath}");
-
-        if (_lastDiagnosticDumpPath is not null)
-        {
-            ImGui.TextWrapped($"Diagnostic dump written to: {_lastDiagnosticDumpPath}");
-            if (ImGui.Button("Show Dump File"))
-                OpenContainingFolder(_lastDiagnosticDumpPath);
-        }
-
-        ImGui.Spacing();
-        var strategyLabels = WorkbookStrategyOptions.Select(o => o.Label).ToArray();
-        ImGui.SetNextItemWidth(220);
-        ImGui.Combo("Workbook destinations", ref _workbookStrategyIndex, strategyLabels, strategyLabels.Length);
-        Help.Tooltip(HelpTopics.ReviewWorkbookDestinations);
-
-        ImGui.SameLine();
-        if (ImGui.Button("Export Workbook"))
-            ExportWorkbook(WorkbookStrategyOptions[_workbookStrategyIndex].Strategy);
-        Help.Tooltip(HelpTopics.ReviewExportWorkbook);
-
-        if (_lastWorkbookExportPath is not null)
-        {
-            // Own line, wrapped, and the button below it rather than SameLine'd - same reasoning
-            // as the Export/Diagnostic Dump paths above: the path itself is unbounded in length.
-            ImGui.TextWrapped($"Workbook exported to: {_lastWorkbookExportPath}");
-            if (ImGui.Button("Open Workbook"))
-                OpenFileWithDefaultApp(_lastWorkbookExportPath);
-        }
+        DrawWorkbookGroup(CurrentGates());
 
         ImGui.Spacing();
         // Restructured from `result.HasIssues && ImGui.Button(...)`: short-circuiting means the
@@ -109,9 +64,15 @@ public sealed partial class MainWindow
             ImGui.OpenPopup("Apply complete - Rediscover Mods reminder");
         }
 
-        ImGui.BeginDisabled(result.HasIssues || !gates.CanStartApply);
-        var applyClicked = ImGui.Button("Apply");
-        ImGui.EndDisabled();
+        ImGui.Separator();
+        ImGui.Spacing();
+        bool applyClicked;
+        using (PluginTheme.PrimaryButton())
+        {
+            ImGui.BeginDisabled(result.HasIssues || !gates.CanStartApply);
+            applyClicked = ImGui.Button("Apply");
+            ImGui.EndDisabled();
+        }
         // One of two disable reasons, resolved at the call site rather than swept: an unfixable
         // "another operation is running" message when the real problem is errors the user can
         // actually go and fix would send them looking in the wrong place. Errors are checked first
@@ -170,8 +131,107 @@ public sealed partial class MainWindow
         }
 
         ImGui.Spacing();
+        DrawDiagnosticsGroup();
+        ImGui.Spacing();
         ImGui.Separator();
         DrawOrphanedFoldersSection();
+    }
+
+    // Export and import side by side: the workflow is sort, export a pre-sorted workbook, tune it
+    // in Excel, import it, then review. Import is available whenever the activity gate allows it,
+    // including with a scan loaded and nothing staged, so a workbook can be imported without
+    // sorting first. Results stay inside this group: the export path with Open Workbook, and the
+    // import summary, errors and warnings, each until its own next run.
+    private void DrawWorkbookGroup(ActivityGates gates)
+    {
+        ImGui.TextColored(PluginTheme.ChangedGood, "Workbook");
+
+        var strategyLabels = WorkbookStrategyOptions.Select(o => o.Label).ToArray();
+        ImGui.SetNextItemWidth(220);
+        ImGui.Combo("Group workbook by", ref _workbookStrategyIndex, strategyLabels, strategyLabels.Length);
+        Help.Tooltip(HelpTopics.ReviewWorkbookDestinations);
+
+        if (ImGui.Button("Export Workbook"))
+            ExportWorkbook(WorkbookStrategyOptions[_workbookStrategyIndex].Strategy);
+        Help.Tooltip(HelpTopics.ReviewExportWorkbook);
+
+        ImGui.SameLine();
+        // Re-established here from the Sort tab, where it used to live. The dialog callback fires on
+        // a later frame, after this frame's BeginDisabled has lapsed, so the gate is re-checked at
+        // the moment the import would actually run: a scan can have started in between, and
+        // ReplaceScanAtomically would silently wipe whatever ImportWorkbook is about to stage.
+        ImGui.BeginDisabled(!gates.CanStageProposals);
+        if (ImGui.Button("Import Workbook"))
+        {
+            _fileDialogManager.OpenFileDialog(
+                "Import Workbook",
+                ".xlsx",
+                (success, paths) =>
+                {
+                    if (!success || paths.Count == 0)
+                        return;
+                    if (!CurrentGates().CanStageProposals)
+                    {
+                        _lastError = "Import Workbook was cancelled because library work started before the file was chosen.";
+                        return;
+                    }
+                    ImportWorkbook(paths[0]);
+                },
+                selectionCountMax: 1);
+        }
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortImportWorkbook, gates.CanStageProposals ? null : ActivityGateReason);
+
+        if (_lastWorkbookExportPath is not null)
+        {
+            // Own line, wrapped, with the button below it rather than SameLine'd: a path is unbounded.
+            ImGui.TextWrapped($"Workbook exported to: {_lastWorkbookExportPath}");
+            if (ImGui.Button("Open Workbook"))
+                OpenFileWithDefaultApp(_lastWorkbookExportPath);
+        }
+
+        if (_lastWorkbookImportResult is not null)
+        {
+            ImGui.TextWrapped(_lastWorkbookImportResult.Summary);
+            foreach (var error in _lastWorkbookImportResult.Errors)
+                TextColoredWrapped(PluginTheme.CollisionBad, $"  {error}");
+            foreach (var warning in _lastWorkbookImportResult.Warnings)
+                TextColoredWrapped(ImGuiColors.DalamudYellow, $"  {warning}");
+        }
+    }
+
+    // The troubleshooting tools, collapsed by default: most users never open them. Each keeps its
+    // own result line, so a diagnostic export can never replace the workbook path above.
+    private void DrawDiagnosticsGroup()
+    {
+        var open = ImGui.CollapsingHeader("Diagnostics##review-diagnostics");
+        Help.Tooltip(HelpTopics.ReviewDiagnostics);
+        if (!open)
+            return;
+
+        if (ImGui.Button("Export"))
+            _lastExportPath = _plugin.ExportReview();
+        Help.Tooltip(HelpTopics.ReviewExport);
+
+        ImGui.SameLine();
+        if (ImGui.Button("Show Config File"))
+            OpenConfigFile();
+        Help.Tooltip(HelpTopics.ReviewShowConfigFile);
+
+        ImGui.SameLine();
+        if (ImGui.Button("Create Diagnostic Dump"))
+            _lastDiagnosticDumpPath = CreateDiagnosticDump();
+        Help.Tooltip(HelpTopics.ReviewDiagnosticDump);
+
+        if (_lastExportPath is not null)
+            ImGui.TextWrapped($"Exported to: {_lastExportPath}");
+
+        if (_lastDiagnosticDumpPath is not null)
+        {
+            ImGui.TextWrapped($"Diagnostic dump written to: {_lastDiagnosticDumpPath}");
+            if (ImGui.Button("Show Dump File"))
+                OpenContainingFolder(_lastDiagnosticDumpPath);
+        }
     }
 
     private void DrawOrphanedFoldersSection()

@@ -112,4 +112,38 @@ public class SortPanelPreferencesTests
         Assert.Equal(Labels, result!.Labels);
         Assert.False(needsSave);
     }
+
+    // ---- First-choice body is always the list's rank 1 ----
+
+    private static readonly string[] FirstChoiceLabels = ["Bibo+", "Rue+", "TBSE"];
+
+    [Fact]
+    public void FirstChoice_IsTheRankOneLabel()
+    {
+        Assert.Equal("Bibo+", SortPanel.FirstChoice(BodyPriority.Default(FirstChoiceLabels)));
+        Assert.Null(SortPanel.FirstChoice(BodyPriority.Default([])));
+    }
+
+    [Fact]
+    public void FirstChoice_FollowsArrowMoves_Reset_AndAPickFromTheDropdown()
+    {
+        var p = BodyPriority.Default(FirstChoiceLabels);
+
+        Assert.Equal("Rue+", SortPanel.FirstChoice(p.MoveDown(0)));
+        Assert.Equal("Bibo+", SortPanel.FirstChoice(p.MoveDown(0).MoveUp(1)));
+        Assert.Equal("TBSE", SortPanel.FirstChoice(p.MoveToTop("TBSE")));
+        Assert.Equal("Bibo+", SortPanel.FirstChoice(
+            BodyPriority.Default(FirstChoiceLabels)));
+    }
+
+    [Fact]
+    public void FirstChoice_FollowsABodyListRefresh()
+    {
+        var saved = new[] { "TBSE", "Rue+", "Bibo+" };
+        var refreshed = new[] { "Bibo+", "Rue+" };
+
+        var repaired = SortPanel.RefreshBodyPriority(refreshed, FirstChoiceLabels, saved, out _);
+
+        Assert.Equal("Rue+", SortPanel.FirstChoice(repaired!));
+    }
 }

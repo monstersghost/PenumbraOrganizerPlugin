@@ -59,6 +59,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private bool _pendingApplyReminder;
     private string _createBackupLabelInput = string.Empty;
     private Guid? _pendingRestoreSnapshotId;
+    private Guid? _pendingDeleteSnapshotId;
     private Organizer.RestorePlan? _pendingRestorePreview;
     private IReadOnlyList<Organizer.Operations.OperationJournal> _recentOperations = [];
     private string? _recentOperationsError;

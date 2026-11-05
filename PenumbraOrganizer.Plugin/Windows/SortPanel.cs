@@ -18,7 +18,8 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </remarks>
 public readonly record struct SortSelection(
     SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
-    string? HairRaceCode = null, bool MidlanderFallback = false, bool SplitBody = false,
+    string? HairRaceCode = null, bool MidlanderFallback = false,
+    bool SplitGearBody = false, bool SplitBodyMods = false,
     BodyPriority? BodyPriority = null)
 {
     // By Creator never consults category, so no split can change its output. All four checkboxes
@@ -77,7 +78,9 @@ public sealed class SortPanel
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
     private int _hairRaceIndex;              // 0 is None; see HairRaceLabels
     private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
-    private bool _splitBody;                 // off, like gear and hair: no body folders until asked
+    private bool _splitGearBody;         // off: no body folders until asked, like gear and hair
+    private bool _splitBodyMods;
+    private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;
     private BodyPriority _bodyPriority = BodyPriority.Default([]);
@@ -140,6 +143,14 @@ public sealed class SortPanel
         return BodyPriority.Repair(saved, bodyLabels, out needsSave);
     }
 
+    /// <summary>
+    /// The body at rank 1, which is what the First-choice dropdown shows. Derived from the priority
+    /// every frame and never stored separately, so it cannot disagree with the full list after an
+    /// arrow move, a Reset or a body-list refresh. Null only for an empty list.
+    /// </summary>
+    public static string? FirstChoice(BodyPriority priority) =>
+        priority.Labels.Count > 0 ? priority.Labels[0] : null;
+
     // A rule and a coloured heading above each mod-type group. The rule is ImGui's own separator,
     // so the groups read as separate without a new widget.
     private static void GroupHeading(string title)
@@ -182,62 +193,58 @@ public sealed class SortPanel
             }
         }
 
+        // Group by is its own tiny section so the tab reads top to bottom with the same headings.
+        ImGui.TextColored(PluginTheme.ChangedGood, "Group by");
         ImGui.BeginDisabled(!gates.CanStageProposals);
-
         ImGui.SetNextItemWidth(220);
-        ImGui.Combo("Group by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
-        Help.Tooltip(HelpTopics.SortGrouping);
-
-        // The strategy is settled the moment the combo has been submitted. SplitsApply reads only
-        // Strategy, so gating the checkboxes on it here is correct even though the split values
-        // themselves may still change further down this same frame.
-        var strategy = Groupings[_groupingIndex].Strategy;
-        var splitsApply = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair).SplitsApply;
-
-        // Each checkbox closes its own disabled scope before its tooltip: ImGui is positional, so
-        // Help.Tooltip binds to whichever widget was submitted last, and EndDisabled submits none.
-        GroupHeading("Gear");
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Split gear by equipment slot", ref _splitGear);
+        ImGui.Combo("##group-by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
         ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitGear, splitsApply ? null : SplitsInapplicableReason);
+        Help.Tooltip(HelpTopics.SortGrouping, gates.CanStageProposals ? null : ActivityGateReason);
+
+        // The strategy is settled the moment the combo has been submitted. Every control below takes
+        // its visible and enabled state from SortLayout, which is what the tests pin.
+        var strategy = Groupings[_groupingIndex].Strategy;
+        var states = SortLayout.Compute(
+            strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals);
+        var splitReason = !gates.CanStageProposals ? ActivityGateReason
+            : strategy == SortStrategy.CreatorOnly ? SplitsInapplicableReason
+            : null;
+
+        GroupHeading("Gear");
+        DrawCheckbox("Split gear by equipment slot", ref _splitGear, states.SplitGear, HelpTopics.SortSplitGear, splitReason);
 
         GroupHeading("NPC");
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Split NPC mods by kind", ref _splitNpc);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitNpc, splitsApply ? null : SplitsInapplicableReason);
+        DrawCheckbox("Split NPC mods by kind", ref _splitNpc, states.SplitNpc, HelpTopics.SortSplitNpc, splitReason);
 
-        // Piece 1's opt-in. Bound directly to config, saved on change, and force-disabled for 0.6.0
-        // through the SAME gate the backend consults - so a config value left true cannot quietly
-        // enable a path the UI says is off.
-        ImGui.BeginDisabled(!Configuration.ScrapedNpcListFeatureEnabled);
-        var useScraped = config.UseScrapedNpcNameList;
-        if (ImGui.Checkbox("Also use the NPC list scraped from the wiki", ref useScraped))
+        // The scraped-list opt-in and its refresh button are hidden while the feature is switched
+        // off at compile time (Configuration.ScrapedNpcListFeatureEnabled): they did nothing but
+        // explain, at length, why they were disabled. MainWindow draws no refresh controls either.
+        if (states.ScrapedNpcCheckbox.Visible)
         {
-            config.UseScrapedNpcNameList = useScraped;
-            saveConfig();
+            ImGui.BeginDisabled(!states.ScrapedNpcCheckbox.Enabled);
+            var useScraped = config.UseScrapedNpcNameList;
+            if (ImGui.Checkbox("Also use the NPC list scraped from the wiki", ref useScraped))
+            {
+                config.UseScrapedNpcNameList = useScraped;
+                saveConfig();
+            }
+            ImGui.EndDisabled();
+            Help.Tooltip(HelpTopics.SortScrapedNpcList, states.ScrapedNpcCheckbox.Enabled ? null : ActivityGateReason);
         }
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortScrapedNpcList,
-            Configuration.ScrapedNpcListFeatureEnabled ? null : "Not available in this version.");
 
         GroupHeading("Hair");
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Split hair by hair number", ref _splitHair);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitHair, splitsApply ? null : SplitsInapplicableReason);
-
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.SetNextItemWidth(220);
-        ImGui.Combo("Priority race", ref _hairRaceIndex, HairRaceLabels, HairRaceLabels.Length);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortPriorityRace, splitsApply ? null : SplitsInapplicableReason);
-
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Midlander fallback", ref _midlanderFallback);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortMidlanderFallback, splitsApply ? null : SplitsInapplicableReason);
+        DrawCheckbox("Split hair by hair number", ref _splitHair, states.SplitHair, HelpTopics.SortSplitHair, splitReason);
+        if (states.PriorityRace.Visible)
+        {
+            ImGui.BeginDisabled(!states.PriorityRace.Enabled);
+            ImGui.SetNextItemWidth(220);
+            ImGui.Combo("Priority race", ref _hairRaceIndex, HairRaceLabels, HairRaceLabels.Length);
+            ImGui.EndDisabled();
+            Help.Tooltip(HelpTopics.SortPriorityRace, splitReason);
+        }
+        if (states.MidlanderFallback.Visible)
+            DrawCheckbox("Midlander fallback", ref _midlanderFallback, states.MidlanderFallback,
+                HelpTopics.SortMidlanderFallback, splitReason);
 
         var raceCode = HairRaceCodeAt(_hairRaceIndex);
         if (config.HairRaceCode != raceCode || config.MidlanderFallback != _midlanderFallback)
@@ -248,40 +255,40 @@ public sealed class SortPanel
         }
 
         GroupHeading("Body type");
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.Checkbox("Split gear and body mods by body type", ref _splitBody);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortSplitBody, splitsApply ? null : SplitsInapplicableReason);
-
-        DrawBodyPriority(config, saveConfig, bodyLabels, splitsApply);
+        DrawCheckbox("Split gear by body type", ref _splitGearBody, states.SplitGearBody,
+            HelpTopics.SortSplitGearBody, splitReason);
+        DrawCheckbox("Split body mods by body type", ref _splitBodyMods, states.SplitBodyMods,
+            HelpTopics.SortSplitBodyMods, splitReason);
+        DrawBodyModsHelpMarker();
 
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
 
         // Every control above has now been submitted, so this is the selection as the user has it
-        // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
-        // the checkboxes held before the user's click was processed.
+        // THIS frame. The body priority section below may change the priority later in the frame; the
+        // staleness hint then picks that up on the next frame, which is not visible.
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitBody, _bodyPriority);
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority);
 
-        // Stable id: a label varying with mod count makes the widget id vary with it, so a background
-        // scan publishing mid-click would change the active id and the click would be dropped.
-        if (ImGui.Button("Sort##sort-mods"))
+        // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
+        // Stable id: a label varying with mod count would vary the widget id, so a background scan
+        // publishing mid-click would drop the click.
+        bool sortClicked;
+        using (PluginTheme.PrimaryButton())
+        {
+            ImGui.BeginDisabled(!states.SortButton.Enabled);
+            sortClicked = ImGui.Button("Sort##sort-mods");
+            ImGui.EndDisabled();
+        }
+        Help.Tooltip(HelpTopics.SortButton, gates.CanStageProposals ? null : ActivityGateReason);
+        if (sortClicked)
         {
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
-                canonicalizeCreator, selection.HairPriority, selection.SplitBody, selection.BodyPriority);
+                canonicalizeCreator, selection.HairPriority, selection.SplitGearBody, selection.SplitBodyMods,
+                selection.BodyPriority);
             _lastSorted = selection;
         }
-
-        // The gate reason rides on the Sort button's own tooltip rather than a second SetTooltip
-        // call bound to the same item - two tooltips submitted for one item in one frame fight over
-        // the same window. disabledReason is the parameter Help.Tooltip exists to take, and it is
-        // what the three controls above already use.
-        Help.Tooltip(HelpTopics.SortButton,
-            gates.CanStageProposals ? null : ActivityGateReason);
-
-        ImGui.EndDisabled();
 
         // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.
         ImGui.SameLine();
@@ -291,56 +298,120 @@ public sealed class SortPanel
 
         if (_lastSorted is { } last && last != selection)
             ImGui.TextDisabled("Selection changed since the last sort.");
+
+        ImGui.Spacing();
+        DrawBodyPriority(config, saveConfig, bodyLabels, states, anyBodySplit: _splitGearBody || _splitBodyMods);
     }
 
-    // Collapsed by default: set once and forget. Arrows rather than drag-and-drop, which is fiddly
-    // in ImGui and unusable from a keyboard. Disabled under the same condition as the body checkbox.
-    private void DrawBodyPriority(
-        Configuration config, Action saveConfig, IReadOnlyList<string> bodyLabels, bool splitsApply)
+    // One checkbox: not drawn when hidden, greyed when disabled, and its tooltip always carries the
+    // reason when it is greyed. Each closes its own disabled scope BEFORE the tooltip because
+    // Help.Tooltip binds to the last submitted item and EndDisabled submits none.
+    private static void DrawCheckbox(
+        string label, ref bool value, ControlState state, HelpTopic topic, string? disabledReason)
     {
-        if (!ImGui.CollapsingHeader("Body priority##body-priority"))
+        if (!state.Visible)
             return;
 
-        ImGui.BeginDisabled(!splitsApply);
-        ImGui.TextDisabled("Highest first. Used when a mod supports more than one body.");
+        ImGui.BeginDisabled(!state.Enabled);
+        ImGui.Checkbox(label, ref value);
+        ImGui.EndDisabled();
+        Help.Tooltip(topic, state.Enabled ? null : disabledReason);
+    }
+
+    // The "(?)" beside "Split body mods by body type": a small CLICKABLE button that opens the
+    // explanation in a popup (a visible question mark is not itself an explanation), with the same
+    // text as a hover tooltip as an extra. SmallButton is a normal ImGui item, so it takes
+    // keyboard focus and Enter/Space like any button where ImGui keyboard navigation is on.
+    private static void DrawBodyModsHelpMarker()
+    {
+        ImGui.SameLine();
+        if (ImGui.SmallButton("(?)##body-mods-help"))
+            ImGui.OpenPopup(BodyModsHelpPopup);
+        Help.Tooltip(HelpTopics.SortSplitBodyMods);
+
+        if (ImGui.BeginPopup(BodyModsHelpPopup))
+        {
+            ImGui.PushTextWrapPos(400f);
+            ImGui.TextUnformatted(Help.Short(HelpTopics.SortSplitBodyMods) ?? string.Empty);
+            ImGui.PopTextWrapPos();
+            ImGui.EndPopup(); // BeginPopup closes on click-away and on Escape by itself
+        }
+    }
+
+    // Always present, collapsed by default. Set once and forget: most people use one body, so the
+    // First-choice dropdown is the common path and the full ranked list is nested beneath it.
+    private void DrawBodyPriority(
+        Configuration config, Action saveConfig, IReadOnlyList<string> bodyLabels,
+        SortControlStates states, bool anyBodySplit)
+    {
+        var open = ImGui.CollapsingHeader("Body priority##body-priority");
+        // Right after the header it explains: Help.Tooltip binds to the last submitted item, so a
+        // tooltip at the end of the method would land on the Reset button or the nested header.
+        Help.Tooltip(HelpTopics.SortBodyPriority);
+        if (!open)
+            return;
+
+        ImGui.BeginDisabled(!states.FirstChoiceBody.Enabled);
+        ImGui.TextDisabled(anyBodySplit
+            ? "Highest first. Used when a mod supports more than one body."
+            : "Highest first. Used when a mod supports more than one body. It applies when a body split above is ticked.");
 
         var order = _bodyPriority.Labels; // immutable: safe to iterate while a click replaces the field
-        if (ImGui.BeginChild("##body-priority-list", new System.Numerics.Vector2(0, 220)))
+        if (FirstChoice(_bodyPriority) is { } first)
         {
-            for (var i = 0; i < order.Count; i++)
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.BeginCombo("First-choice body##first-choice-body", first))
             {
-                ImGui.PushID(i);
-
-                ImGui.BeginDisabled(i == 0);
-                if (ImGui.ArrowButton("##up", ImGuiDir.Up))
-                    SetBodyPriority(config, saveConfig, _bodyPriority.MoveUp(i));
-                ImGui.EndDisabled();
-
-                ImGui.SameLine();
-                ImGui.BeginDisabled(i == order.Count - 1);
-                if (ImGui.ArrowButton("##down", ImGuiDir.Down))
-                    SetBodyPriority(config, saveConfig, _bodyPriority.MoveDown(i));
-                ImGui.EndDisabled();
-
-                ImGui.SameLine();
-                ImGui.TextUnformatted($"{i + 1}. {order[i]}");
-
-                ImGui.PopID();
+                for (var i = 0; i < order.Count; i++)
+                {
+                    if (ImGui.Selectable($"{order[i]}##first-choice-{i}", i == 0))
+                        SetBodyPriority(config, saveConfig, _bodyPriority.MoveToTop(order[i]));
+                }
+                ImGui.EndCombo();
             }
+            Help.Tooltip(HelpTopics.SortFirstChoiceBody);
         }
-        ImGui.EndChild();
 
-        if (ImGui.Button("Reset to default##body-priority-reset"))
+        if (ImGui.CollapsingHeader("Full priority order##body-priority-full"))
         {
-            // An EMPTY saved list is what "default" means, so a reset keeps following the shipped
-            // order across releases instead of freezing today's order into the file.
-            _bodyPriority = BodyPriority.Default(bodyLabels);
-            config.BodyPriority = [];
-            saveConfig();
+            if (ImGui.BeginChild("##body-priority-list", new System.Numerics.Vector2(0, 220)))
+            {
+                for (var i = 0; i < order.Count; i++)
+                {
+                    ImGui.PushID(i);
+
+                    ImGui.BeginDisabled(i == 0);
+                    if (ImGui.ArrowButton("##up", ImGuiDir.Up))
+                        SetBodyPriority(config, saveConfig, _bodyPriority.MoveUp(i));
+                    ImGui.EndDisabled();
+
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(i == order.Count - 1);
+                    if (ImGui.ArrowButton("##down", ImGuiDir.Down))
+                        SetBodyPriority(config, saveConfig, _bodyPriority.MoveDown(i));
+                    ImGui.EndDisabled();
+
+                    ImGui.SameLine();
+                    ImGui.TextUnformatted($"{i + 1}. {order[i]}");
+
+                    ImGui.PopID();
+                }
+            }
+            ImGui.EndChild();
+
+            ImGui.Spacing();
+            if (ImGui.Button("Reset to default##body-priority-reset"))
+            {
+                // An EMPTY saved list is what "default" means, so a reset keeps following the shipped
+                // order across releases instead of freezing today's order into the file.
+                _bodyPriority = BodyPriority.Default(bodyLabels);
+                config.BodyPriority = [];
+                saveConfig();
+            }
+            ImGui.Spacing();
         }
 
         ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortBodyPriority, splitsApply ? null : SplitsInapplicableReason);
     }
 
     private void SetBodyPriority(Configuration config, Action saveConfig, BodyPriority next)
