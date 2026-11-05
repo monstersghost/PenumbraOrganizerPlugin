@@ -626,10 +626,13 @@ public sealed class OrganizerState
                 : null;
         }
 
+        var gearLayout = SortFolderSelectors.BuildGearLayout(
+            _mods.Values.Where(m => !m.Protected), splitGear, splitGearBody, bodyPriority);
+
         return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
                                                       splitHair: splitHair, hairPriority: hairPriority,
                                                       splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
-                                                      bodyPriority: bodyPriority));
+                                                      bodyPriority: bodyPriority, gearLayout: gearLayout));
     }
 
     /// <summary>

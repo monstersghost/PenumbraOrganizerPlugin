@@ -2,6 +2,7 @@ namespace PenumbraOrganizer.Plugin.Tests.Organizer.Templates;
 
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 public class TemplatePlannerTests
@@ -200,7 +201,7 @@ public class TemplatePlannerTests
 
         var plan = TemplatePlanner.Plan(template, [gear], Same);
 
-        Assert.Equal("Gear/Bibo+/Top", plan.DestinationFolders["g1"]);
+        Assert.Equal("Gear/10. Bibo+/02. Top", plan.DestinationFolders["g1"]);
     }
 
     [Fact]
@@ -211,5 +212,62 @@ public class TemplatePlannerTests
         var plan = TemplatePlanner.Plan(Template(splitGear: true), [gear], Same);
 
         Assert.Equal("Gear/Top", plan.DestinationFolders["g1"]);
+    }
+
+    private static ValidatedOrganizationTemplate GearBothSplits(Dictionary<string, string>? entries = null,
+        Dictionary<string, string>? labels = null) => new(
+            "T", "A", null,
+            new TemplateFallback(SortStrategy.TypeOnly, SplitGear: true, SplitNpc: true, SplitGearBody: true),
+            labels ?? new Dictionary<string, string>(), [], entries ?? new Dictionary<string, string>());
+
+    [Fact]
+    public void Plan_FallbackBothGearSplits_UsesTheNumberedLayout()
+    {
+        var gear = Row("g1", "Cool Dress", ModCategory.Gear, "Top", bodyType: "Rue+");
+
+        var plan = TemplatePlanner.Plan(GearBothSplits(), [gear], Same);
+
+        Assert.Equal("Gear/10. Rue+/02. Top", plan.DestinationFolders["g1"]);
+    }
+
+    [Fact]
+    public void Plan_FallbackNumbers_IgnoreBodiesThatOnlyExplicitEntriesPlace()
+    {
+        // The Rue+ mod is placed by an explicit entry, so it never reaches the fallback. With Rue+
+        // ranked FIRST, counting its row wrongly would hand Rue+ the number 10 and push the
+        // fallback's Bibo+ to 11 (a gap). Without a priority Bibo+ would sort first anyway and the
+        // test could not fail, so the priority is supplied on purpose.
+        var explicitRow = Row("e1", "Explicit Dress", ModCategory.Gear, "Top", bodyType: "Rue+");
+        var fallbackRow = Row("f1", "Fallback Dress", ModCategory.Gear, "Top", bodyType: "Bibo+");
+        var template = GearBothSplits(entries: new() { ["explicit dress"] = "Chosen" });
+        var rueFirst = BodyPriority.Normalize(["Rue+"], ["Rue+", "Bibo+"]);
+
+        var plan = TemplatePlanner.Plan(template, [explicitRow, fallbackRow], Same, bodyPriority: rueFirst);
+
+        Assert.Equal("Chosen", plan.DestinationFolders["e1"]);
+        Assert.Equal("Gear/10. Bibo+/02. Top", plan.DestinationFolders["f1"]);
+    }
+
+    [Fact]
+    public void Plan_FallbackNumbers_ApplyTheTemplateRenameToTheNumberedPath()
+    {
+        var gear = Row("g1", "Cool Dress", ModCategory.Gear, "Top", bodyType: "Rue+");
+
+        var plan = TemplatePlanner.Plan(
+            GearBothSplits(labels: new() { ["Gear"] = "Equipment" }), [gear], Same);
+
+        Assert.Equal("Equipment/10. Rue+/02. Top", plan.DestinationFolders["g1"]);
+    }
+
+    [Fact]
+    public void Plan_FallbackNumbers_IgnoreProtectedRows()
+    {
+        var protectedRow = Row("p1", "Protected Dress", ModCategory.Gear, "Top", isProtected: true, bodyType: "Rue+");
+        var fallbackRow = Row("f1", "Fallback Dress", ModCategory.Gear, "Top", bodyType: "Bibo+");
+        var rueFirst = BodyPriority.Normalize(["Rue+"], ["Rue+", "Bibo+"]);
+
+        var plan = TemplatePlanner.Plan(GearBothSplits(), [protectedRow, fallbackRow], Same, bodyPriority: rueFirst);
+
+        Assert.Equal("Gear/10. Bibo+/02. Top", plan.DestinationFolders["f1"]);
     }
 }

@@ -136,6 +136,26 @@ Slot names (`Head`, `Top`, `Hands`, `Legs`, `Feet`, `Ears`, `Neck`, `Wrists`, `R
 named `"Body"`, maps to `Top` here, deliberately distinct from this plugin's unrelated
 `ModCategory.Body` bucket for Smallclothes and skin mods.
 
+## Numbered gear folders
+
+When both **Split gear by equipment slot** and **Split gear by body type** are on, `Gear/` is numbered
+(`GearFolderLayout`). With only one on, the layout is the old unnumbered one.
+
+```
+Gear/
+  00. Sets          no single slot, no body found
+  01. Head  02. Top  03. Hands  04. Legs  05. Feet
+  06. Ears  07. Neck  08. Wrists  09. Rings     single slot, no body found
+  10. Rue+          bodies by priority, only those with gear
+      00. Sets  02. Top  03. Hands  04. Legs  05. Feet   same slot numbers inside
+  11. Bibo+  ...
+```
+
+Body folders are numbered from 10 in Body priority order, only for bodies that have gear in this
+sort, with no gaps. Gear whose slot is unresolved or that touches several slots goes to `00. Sets`
+(under its body folder when a body was found). Hair folders are padded to three digits (`Hair/002`);
+numbers of 1000 or more are written as is.
+
 ## Hair sub-classification (hair number)
 
 A mod classified `Hair` (its `Customization:` keys point at hair, which beats body and skin) gets

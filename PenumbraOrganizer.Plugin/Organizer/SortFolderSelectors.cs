@@ -42,13 +42,22 @@ public static class SortFolderSelectors
         HairPriority? hairPriority = null,
         bool splitGearBody = false,
         bool splitBodyMods = false,
-        BodyPriority? bodyPriority = null)
+        BodyPriority? bodyPriority = null,
+        GearFolderLayout? gearLayout = null)
     {
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
 
         string? Type()
         {
+            // The numbered gear layout owns Gear rows entirely. The template rename still applies,
+            // to the whole numbered path, exactly where TypeFolder applies it.
+            if (gearLayout is not null && row.Category == ModCategory.Gear)
+            {
+                var gearFolder = gearLayout.Folder(
+                    row.SubCategory, BodyFor(row, splitGearBody, splitBodyMods, bodyPriority));
+                return renameFolder is null ? gearFolder : renameFolder(gearFolder);
+            }
             var sub = row.SubCategory;
             // A priority only changes a hair row's number, and only while hair is split. With no
             // priority the resolver's step 3 returns the number the scan stored, so the output is
@@ -134,6 +143,18 @@ public static class SortFolderSelectors
         OrganizerModRow row, bool splitGearBody, bool splitBodyMods, BodyPriority? priority) =>
         (row.Category == ModCategory.Gear && splitGearBody) || (row.Category == ModCategory.Body && splitBodyMods)
             ? ResolveBody(row, priority)
+            : null;
+
+    /// <summary>
+    /// The numbered Gear layout for the rows that are about to be placed by the gear rule, or null
+    /// unless BOTH the slot split and the gear body split are on (any other combination keeps
+    /// today's layout exactly).
+    /// </summary>
+    public static GearFolderLayout? BuildGearLayout(
+        IEnumerable<OrganizerModRow> rows, bool splitGear, bool splitGearBody, BodyPriority? priority) =>
+        splitGear && splitGearBody
+            ? GearFolderLayout.Build(
+                rows.Where(r => r.Category == ModCategory.Gear).Select(r => ResolveBody(r, priority)), priority)
             : null;
 
     private static string? ResolveBody(OrganizerModRow row, BodyPriority? priority) =>

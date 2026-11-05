@@ -218,12 +218,12 @@ public class OrganizerExportFormatterTests
 
         Assert.Contains("Body priority used for the last sort: Rue+ > YAB", first);
         Assert.Contains("StagedBody: Rue+ (Content/Option)", first);
-        Assert.Contains("ProposedPath: Gear/Rue+/Top/Succubus", first);
+        Assert.Contains("ProposedPath: Gear/10. Rue+/02. Top/Succubus", first);
         Assert.Contains("BodyType: YAB", first);
 
         Assert.Contains("Body priority used for the last sort: YAB > Rue+", second);
         Assert.Contains("StagedBody: YAB (Content/Option)", second);
-        Assert.Contains("ProposedPath: Gear/YAB/Top/Succubus", second);
+        Assert.Contains("ProposedPath: Gear/10. YAB/02. Top/Succubus", second);
     }
 
     [Fact]

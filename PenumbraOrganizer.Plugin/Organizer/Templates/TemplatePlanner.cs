@@ -78,6 +78,19 @@ public static class TemplatePlanner
         var matchedRows = 0;
         var fallbackRows = 0;
 
+        // Numbering for the numbered gear layout comes from the rows the FALLBACK will place: an
+        // explicit template entry bypasses the fallback, so counting its rows would let a body that
+        // only explicit entries use take a number and leave gaps in the fallback's.
+        var fallbackEligibleRows = rows.Where(r =>
+        {
+            if (r.Protected)
+                return false;
+            var key = ModNameNormalizer.Normalize(r.Name);
+            return !(key.Length > 0 && template.EntriesByNormalizedName.ContainsKey(key));
+        });
+        var gearLayout = SortFolderSelectors.BuildGearLayout(
+            fallbackEligibleRows, template.Fallback.SplitGear, template.Fallback.SplitGearBody, bodyPriority);
+
         foreach (var row in rows)
         {
             // Protected rows are excluded here for reporting, and again by OrganizerState.Sort's
@@ -108,7 +121,7 @@ public static class TemplatePlanner
                 fallback.Strategy, fallback.SplitGear, fallback.SplitNpc, row, canonicalizeCreator, renameFolder,
                 splitHair: fallback.SplitHair, hairPriority: hairPriority,
                 splitGearBody: fallback.SplitGearBody, splitBodyMods: fallback.SplitBodyMods,
-                bodyPriority: bodyPriority);
+                bodyPriority: bodyPriority, gearLayout: gearLayout);
             destinations[row.Identifier] = SortFolderSelectors.FlattenToFolder(primary, secondary);
             fallbackRows++;
         }

@@ -72,7 +72,7 @@ public static class ModTypeFolders
         // Hair cannot be enumerated the way the nine gear slots and three NPC kinds are - there are
         // several hundred vanilla hair numbers. The shape is validated instead, which keeps the
         // fail-fast intent above: Hair + "Bosses" still throws.
-        (ModCategory.Hair, _) when IsHairNumber(subCategory) => $"{ModCategory.Hair}/{subCategory}",
+        (ModCategory.Hair, _) when IsHairNumber(subCategory) => $"{ModCategory.Hair}/{subCategory!.PadLeft(3, '0')}",
         _ => throw new ArgumentOutOfRangeException(
             nameof(subCategory), subCategory, $"Unsupported subcategory '{subCategory}' for {category}."),
     };
@@ -85,6 +85,7 @@ public static class ModTypeFolders
     // check in the reader is what makes the two sides line up, and this guard is what turns a
     // future producer that skips it into a loud failure rather than a "Hair/0115" folder sitting
     // beside an existing "Hair/115" one.
+    // The input is the plain number; GetFolder pads it to three digits when it builds the folder.
     private static bool IsHairNumber(string? subCategory) =>
         subCategory is { Length: >= 1 and <= 4 }
         && subCategory[0] is >= '1' and <= '9'

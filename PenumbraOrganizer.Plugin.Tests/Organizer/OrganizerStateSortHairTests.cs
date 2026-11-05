@@ -163,7 +163,7 @@ public class OrganizerStateSortHairTests
 
         state.Sort(SortStrategy.TypeOnly, true, true, true, c => c, new HairPriority("1801", false));
 
-        Assert.Equal("Hair/3/Hair Mod", PathOf(state, "hair"));
+        Assert.Equal("Hair/003/Hair Mod", PathOf(state, "hair"));
     }
 
     [Fact]
