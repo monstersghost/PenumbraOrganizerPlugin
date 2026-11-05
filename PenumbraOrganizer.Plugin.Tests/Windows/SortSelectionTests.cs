@@ -77,25 +77,23 @@ public class SortSelectionTests
     }
 
     [Fact]
-    public void SortSelection_ValueEquality_CoversSplitBody()
+    public void SortSelection_ValueEquality_CoversBothBodySplits()
     {
-        // The SplitHair test's reasoning applies verbatim: this pins only that SplitBody is a
-        // positional member the generated equality covers, not the staleness behaviour it enables.
-        //
-        // SplitBody sits AFTER the two hair priority fields, so it is spelled out positionally here
-        // rather than with a named argument - a member appended in the wrong place would still
-        // compare unequal under a named argument and this test would not notice.
-        Assert.NotEqual(
-            new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, false),
-            new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, true));
+        // Spelled positionally on purpose: a member appended in the wrong place would still compare
+        // unequal under a named argument and this test would not notice.
+        var off = new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, false, false);
+
+        Assert.NotEqual(off, new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, true, false));
+        Assert.NotEqual(off, new SortSelection(SortStrategy.TypeOnly, false, false, false, null, false, false, true));
     }
 
     [Fact]
-    public void SortSelection_SplitBody_DefaultsOff()
+    public void SortSelection_BodySplits_DefaultOff()
     {
-        // An unchanged install must not start splitting bodies, and the four-argument construction
-        // every existing test uses must keep meaning what it meant.
-        Assert.False(new SortSelection(SortStrategy.TypeOnly, false, false, false).SplitBody);
+        var selection = new SortSelection(SortStrategy.TypeOnly, false, false, false);
+
+        Assert.False(selection.SplitGearBody);
+        Assert.False(selection.SplitBodyMods);
     }
 
     [Fact]
@@ -134,7 +132,7 @@ public class SortSelectionTests
     private static readonly string[] Bodies = ["Bibo+", "Rue+", "TBSE"];
 
     private static SortSelection WithPriority(BodyPriority? p) =>
-        new(SortStrategy.TypeOnly, true, true, false, SplitBody: true, BodyPriority: p);
+        new(SortStrategy.TypeOnly, true, true, false, SplitGearBody: true, BodyPriority: p);
 
     [Fact]
     public void SortSelection_ReorderingTheBodyPriority_MakesTheSelectionDiffer()

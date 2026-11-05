@@ -45,13 +45,11 @@ public class TemplateFallbackConversionTests
     // shared template silently re-foldering a recipient's gear by a body list they may not have the
     // same version of.
     //
-    // The eighth is the body priority, deliberately not stored by templates for the same reason the
-    // hair priority and body split are not: a shared template must not re-folder a recipient's gear
-    // against a body list they may hold a different version of.
+    // The seventh and eighth are the two body-split flags (gear, and body mods), which replaced the single body split, and the ninth is the body priority. None of the three is stored by templates, for the same reason the hair split is not.
     [Fact]
     public void BothTypes_CarryTheValuesTheyHaveBeenDesignedFor()
     {
-        Assert.Equal(8, PrimaryConstructorParameterCount(typeof(SortSelection)));
+        Assert.Equal(9, PrimaryConstructorParameterCount(typeof(SortSelection)));
         Assert.Equal(3, PrimaryConstructorParameterCount(typeof(TemplateFallback)));
     }
 

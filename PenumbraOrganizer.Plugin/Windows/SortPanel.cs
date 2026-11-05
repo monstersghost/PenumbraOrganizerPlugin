@@ -18,7 +18,8 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </remarks>
 public readonly record struct SortSelection(
     SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
-    string? HairRaceCode = null, bool MidlanderFallback = false, bool SplitBody = false,
+    string? HairRaceCode = null, bool MidlanderFallback = false,
+    bool SplitGearBody = false, bool SplitBodyMods = false,
     BodyPriority? BodyPriority = null)
 {
     // By Creator never consults category, so no split can change its output. All four checkboxes
@@ -263,14 +264,14 @@ public sealed class SortPanel
         // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
         // the checkboxes held before the user's click was processed.
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitBody, _bodyPriority);
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitBody, _splitBody, _bodyPriority);
 
         // Stable id: a label varying with mod count makes the widget id vary with it, so a background
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
-                canonicalizeCreator, selection.HairPriority, selection.SplitBody, selection.BodyPriority);
+                canonicalizeCreator, selection.HairPriority, selection.SplitGearBody, selection.SplitBodyMods, selection.BodyPriority);
             _lastSorted = selection;
         }
 

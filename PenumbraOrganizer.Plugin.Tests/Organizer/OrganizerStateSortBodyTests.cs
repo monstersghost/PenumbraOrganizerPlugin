@@ -52,7 +52,7 @@ public class OrganizerStateSortBodyTests
         var state = WithMods();
 
         state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false,
-            Canon, splitBody: true);
+            Canon, splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal("Gear/Bibo+/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
         Assert.Equal("Gear/TBSE/TBSE Outfit", PathOf(state, "unslotted"));
@@ -67,7 +67,7 @@ public class OrganizerStateSortBodyTests
         var state = WithMods();
 
         state.Sort(SortStrategy.TypeOnly, splitGear: false, splitNpc: false, splitHair: false,
-            Canon, splitBody: true);
+            Canon, splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal("Gear/Bibo+/Bibo+ Medieval Dress", PathOf(state, "dress"));
         Assert.Equal("Gear/TBSE/TBSE Outfit", PathOf(state, "unslotted"));
@@ -80,7 +80,7 @@ public class OrganizerStateSortBodyTests
         var state = WithMods();
 
         state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false,
-            Canon, splitBody: false);
+            Canon, splitGearBody: false, splitBodyMods: false);
 
         Assert.Equal("Gear/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
         Assert.Equal("Gear/TBSE Outfit", PathOf(state, "unslotted"));
@@ -91,7 +91,7 @@ public class OrganizerStateSortBodyTests
     [Fact]
     public void Sort_BodySplitDefaultsOff_SoAnUnchangedInstallDoesNotMove()
     {
-        // The overload without splitBody must mean what it meant before this feature existed.
+        // The overload without the body flags must mean what it meant before this feature existed.
         var state = WithMods();
 
         state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false, Canon);
@@ -107,7 +107,7 @@ public class OrganizerStateSortBodyTests
     {
         var state = WithMods();
 
-        state.Sort(strategy, splitGear: true, splitNpc: false, splitHair: false, Canon, splitBody: true);
+        state.Sort(strategy, splitGear: true, splitNpc: false, splitHair: false, Canon, splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal(expected, PathOf(state, "dress"));
     }
@@ -120,7 +120,7 @@ public class OrganizerStateSortBodyTests
         var state = WithMods();
 
         state.Sort(SortStrategy.CreatorOnly, splitGear: false, splitNpc: false, splitHair: false,
-            Canon, splitBody: true);
+            Canon, splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal("Ann/Bibo+ Medieval Dress", PathOf(state, "dress"));
         Assert.Equal("Bob/Rue+ Body", PathOf(state, "bodymod"));
@@ -144,7 +144,7 @@ public class OrganizerStateSortBodyTests
         ], new HashSet<string>());
 
         state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: true, splitHair: true,
-            Canon, splitBody: true);
+            Canon, splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal("Hair/115/Bibo+ Hair", PathOf(state, "hair"));
         Assert.Equal("NPC/Bosses/Some Boss", PathOf(state, "npc"));
@@ -174,11 +174,11 @@ public class OrganizerStateSortBodyTests
     {
         var state = WithMultiBodyMod();
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Normalize(["Rue+"], Bodies));
         Assert.Equal("Gear/Rue+/Top/Succubus Lifestyle", PathOf(state, "multi"));
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Normalize(["YAB"], Bodies));
         Assert.Equal("Gear/YAB/Top/Succubus Lifestyle", PathOf(state, "multi"));
     }
@@ -188,7 +188,7 @@ public class OrganizerStateSortBodyTests
     {
         var state = WithMultiBodyMod();
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true);
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal("Gear/YAB/Top/Succubus Lifestyle", PathOf(state, "multi"));
     }
@@ -198,7 +198,7 @@ public class OrganizerStateSortBodyTests
     {
         var state = WithMultiBodyMod();
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: false,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: false,
             bodyPriority: BodyPriority.Normalize(["Rue+"], Bodies));
 
         Assert.Equal("Gear/Top/Succubus Lifestyle", PathOf(state, "multi"));
@@ -211,13 +211,13 @@ public class OrganizerStateSortBodyTests
         var row = state.Mods.Single();
 
         var rueFirst = BodyPriority.Normalize(["Rue+"], Bodies);
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true, bodyPriority: rueFirst);
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true, bodyPriority: rueFirst);
         Assert.Equal(new BodyResolution("Rue+", BodyEvidenceTier.Content, BodyEvidenceSource.Option), row.StagedBodyResolution);
         Assert.Equal(rueFirst, state.StagedBodyPriority);
         Assert.Equal("YAB", row.BodyType);
 
         var yabFirst = BodyPriority.Normalize(["YAB"], Bodies);
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true, bodyPriority: yabFirst);
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true, bodyPriority: yabFirst);
         Assert.Equal("YAB", row.StagedBodyResolution!.Label);
         Assert.Equal(yabFirst, state.StagedBodyPriority);
     }
@@ -226,10 +226,10 @@ public class OrganizerStateSortBodyTests
     public void Sort_BodySplitOff_ClearsTheStagedResolutionAndPriority()
     {
         var state = WithMultiBodyMod();
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Default(Bodies));
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: false);
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: false);
 
         Assert.Null(state.Mods.Single().StagedBodyResolution);
         Assert.Null(state.StagedBodyPriority);
@@ -240,7 +240,7 @@ public class OrganizerStateSortBodyTests
     {
         var state = WithMods();
 
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Default(Bodies));
 
         Assert.Equal("Gear/Bibo+/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
@@ -250,7 +250,7 @@ public class OrganizerStateSortBodyTests
     public void LoadScan_AfterASortWithAPriority_ClearsTheStagedPriorityAndTheExportLine()
     {
         var state = WithMultiBodyMod();
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Default(Bodies));
         Assert.NotNull(state.StagedBodyPriority);
 
@@ -270,7 +270,7 @@ public class OrganizerStateSortBodyTests
     public void ApplyTemplate_AfterASortWithAPriority_ClearsTheTouchedRowsAndThePriority()
     {
         var state = WithMultiBodyMod();
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Default(Bodies));
         Assert.NotNull(state.Mods.Single().StagedBodyResolution);
 
@@ -288,12 +288,119 @@ public class OrganizerStateSortBodyTests
     public void AssignManual_ClearsThatRowsStagedResolutionButNotThePriority()
     {
         var state = WithMultiBodyMod();
-        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: true, splitBodyMods: true,
             bodyPriority: BodyPriority.Default(Bodies));
 
         Assert.True(state.AssignManual("multi", "Manual/Spot"));
 
         Assert.Null(state.Mods.Single().StagedBodyResolution);
         Assert.NotNull(state.StagedBodyPriority);
+    }
+
+    [Fact]
+    public void Sort_GearBodyFlagOnly_FilesGearUnderItsBody_AndLeavesBodyModsFlat()
+    {
+        var state = WithMods();
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false, Canon,
+            splitGearBody: true, splitBodyMods: false);
+
+        Assert.Equal("Gear/Bibo+/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
+        Assert.Equal("Body/Rue+ Body", PathOf(state, "bodymod"));
+    }
+
+    [Fact]
+    public void Sort_BodyModsFlagOnly_FilesBodyModsUnderTheirBody_AndLeavesGearWithoutOne()
+    {
+        var state = WithMods();
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false, Canon,
+            splitGearBody: false, splitBodyMods: true);
+
+        Assert.Equal("Gear/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
+        Assert.Equal("Body/Rue+/Rue+ Body", PathOf(state, "bodymod"));
+    }
+
+    [Fact]
+    public void Sort_BothFlags_FilesBothCategories()
+    {
+        var state = WithMods();
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false, Canon,
+            splitGearBody: true, splitBodyMods: true);
+
+        Assert.Equal("Gear/Bibo+/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
+        Assert.Equal("Body/Rue+/Rue+ Body", PathOf(state, "bodymod"));
+    }
+
+    [Fact]
+    public void Sort_GearBodyFlagWithoutTheSlotSplit_FilesGearAtGearBodyMod()
+    {
+        // The two splits are independent: the body flag does not switch the slot split on.
+        var state = WithMods();
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: false, splitNpc: false, splitHair: false, Canon,
+            splitGearBody: true, splitBodyMods: false);
+
+        Assert.Equal("Gear/Bibo+/Bibo+ Medieval Dress", PathOf(state, "dress"));
+    }
+
+    [Fact]
+    public void Sort_NeitherFlag_UsesNoBodySegmentAnywhere()
+    {
+        var state = WithMods();
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false, Canon);
+
+        Assert.Equal("Gear/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
+        Assert.Equal("Body/Rue+ Body", PathOf(state, "bodymod"));
+    }
+
+    private static OrganizerState WithGearAndBodyCandidates()
+    {
+        var state = new OrganizerState();
+        var both = new BodyCandidates
+        {
+            Content = [new BodyCandidate("YAB", BodyEvidenceSource.Option),
+                       new BodyCandidate("Rue+", BodyEvidenceSource.Option)],
+        };
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "g", Name = "Gear Multi", Author = "Ann",
+                CurrentPath = "Gear Multi", ProposedPath = "Gear Multi",
+                Category = ModCategory.Gear, SubCategory = "Top", BodyType = "YAB", BodyCandidates = both },
+            new OrganizerModRow { Identifier = "b", Name = "Body Multi", Author = "Ann",
+                CurrentPath = "Body Multi", ProposedPath = "Body Multi",
+                Category = ModCategory.Body, BodyType = "YAB", BodyCandidates = both },
+        ], new HashSet<string>());
+        return state;
+    }
+
+    [Fact]
+    public void Sort_StagedResolution_IsRecordedOnlyForRowsWhoseCategoryFlagIsOn()
+    {
+        var state = WithGearAndBodyCandidates();
+        var rueFirst = BodyPriority.Normalize(["Rue+"], ["YAB", "Rue+"]);
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: true, splitNpc: false, splitHair: false, Canon,
+            splitGearBody: true, splitBodyMods: false, bodyPriority: rueFirst);
+
+        Assert.Equal("Rue+", state.Mods.Single(m => m.Identifier == "g").StagedBodyResolution!.Label);
+        Assert.Null(state.Mods.Single(m => m.Identifier == "b").StagedBodyResolution);
+        Assert.Equal(rueFirst, state.StagedBodyPriority);
+        Assert.Equal("Body/Body Multi", PathOf(state, "b"));
+    }
+
+    [Fact]
+    public void Sort_StagedPriority_IsNullOnlyWhenBothFlagsAreOff()
+    {
+        var state = WithGearAndBodyCandidates();
+        var p = BodyPriority.Default(["YAB", "Rue+"]);
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: true, bodyPriority: p);
+        Assert.Equal(p, state.StagedBodyPriority);
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: false, bodyPriority: p);
+        Assert.Null(state.StagedBodyPriority);
     }
 }
