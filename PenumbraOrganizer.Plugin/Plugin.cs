@@ -505,7 +505,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal string ExportReview()
     {
-        var content = Organizer.OrganizerExportFormatter.Format(OrganizerState.Mods, OrganizerState.Validate());
+        var content = Organizer.OrganizerExportFormatter.Format(OrganizerState.Mods, OrganizerState.Validate(), OrganizerState.StagedBodyPriority);
         var path = Path.Combine(PluginInterface.ConfigDirectory.FullName, "organizer-export.txt");
         Directory.CreateDirectory(PluginInterface.ConfigDirectory.FullName);
         File.WriteAllText(path, content);

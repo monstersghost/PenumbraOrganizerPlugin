@@ -1,4 +1,5 @@
 using PenumbraOrganizer.Core.Classification;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Organizer;
@@ -36,6 +37,14 @@ public sealed class OrganizerModRow
     /// </para>
     /// </remarks>
     public string? BodyType { get; init; }
+
+    /// <summary>
+    /// The body resolution the most recent sort used to stage this row's proposal, or null when that
+    /// sort had the body split off, the row has no candidates, or none matched. Unlike
+    /// <see cref="BodyType"/> (the scan's DEFAULT-order winner) this changes with the priority, so a
+    /// dump after a custom-priority sort explains the folder the row was actually proposed.
+    /// </summary>
+    public BodyResolution? StagedBodyResolution { get; set; }
 
     /// <summary>
     /// Every body this mod could file under, by tier. Null unless the row passed the body gate

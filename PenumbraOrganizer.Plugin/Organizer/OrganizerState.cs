@@ -1,4 +1,5 @@
 using PenumbraOrganizer.Core.Classification;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
@@ -33,6 +34,9 @@ public sealed class OrganizerState
 
     public IReadOnlyList<OrganizerModRow> Mods =>
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>The body priority the last sort used, or null when it had the body split off.</summary>
+    public BodyPriority? StagedBodyPriority { get; private set; }
 
     public bool HasScanned { get; private set; }
 
@@ -516,10 +520,22 @@ public sealed class OrganizerState
     /// </summary>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
                     Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
-                    bool splitBody = false) =>
-        Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
-                                               splitHair: splitHair, hairPriority: hairPriority,
-                                               splitBody: splitBody));
+                    bool splitBody = false, BodyPriority? bodyPriority = null)
+    {
+        // Recorded BEFORE the paths are computed, from the same inputs, so the explanation and the
+        // proposal cannot disagree. Cleared when the split is off so a stale one never lingers.
+        StagedBodyPriority = splitBody ? bodyPriority : null;
+        foreach (var row in Mods)
+        {
+            row.StagedBodyResolution = splitBody && bodyPriority is not null
+                ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority)
+                : null;
+        }
+
+        return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
+                                                      splitHair: splitHair, hairPriority: hairPriority,
+                                                      splitBody: splitBody, bodyPriority: bodyPriority));
+    }
 
     /// <summary>
     /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes
