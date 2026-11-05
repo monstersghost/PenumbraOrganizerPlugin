@@ -344,7 +344,11 @@ public sealed class SortPanel
         Configuration config, Action saveConfig, IReadOnlyList<string> bodyLabels,
         SortControlStates states, bool anyBodySplit)
     {
-        if (!ImGui.CollapsingHeader("Body priority##body-priority"))
+        var open = ImGui.CollapsingHeader("Body priority##body-priority");
+        // Right after the header it explains: Help.Tooltip binds to the last submitted item, so a
+        // tooltip at the end of the method would land on the Reset button or the nested header.
+        Help.Tooltip(HelpTopics.SortBodyPriority);
+        if (!open)
             return;
 
         ImGui.BeginDisabled(!states.FirstChoiceBody.Enabled);
@@ -408,7 +412,6 @@ public sealed class SortPanel
         }
 
         ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortBodyPriority);
     }
 
     private void SetBodyPriority(Configuration config, Action saveConfig, BodyPriority next)
