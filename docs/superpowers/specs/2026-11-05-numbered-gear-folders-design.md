@@ -48,22 +48,39 @@ as is. Formatted when the folder is built (`ModTypeFolders.GetFolder`), so `SubC
 priority logic and the diagnostic dump keep plain integers. `IsHairNumber` keeps validating the
 plain input.
 
+**Accepted limitation, stated rather than hidden:** `ModHairFileReader` accepts 1..9999, so a hair
+number of 1000 or more would still sort before `185` as text (`Hair/1000` < `Hair/185`). Three
+digits is the approved format and no vanilla number is believed to reach 1000, so this is accepted;
+a test pins `999` before `1000` being written as `999`/`1000` so the behaviour is visible, and the
+release verification below checks the premise. If a real number of 1000 or more turns up, the fix
+is padding to four digits, which moves hair folders once more.
+
 ## Design
 
-- **`GearFolderLayout`** (new, pure, public): built once per sort from the rows being sorted, the
-  body priority and the two split flags. Holds `IReadOnlyDictionary<string,int> BodyNumbers`:
-  every body that at least one sorted gear mod resolves to (same resolver the sort uses, including
-  `nameFirst` for Body rows is not relevant here - gear only), ordered by `BodyPriority.Rank` then
-  ordinal label, numbered from 10. Exposes `Folder(slot, body)` returning the `Gear/...` path.
-  Null layout means today's behaviour exactly.
+- **`GearFolderLayout`** (new, pure, public): built once per sort from the rows that will be
+  placed by the gear rule, the body priority and the two split flags. Holds
+  `IReadOnlyDictionary<string,int> BodyNumbers`: every body that at least one of those gear rows
+  resolves to (through the same `BodyFor`/resolver the sort uses), ordered by `BodyPriority.Rank`
+  then ordinal label, numbered from 10. Exposes `Folder(slot, body)` returning the `Gear/...` path.
+  A null layout means today's behaviour exactly.
+- **No priority supplied.** The feature depends on the two flags alone. When no `BodyPriority` is
+  passed (the existing APIs allow it), bodies resolve through the row's stored `BodyType`, exactly as
+  today, and are numbered in ordinal label order. Both-flags-with-null-priority is tested; it never
+  silently falls back to the old layout.
 - **`SortFolderSelectors.Select`** gains an optional `GearFolderLayout? gearLayout`. For a Gear row
   with a layout it asks the layout for the folder instead of `TypeFolder`; everything else is
-  unchanged. Because the template planner's fallback uses the same selector, templates inherit the
+  unchanged. **The template `renameFolder` is applied to the numbered path after it is built**, the
+  same call `TypeFolder` makes today, so a template mapping such as `Gear` to `Equipment` still
+  renames the root of `Gear/10. Rue+/02. Top` (tested). Keys written against the old unnumbered
+  subfolders (`Gear/Legs`) simply no longer match, as noted below. Because the template planner's fallback uses the same selector, templates inherit the
   layout with no extra code, once the planner builds a layout from its rows.
 - **`OrganizerState.Sort`** builds the layout (when both gear flags are on and a body priority was
   supplied) before the per-row loop and passes it to `Select`.
-- **`TemplatePlanner`** builds a layout from the unprotected rows with the importer's body priority
-  and fallback flags.
+- **`TemplatePlanner`** builds its layout from the **fallback-eligible rows only**: unprotected rows
+  that no template entry matched. Rows an explicit entry places never reach the selector, so
+  counting them would let a body used only by explicit matches consume a number and leave the
+  fallback bodies starting above 10 with a gap. Uses the importer's body priority and the template
+  fallback's flags. Tested with a body that exists only in explicit matches.
 - **`ModTypeFolders.GetFolder`** pads hair. Gear numbering lives in the layout, not here, so
   `GetFolder` keeps its fail-fast validation untouched.
 - The body label in a folder name still passes through the existing label validation.
@@ -84,8 +101,11 @@ plain input.
   tie by ordinal label, `00. Sets` for unresolved slots, slot numbers, non-body slots never under a
   body, null layout equals today's output.
 - `OrganizerStateSortBodyTests`: both flags on gives the layout; either flag alone is unchanged.
-- Template fallback test with both flags on.
-- Hair: `Hair/002`, `Hair/115`, `Hair/1000`, with the stored `SubCategory` unchanged.
+- Template fallback with both flags on; with a `Gear` -> `Equipment` label; and with a body that
+  appears only in explicitly matched rows (no gap in the fallback numbers).
+- Both flags on with a null body priority: numbered, ordinal order.
+- Hair: `Hair/002`, `Hair/115`, `Hair/999`, `Hair/1000` (written unpadded, the accepted limitation),
+  with the stored `SubCategory` unchanged.
 - A golden test on a small mixed library mirroring the author's `Gear/` counts.
 
 ## Out of scope (separate pieces)
