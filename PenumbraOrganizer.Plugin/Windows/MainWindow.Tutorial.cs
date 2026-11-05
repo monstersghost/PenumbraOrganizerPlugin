@@ -10,7 +10,7 @@ public sealed partial class MainWindow
     internal Func<(HighlightTarget Tab, HighlightTarget Button)>? TutorialHighlight { get; set; }
 
     private (HighlightTarget Tab, HighlightTarget Button) _highlight;
-    private HighlightTarget _highlightedTab;
+    private (HighlightTarget Tab, HighlightTarget Button) _lastHighlight;
     private HighlightTarget _tabToSelect;
 
     // Once per frame, before the tabs. A change of tab target selects that tab for ONE frame, so the
@@ -18,9 +18,11 @@ public sealed partial class MainWindow
     private void RefreshTutorialHighlight()
     {
         _highlight = TutorialHighlight?.Invoke() ?? (HighlightTarget.None, HighlightTarget.None);
-        if (_highlight.Tab != _highlightedTab)
+        // Any change of step re-selects its tab, so moving from the Review step to the Apply step
+        // (same tab) brings the user back if they clicked away in between.
+        if (_highlight != _lastHighlight)
         {
-            _highlightedTab = _highlight.Tab;
+            _lastHighlight = _highlight;
             _tabToSelect = _highlight.Tab;
         }
     }

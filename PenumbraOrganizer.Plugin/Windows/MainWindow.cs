@@ -222,6 +222,10 @@ public sealed partial class MainWindow : Window, IDisposable
             }
         }
 
+        // Window level, not inside the Review tab: it is its own floating window and must not
+        // vanish when the user switches tabs.
+        DrawFailureWindow();
+
         _fileDialogManager.Draw();
     }
 

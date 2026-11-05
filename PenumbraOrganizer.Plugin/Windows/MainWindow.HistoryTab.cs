@@ -103,7 +103,7 @@ public sealed partial class MainWindow
                 ImGui.PushStyleColor(ImGuiCol.Text, PluginTheme.CollisionBad);
                 var confirmDelete = ImGui.Button("Yes, delete");
                 ImGui.PopStyleColor();
-                if (confirmDelete)
+                if (confirmDelete && CurrentGates().CanCreateBackup)
                 {
                     DeleteHistorySnapshot(snapshot.Id);
                     _pendingDeleteSnapshotId = null;

@@ -721,6 +721,11 @@ reported as failed with `PathRenameFailed`, the Failed mods window on the Review
 it and the path it wanted. The usual cause is another mod sitting exactly where a folder is needed;
 the plugin now moves such a mod aside first.
 
+The reverse is not automatic: restoring a snapshot that moves such a mod back onto the path of a folder
+that still exists (the empty `Body/Bibo+` folder left behind) can fail the same way, because Penumbra
+keeps empty folders. Run Folder Cleanup on the Review Changes tab to remove the empty folder, then
+restore again.
+
 Heliosphere and Proteus behaviour follows from how those tools find their mods (by directory, not by
 Penumbra path), which is why moving their mods is safe in the two non-Protected modes. The
 Proteus controls have only been exercised against test mods, not a real Proteus library; tell us

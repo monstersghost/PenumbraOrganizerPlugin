@@ -48,6 +48,38 @@ public sealed class OrganizerState
             row.Protected = IsEffectivelyProtectedFull(row);
     }
 
+    /// <summary>
+    /// The user changed a tool's mode on the Protect tab. For each tool whose setting changed, its
+    /// mods' per-mod overrides are dropped (so the new mode applies cleanly), and when the change
+    /// frees them their explicit protection goes too: "Protect all" ticks every mod, tool mods
+    /// included, and an explicit protection beats the mode, so without this the change would do
+    /// nothing and nothing on screen would say why. A protected FOLDER still wins, visibly.
+    /// Startup uses <see cref="SetToolPolicy"/> instead, which must never drop protection.
+    /// </summary>
+    public void ChangeToolPolicy(ToolPolicy policy)
+    {
+        var old = _toolPolicy;
+
+        void Reset(Func<OrganizerModRow, bool> belongs, bool frees)
+        {
+            foreach (var row in _mods.Values.Where(belongs))
+            {
+                _toolUnprotectOverrides.Remove(row.Identifier);
+                if (frees)
+                    _protectedModIdentifiers.Remove(row.Identifier);
+            }
+        }
+
+        if (policy.Heliosphere != old.Heliosphere)
+            Reset(m => m.HeliosphereManaged && m.ProteusRole == ProteusRole.None, policy.Heliosphere != ToolMode.Protected);
+        if (policy.Proteus != old.Proteus)
+            Reset(m => m.ProteusRole == ProteusRole.Made, policy.Proteus != ToolMode.Protected);
+        if (policy.ProteusManagedAtRoot != old.ProteusManagedAtRoot)
+            Reset(m => m.ProteusRole == ProteusRole.Managed, policy.ProteusManagedAtRoot);
+
+        SetToolPolicy(policy);
+    }
+
     public IReadOnlyList<OrganizerModRow> Mods =>
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
 

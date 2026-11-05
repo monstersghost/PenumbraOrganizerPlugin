@@ -140,8 +140,6 @@ public sealed partial class MainWindow
             }
         }
 
-        DrawFailureWindow();
-
         ImGui.Spacing();
         DrawDiagnosticsGroup();
         ImGui.Spacing();

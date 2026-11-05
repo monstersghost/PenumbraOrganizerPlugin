@@ -409,7 +409,7 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Pushes the saved tool modes into the organizer state and saves them.</summary>
     internal void ApplyToolPolicy()
     {
-        OrganizerState.SetToolPolicy(Config.ToolPolicy);
+        OrganizerState.ChangeToolPolicy(Config.ToolPolicy);
         PluginInterface.SavePluginConfig(Config);
     }
 

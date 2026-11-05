@@ -27,7 +27,9 @@ public static class LastOperationFailures
             if (OperationPlanCodec.TryLoad(OperationBundlePaths.PlanPath(dir), out var loaded))
                 plan = loaded;
 
-            var targets = plan?.RecoveryTargets.ToDictionary(t => t.Identifier, StringComparer.Ordinal);
+            var targets = plan?.RecoveryTargets
+                .GroupBy(t => t.Identifier, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
             var failures = StepResultLog.ReadAll(OperationBundlePaths.ResultsPath(dir))
                 .Where(r => r.Disposition == OperationStepDisposition.Failed)
@@ -45,7 +47,9 @@ public static class LastOperationFailures
 
             return new LastOperationFailureReport(journal.Type, journal.UpdatedAt, failures);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        // This runs inside a draw call, where anything that escapes kills the frame; a damaged bundle
+        // should read as "nothing found", never as a crash.
+        catch (Exception)
         {
             return null;
         }

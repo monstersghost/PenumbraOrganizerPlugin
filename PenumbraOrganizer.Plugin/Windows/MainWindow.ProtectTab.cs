@@ -22,7 +22,9 @@ public sealed partial class MainWindow
         if (!tab)
             return;
 
-        var allProtected = _plugin.OrganizerState.Mods.All(m => m.Protected);
+        // One snapshot per frame: Mods sorts and copies the whole list on every call.
+        var allMods = _plugin.OrganizerState.Mods;
+        var allProtected = allMods.All(m => m.Protected);
         if (ImGui.Button($"{ProtectToggleLabels.All(allProtected)}##toggle-protect-all"))
         {
             _plugin.OrganizerState.SetAllProtection(!allProtected);
@@ -30,7 +32,7 @@ public sealed partial class MainWindow
         }
         Help.Tooltip(HelpTopics.ProtectToggleAll);
 
-        DrawToolModes();
+        DrawToolModes(allMods);
 
         // A protected mod sitting at the library root is stuck there permanently: protection means
         // the plugin never proposes a path for it, so no amount of sorting will file it away. That is
@@ -200,9 +202,8 @@ public sealed partial class MainWindow
 
     // One mode dropdown per tool, each shown only while the library has that tool's mods. The mode is
     // a saved setting (Configuration), pushed into the state; a per-mod untick below is separate.
-    private void DrawToolModes()
+    private void DrawToolModes(IReadOnlyList<OrganizerModRow> mods)
     {
-        var mods = _plugin.OrganizerState.Mods;
         var heliosphere = mods.Count(m => m.HeliosphereManaged && m.ProteusRole == ProteusRole.None);
         var proteus = mods.Count(m => m.ProteusRole == ProteusRole.Made);
         var managedExists = mods.Any(m => m.ProteusRole == ProteusRole.Managed);

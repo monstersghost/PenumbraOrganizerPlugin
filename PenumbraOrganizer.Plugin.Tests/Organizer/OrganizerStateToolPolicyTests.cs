@@ -125,4 +125,64 @@ public class OrganizerStateToolPolicyTests
         Assert.False(IsProtected(state, "hs"));
         Assert.True(IsProtected(state, "pt"));
     }
+
+    [Fact]
+    public void ChangeToolPolicy_ToNormal_FreesToolModsEvenAfterProtectAll()
+    {
+        var state = StateWith(ToolPolicy.Default, Row("hs", "x/hs", hs: true), Row("plain", "Gear/plain"));
+        state.SetAllProtection(true);
+
+        state.ChangeToolPolicy(new ToolPolicy(ToolMode.Normal, ToolMode.Protected, false));
+
+        Assert.False(IsProtected(state, "hs"));
+        Assert.True(IsProtected(state, "plain")); // only the tool's mods are affected
+    }
+
+    [Fact]
+    public void ChangeToolPolicy_BackToProtected_ReprotectsModsTheUserHadUnticked()
+    {
+        var state = StateWith(ToolPolicy.Default, Row("hs", "x/hs", hs: true));
+        state.SetProtected("hs", false); // per-mod override
+
+        state.ChangeToolPolicy(new ToolPolicy(ToolMode.Normal, ToolMode.Protected, false));
+        state.ChangeToolPolicy(ToolPolicy.Default);
+
+        Assert.True(IsProtected(state, "hs"));
+    }
+
+    [Fact]
+    public void ChangeToolPolicy_OnlyTheChangedToolIsTouched()
+    {
+        var state = StateWith(ToolPolicy.Default,
+            Row("hs", "x/hs", hs: true), Row("pt", "Proteus Upscales/pt", role: ProteusRole.Made));
+        state.SetAllProtection(true);
+
+        state.ChangeToolPolicy(new ToolPolicy(ToolMode.Normal, ToolMode.Protected, false));
+
+        Assert.True(IsProtected(state, "pt"));
+    }
+
+    [Fact]
+    public void ChangeToolPolicy_ManagedModToTheRoot_FreesItEvenAfterProtectAll()
+    {
+        var state = StateWith(ToolPolicy.Default, Row("pm", "Proteus Upscales/Proteus", role: ProteusRole.Managed));
+        state.SetAllProtection(true);
+
+        state.ChangeToolPolicy(new ToolPolicy(ToolMode.Protected, ToolMode.Protected, true));
+
+        Assert.False(IsProtected(state, "pm"));
+    }
+
+    [Fact]
+    public void SetToolPolicy_AtStartup_KeepsExplicitProtection()
+    {
+        // The startup push must not silently drop protection the user chose in an earlier session.
+        var state = new OrganizerState();
+        state.LoadScan([Row("hs", "x/hs", hs: true)], new HashSet<string>());
+        state.SetProtected("hs", true);
+
+        state.SetToolPolicy(new ToolPolicy(ToolMode.Normal, ToolMode.Protected, false));
+
+        Assert.True(IsProtected(state, "hs"));
+    }
 }
