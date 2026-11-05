@@ -252,4 +252,44 @@ public class ConfigurationTests
         var old = System.Text.Json.JsonSerializer.Deserialize<Configuration>("""{"Version":2}""")!;
         Assert.Empty(old.BodyPriority);
     }
+
+    [Fact]
+    public void ToolModes_DefaultToProtected_AndTheManagedModStaysProtected()
+    {
+        var config = new Configuration();
+
+        Assert.Equal(ToolMode.Protected, config.HeliosphereMode);
+        Assert.Equal(ToolMode.Protected, config.ProteusMode);
+        Assert.False(config.ProteusManagedAtRoot);
+        Assert.Equal(ToolPolicy.Default, config.ToolPolicy);
+    }
+
+    [Fact]
+    public void ToolModes_RoundTripThroughJson_AndAnOldConfigWithoutThemLoadsAsDefaults()
+    {
+        var config = new Configuration
+        {
+            HeliosphereMode = ToolMode.Normal,
+            ProteusMode = ToolMode.SortInside,
+            ProteusManagedAtRoot = true,
+        };
+
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<Configuration>(
+            System.Text.Json.JsonSerializer.Serialize(config))!;
+        Assert.Equal(ToolMode.Normal, loaded.HeliosphereMode);
+        Assert.Equal(ToolMode.SortInside, loaded.ProteusMode);
+        Assert.True(loaded.ProteusManagedAtRoot);
+
+        var old = System.Text.Json.JsonSerializer.Deserialize<Configuration>("""{"Version":2}""")!;
+        Assert.Equal(ToolPolicy.Default, old.ToolPolicy);
+    }
+
+    [Fact]
+    public void ToolPolicy_ReadsAnUnknownStoredModeAsProtected()
+    {
+        var config = new Configuration { HeliosphereMode = (ToolMode)42, ProteusMode = (ToolMode)(-3) };
+
+        Assert.Equal(ToolMode.Protected, config.ToolPolicy.Heliosphere);
+        Assert.Equal(ToolMode.Protected, config.ToolPolicy.Proteus);
+    }
 }
