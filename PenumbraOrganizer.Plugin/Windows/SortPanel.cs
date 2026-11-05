@@ -66,13 +66,36 @@ public sealed class SortPanel
     // Instance, not static: ImGui.Combo(ref int) and Checkbox(ref bool) need backing storage that
     // survives between frames. A per-frame instance would reset the selection every frame.
     //
-    // Group by and the four split checkboxes are SESSION state: a sort strategy is a choice about
-    // the action you are about to take, not a preference worth persisting.
-    //
-    // The hair race, the Midlander fallback and the body priority are PREFERENCES. They are set once
-    // and left (most people use one body per character), so they are read from Configuration on the
-    // first frame and written back the moment they change.
+    // Every Sort tab choice - Group by, the split checkboxes, the hair race, the Midlander fallback
+    // and the body priority - is read from Configuration on the first frame and written back the
+    // moment it changes, so reopening the plugin does not reset the user's setup. (Group by and the
+    // splits were session-only at first; people re-set them every launch, so they now persist.)
     private int _groupingIndex = DefaultGroupingIndex;
+
+    /// <summary>The Groupings index for a saved strategy name; the default when missing or unknown.</summary>
+    public static int GroupingIndexFor(string? saved)
+    {
+        var index = Array.FindIndex(Groupings, g => g.Strategy.ToString() == saved);
+        return index >= 0 ? index : DefaultGroupingIndex;
+    }
+
+    private void PersistSortChoices(Configuration config, Action saveConfig, SortStrategy strategy)
+    {
+        var name = strategy.ToString();
+        if (config.SortGrouping == name
+            && config.SortSplitGear == _splitGear && config.SortSplitNpc == _splitNpc
+            && config.SortSplitHair == _splitHair && config.SortSplitGearBody == _splitGearBody
+            && config.SortSplitBodyMods == _splitBodyMods)
+            return;
+
+        config.SortGrouping = name;
+        config.SortSplitGear = _splitGear;
+        config.SortSplitNpc = _splitNpc;
+        config.SortSplitHair = _splitHair;
+        config.SortSplitGearBody = _splitGearBody;
+        config.SortSplitBodyMods = _splitBodyMods;
+        saveConfig();
+    }
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
@@ -176,6 +199,12 @@ public sealed class SortPanel
             _prefsLoaded = true;
             _hairRaceIndex = HairRaceIndexFor(config.HairRaceCode);
             _midlanderFallback = config.MidlanderFallback;
+            _groupingIndex = GroupingIndexFor(config.SortGrouping);
+            _splitGear = config.SortSplitGear;
+            _splitNpc = config.SortSplitNpc;
+            _splitHair = config.SortSplitHair;
+            _splitGearBody = config.SortSplitGearBody;
+            _splitBodyMods = config.SortSplitBodyMods;
         }
 
         // Re-repaired only when a scan published a different body list (see RefreshBodyPriority), so
@@ -268,6 +297,8 @@ public sealed class SortPanel
         // Every control above has now been submitted, so this is the selection as the user has it
         // THIS frame. The body priority section below may change the priority later in the frame; the
         // staleness hint then picks that up on the next frame, which is not visible.
+        PersistSortChoices(config, saveConfig, strategy);
+
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
             HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority);
 

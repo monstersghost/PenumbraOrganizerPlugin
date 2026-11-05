@@ -90,6 +90,16 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>The Midlander hair fallback. A set-once preference.</summary>
     public bool MidlanderFallback { get; set; }
 
+    /// <summary>The Sort tab's Group by, as a <c>SortStrategy</c> name; null means the default.</summary>
+    public string? SortGrouping { get; set; }
+
+    /// <summary>The Sort tab's split checkboxes, kept between sessions.</summary>
+    public bool SortSplitGear { get; set; }
+    public bool SortSplitNpc { get; set; } = true;
+    public bool SortSplitHair { get; set; }
+    public bool SortSplitGearBody { get; set; }
+    public bool SortSplitBodyMods { get; set; }
+
     /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
     public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;
 
