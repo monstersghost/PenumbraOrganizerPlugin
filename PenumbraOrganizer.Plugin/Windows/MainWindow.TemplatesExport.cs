@@ -368,7 +368,10 @@ public sealed partial class MainWindow
 
             // The new file belongs in the list above without needing a manual refresh.
             _templateListing = _plugin.TemplateStore.List();
-            _exportStatus = $"Saved as {fileName}.";
+            // Saving finishes the job: close the creator and report on the list screen.
+            _exportOpen = false;
+            _exportStatus = null;
+            _templateStatus = $"Saved as {fileName}.";
             _lastError = null;
         }
         catch (Exception ex)
