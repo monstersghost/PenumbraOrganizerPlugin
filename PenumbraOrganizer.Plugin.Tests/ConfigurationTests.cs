@@ -292,4 +292,17 @@ public class ConfigurationTests
         Assert.Equal(ToolMode.Protected, config.ToolPolicy.Heliosphere);
         Assert.Equal(ToolMode.Protected, config.ToolPolicy.Proteus);
     }
+
+    [Fact]
+    public void NewtonsoftRoundTrip_PersistsTheModes_NotTheDerivedPolicy()
+    {
+        var config = new Configuration { ProteusMode = ToolMode.SortInside };
+
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(config);
+
+        Assert.DoesNotContain("\"ToolPolicy\"", json);
+        Assert.Contains("\"ProteusMode\"", json);
+        var back = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(json)!;
+        Assert.Equal(ToolMode.SortInside, back.ProteusMode);
+    }
 }

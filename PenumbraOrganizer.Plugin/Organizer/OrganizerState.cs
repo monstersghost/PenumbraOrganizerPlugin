@@ -18,7 +18,7 @@ public sealed class OrganizerState
     private Dictionary<string, bool> _folderProtectionRules = new(StringComparer.Ordinal);
     private List<string> _knownFolders = [];
 
-    // Heliosphere-managed mods the user has explicitly unprotected this session.
+    // Tool-managed mods (Heliosphere or Proteus) the user has explicitly unprotected this session.
     //
     // This exists because the override needs somewhere to LIVE. It used to be written straight onto
     // row.Protected and recorded nowhere, so any later full recompute - notably ticking any folder
@@ -30,7 +30,23 @@ public sealed class OrganizerState
     // contract is that Heliosphere mods are re-protected on every scan no matter how the toggle was
     // last left, because Heliosphere owns their location. This makes the override survive unrelated
     // UI actions, not survive a scan.
-    private HashSet<string> _heliosphereUnprotectOverrides = new(StringComparer.Ordinal);
+    private HashSet<string> _toolUnprotectOverrides = new(StringComparer.Ordinal);
+
+    private ToolPolicy _toolPolicy = ToolPolicy.Default;
+
+    /// <summary>The saved tool modes the protection rule and the sort consult.</summary>
+    public ToolPolicy ToolPolicy => _toolPolicy;
+
+    /// <summary>
+    /// Stores the tool modes and re-derives every row's protection through the one rule. The state
+    /// never reads Configuration; the plugin pushes the policy in at startup and on every change.
+    /// </summary>
+    public void SetToolPolicy(ToolPolicy policy)
+    {
+        _toolPolicy = policy;
+        foreach (var row in _mods.Values)
+            row.Protected = IsEffectivelyProtectedFull(row);
+    }
 
     public IReadOnlyList<OrganizerModRow> Mods =>
         _mods.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
@@ -117,7 +133,7 @@ public sealed class OrganizerState
             : new Dictionary<string, bool>(previouslyProtectedFolderRules, StringComparer.Ordinal);
         // A scan re-asserts Heliosphere protection unconditionally, so this session's overrides end
         // here. Built as a replacement like everything else so a throw below leaves them untouched.
-        var replacementHeliosphereOverrides = new HashSet<string>(StringComparer.Ordinal);
+        var replacementToolOverrides = new HashSet<string>(StringComparer.Ordinal);
 
         var replacementMods = new Dictionary<string, OrganizerModRow>();
         foreach (var row in scanned)
@@ -125,7 +141,7 @@ public sealed class OrganizerState
             // Protection is derived against the REPLACEMENT sets, not the live fields, so this loop
             // reads nothing it is about to overwrite.
             row.Protected = IsEffectivelyProtected(
-                row, replacementProtectedIdentifiers, replacementFolderRules, replacementHeliosphereOverrides);
+                row, replacementProtectedIdentifiers, replacementFolderRules, _toolPolicy, replacementToolOverrides);
             row.ProposedPath = row.CurrentPath;
             replacementMods[row.Identifier] = row;
         }
@@ -142,7 +158,7 @@ public sealed class OrganizerState
         // COMMIT. Nothing above this point has touched published state.
         _protectedModIdentifiers = replacementProtectedIdentifiers;
         _folderProtectionRules = replacementFolderRules;
-        _heliosphereUnprotectOverrides = replacementHeliosphereOverrides;
+        _toolUnprotectOverrides = replacementToolOverrides;
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
         BodyLabels = bodyLabels;
@@ -162,15 +178,15 @@ public sealed class OrganizerState
         // withdrawal, re-protecting and then unprotecting a folder would leave the row stuck.
         if (_mods.TryGetValue(identifier, out var row))
         {
-            if (row.HeliosphereManaged)
-                SetHeliosphereOverride(identifier, unprotected: !value);
+            if (row.IsToolManaged)
+                SetToolOverride(identifier, unprotected: !value);
 
             row.Protected = IsEffectivelyProtectedFull(row);
         }
     }
 
     // Still a transient override re-asserted on the next Scan - that part is unchanged. What
-    // changed is where it lives: in _heliosphereUnprotectOverrides rather than only on row.Protected,
+    // changed is where it lives: in _toolUnprotectOverrides rather than only on row.Protected,
     // so a later recompute triggered by an unrelated control cannot silently reverse it.
     //
     // Unprotecting ALSO clears each row's explicit protection. "Protect all" marks every mod as
@@ -181,7 +197,7 @@ public sealed class OrganizerState
     {
         foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
         {
-            SetHeliosphereOverride(row.Identifier, unprotected: !value);
+            SetToolOverride(row.Identifier, unprotected: !value);
             if (!value)
                 _protectedModIdentifiers.Remove(row.Identifier);
             row.Protected = IsEffectivelyProtectedFull(row);
@@ -200,19 +216,19 @@ public sealed class OrganizerState
         // unprotecting everything would visibly leave the Heliosphere rows ticked.
         foreach (var row in _mods.Values)
         {
-            if (row.HeliosphereManaged)
-                SetHeliosphereOverride(row.Identifier, unprotected: !value);
+            if (row.IsToolManaged)
+                SetToolOverride(row.Identifier, unprotected: !value);
 
             row.Protected = IsEffectivelyProtectedFull(row);
         }
     }
 
-    private void SetHeliosphereOverride(string identifier, bool unprotected)
+    private void SetToolOverride(string identifier, bool unprotected)
     {
         if (unprotected)
-            _heliosphereUnprotectOverrides.Add(identifier);
+            _toolUnprotectOverrides.Add(identifier);
         else
-            _heliosphereUnprotectOverrides.Remove(identifier);
+            _toolUnprotectOverrides.Remove(identifier);
     }
 
     // A folder-rule change is a system/bulk event, not a single-mod interactive toggle, so it
@@ -336,8 +352,8 @@ public sealed class OrganizerState
                 continue;
 
             _protectedModIdentifiers.Remove(row.Identifier);
-            if (row.HeliosphereManaged)
-                SetHeliosphereOverride(row.Identifier, unprotected: true);
+            if (row.IsToolManaged)
+                SetToolOverride(row.Identifier, unprotected: true);
         }
 
         // Full recompute through the one protection rule, as every other protection path does,
@@ -445,7 +461,7 @@ public sealed class OrganizerState
     }
 
     private bool IsEffectivelyProtectedFull(OrganizerModRow row) =>
-        IsEffectivelyProtected(row, _protectedModIdentifiers, _folderProtectionRules, _heliosphereUnprotectOverrides);
+        IsEffectivelyProtected(row, _protectedModIdentifiers, _folderProtectionRules, _toolPolicy, _toolUnprotectOverrides);
 
     /// <summary>
     /// The single protection rule. Every path recomputes through this one.
@@ -454,7 +470,7 @@ public sealed class OrganizerState
     /// There used to be a second, divergent rule for interactive toggles that simply omitted the
     /// Heliosphere clause. Two rules meant the answer depended on which control the user last
     /// touched, which is exactly how ticking a folder came to reverse an explicit Heliosphere
-    /// unprotect. The override set replaces that divergence: Heliosphere still protects by default,
+    /// unprotect. The override set replaces that divergence: tool-managed mods are protected by default according to their tool's mode,
     /// and an explicit unprotect is represented rather than implied by whichever branch ran.
     /// <para>
     /// Order matters. An explicit mod protection or a protected folder still wins over the override,
@@ -472,11 +488,30 @@ public sealed class OrganizerState
         OrganizerModRow row,
         IReadOnlySet<string> protectedModIdentifiers,
         IReadOnlyDictionary<string, bool> folderRules,
-        IReadOnlySet<string> heliosphereUnprotectOverrides) =>
-        (row.HeliosphereManaged && !heliosphereUnprotectOverrides.Contains(row.Identifier))
+        ToolPolicy policy,
+        IReadOnlySet<string> toolUnprotectOverrides) =>
+        ToolProtects(row, policy, toolUnprotectOverrides)
         || protectedModIdentifiers.Contains(row.Identifier)
         || OrganizationCleanupPlanner.ResolveFolderProtection(row.CurrentPath, folderRules)
             == FolderProtectionRule.Protected;
+
+    // The tool clause of the single protection rule. A per-mod override (the user unticked a protected
+    // tool mod) cancels it; an explicit mod protection or a protected folder, checked by the caller,
+    // still beats the override. The Proteus managed mod is outside the three modes: protected unless
+    // the user asked for it at the root.
+    private static bool ToolProtects(
+        OrganizerModRow row, ToolPolicy policy, IReadOnlySet<string> toolUnprotectOverrides)
+    {
+        if (toolUnprotectOverrides.Contains(row.Identifier))
+            return false;
+
+        return row.ProteusRole switch
+        {
+            ProteusRole.Managed => !policy.ProteusManagedAtRoot,
+            ProteusRole.Made => policy.Proteus == ToolMode.Protected,
+            _ => row.HeliosphereManaged && policy.Heliosphere == ToolMode.Protected,
+        };
+    }
 
     public bool AssignManual(string identifier, string proposedPath)
     {
