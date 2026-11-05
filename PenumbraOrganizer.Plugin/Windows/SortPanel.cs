@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.Windows;
@@ -17,7 +18,8 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </remarks>
 public readonly record struct SortSelection(
     SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
-    string? HairRaceCode = null, bool MidlanderFallback = false, bool SplitBody = false)
+    string? HairRaceCode = null, bool MidlanderFallback = false, bool SplitBody = false,
+    BodyPriority? BodyPriority = null)
 {
     // By Creator never consults category, so no split can change its output. All four checkboxes
     // are disabled when this is false.
@@ -63,8 +65,12 @@ public sealed class SortPanel
     // Instance, not static: ImGui.Combo(ref int) and Checkbox(ref bool) need backing storage that
     // survives between frames. A per-frame instance would reset the selection every frame.
     //
-    // These five are SESSION state. A sort strategy is a choice about the action you are about to
-    // take, not a preference worth persisting.
+    // Group by and the four split checkboxes are SESSION state: a sort strategy is a choice about
+    // the action you are about to take, not a preference worth persisting.
+    //
+    // The hair race, the Midlander fallback and the body priority are PREFERENCES. They are set once
+    // and left (most people use one body per character), so they are read from Configuration on the
+    // first frame and written back the moment they change.
     private int _groupingIndex = DefaultGroupingIndex;
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
@@ -73,6 +79,9 @@ public sealed class SortPanel
     private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
     private bool _splitBody;                 // off, like gear and hair: no body folders until asked
     private SortSelection? _lastSorted;
+    private bool _prefsLoaded;
+    private BodyPriority _bodyPriority = BodyPriority.Default([]);
+    private IReadOnlyList<string>? _bodyLabelsSeen;
 
     private const string Male = "\u2642";
     private const string Female = "\u2640";
@@ -99,8 +108,37 @@ public sealed class SortPanel
         Configuration config,             // the scraped-list opt-in is persistent, not session
         Action saveConfig,
         Func<string, string> canonicalizeCreator,
+        Func<IReadOnlyList<string>> getBodyLabels,
         Action? onShowSortHelp = null)
     {
+        var bodyLabels = getBodyLabels();
+
+        if (!_prefsLoaded)
+        {
+            _prefsLoaded = true;
+            var raceIndex = config.HairRaceCode is null
+                ? 0
+                : Array.FindIndex(HairRaceCodes.All.ToArray(), r => r.Code == config.HairRaceCode) + 1;
+            _hairRaceIndex = Math.Max(raceIndex, 0);
+            _midlanderFallback = config.MidlanderFallback;
+        }
+
+        // Re-repaired only when the label list is a new instance, i.e. after a rescan published a
+        // different body list, so this costs nothing per frame. Repair drops stale labels and
+        // appends new bodies, and WRITES THE RESULT BACK when it changed a non-empty saved list.
+        // An empty saved list means "default" and stays empty. Guarded on a non-empty label list:
+        // Repair against an empty list would report needsSave and wipe the user's saved ranking.
+        if (bodyLabels.Count > 0 && !ReferenceEquals(_bodyLabelsSeen, bodyLabels))
+        {
+            _bodyLabelsSeen = bodyLabels;
+            _bodyPriority = BodyPriority.Repair(config.BodyPriority, bodyLabels, out var needsSave);
+            if (needsSave)
+            {
+                config.BodyPriority = [.. _bodyPriority.Labels];
+                saveConfig();
+            }
+        }
+
         ImGui.BeginDisabled(!gates.CanStageProposals);
 
         ImGui.SetNextItemWidth(220);
@@ -158,11 +196,21 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortMidlanderFallback, splitsApply ? null : SplitsInapplicableReason);
 
+        var raceCode = HairRaceCodeAt(_hairRaceIndex);
+        if (config.HairRaceCode != raceCode || config.MidlanderFallback != _midlanderFallback)
+        {
+            config.HairRaceCode = raceCode;
+            config.MidlanderFallback = _midlanderFallback;
+            saveConfig();
+        }
+
         GroupHeading("Body type");
         ImGui.BeginDisabled(!splitsApply);
         ImGui.Checkbox("Split gear and body mods by body type", ref _splitBody);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortSplitBody, splitsApply ? null : SplitsInapplicableReason);
+
+        DrawBodyPriority(config, saveConfig, bodyLabels, splitsApply);
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -172,14 +220,14 @@ public sealed class SortPanel
         // THIS frame. Building it earlier would sort with, and compare staleness against, whatever
         // the checkboxes held before the user's click was processed.
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitBody);
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitBody, _bodyPriority);
 
         // Stable id: a label varying with mod count makes the widget id vary with it, so a background
         // scan publishing mid-click would change the active id and the click would be dropped.
         if (ImGui.Button("Sort##sort-mods"))
         {
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
-                canonicalizeCreator, selection.HairPriority, selection.SplitBody);
+                canonicalizeCreator, selection.HairPriority, selection.SplitBody, selection.BodyPriority);
             _lastSorted = selection;
         }
 
@@ -200,5 +248,64 @@ public sealed class SortPanel
 
         if (_lastSorted is { } last && last != selection)
             ImGui.TextDisabled("Selection changed since the last sort.");
+    }
+
+    // Collapsed by default: set once and forget. Arrows rather than drag-and-drop, which is fiddly
+    // in ImGui and unusable from a keyboard. Disabled under the same condition as the body checkbox.
+    private void DrawBodyPriority(
+        Configuration config, Action saveConfig, IReadOnlyList<string> bodyLabels, bool splitsApply)
+    {
+        if (!ImGui.CollapsingHeader("Body priority##body-priority"))
+            return;
+
+        ImGui.BeginDisabled(!splitsApply);
+        ImGui.TextDisabled("Highest first. Used when a mod supports more than one body.");
+
+        var order = _bodyPriority.Labels; // immutable: safe to iterate while a click replaces the field
+        if (ImGui.BeginChild("##body-priority-list", new System.Numerics.Vector2(0, 220)))
+        {
+            for (var i = 0; i < order.Count; i++)
+            {
+                ImGui.PushID(i);
+
+                ImGui.BeginDisabled(i == 0);
+                if (ImGui.ArrowButton("##up", ImGuiDir.Up))
+                    SetBodyPriority(config, saveConfig, _bodyPriority.MoveUp(i));
+                ImGui.EndDisabled();
+
+                ImGui.SameLine();
+                ImGui.BeginDisabled(i == order.Count - 1);
+                if (ImGui.ArrowButton("##down", ImGuiDir.Down))
+                    SetBodyPriority(config, saveConfig, _bodyPriority.MoveDown(i));
+                ImGui.EndDisabled();
+
+                ImGui.SameLine();
+                ImGui.TextUnformatted($"{i + 1}. {order[i]}");
+
+                ImGui.PopID();
+            }
+        }
+        ImGui.EndChild();
+
+        if (ImGui.Button("Reset to default##body-priority-reset"))
+        {
+            // An EMPTY saved list is what "default" means, so a reset keeps following the shipped
+            // order across releases instead of freezing today's order into the file.
+            _bodyPriority = BodyPriority.Default(bodyLabels);
+            config.BodyPriority = [];
+            saveConfig();
+        }
+
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortBodyPriority, splitsApply ? null : SplitsInapplicableReason);
+    }
+
+    private void SetBodyPriority(Configuration config, Action saveConfig, BodyPriority next)
+    {
+        if (next == _bodyPriority)
+            return;
+        _bodyPriority = next;
+        config.BodyPriority = [.. next.Labels];
+        saveConfig();
     }
 }

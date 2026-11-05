@@ -52,6 +52,7 @@ public static class HelpTopics
     public static readonly HelpTopic SortSplitNpc = new("sort.split-npc");
     public static readonly HelpTopic SortSplitHair = new("sort.split-hair");
     public static readonly HelpTopic SortSplitBody = new("sort.split-body");
+    public static readonly HelpTopic SortBodyPriority = new("sort.body-priority");
     public static readonly HelpTopic SortPriorityRace = new("sort.priority-race");
     public static readonly HelpTopic SortMidlanderFallback = new("sort.midlander-fallback");
     public static readonly HelpTopic SortHairResolution = new("sort.hair-resolution");

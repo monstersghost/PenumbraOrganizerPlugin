@@ -44,10 +44,14 @@ public class TemplateFallbackConversionTests
     // fallback already computes gear and NPC splits only. Storing the body split would mean a
     // shared template silently re-foldering a recipient's gear by a body list they may not have the
     // same version of.
+    //
+    // The eighth is the body priority, deliberately not stored by templates for the same reason the
+    // hair priority and body split are not: a shared template must not re-folder a recipient's gear
+    // against a body list they may hold a different version of.
     [Fact]
     public void BothTypes_CarryTheValuesTheyHaveBeenDesignedFor()
     {
-        Assert.Equal(7, PrimaryConstructorParameterCount(typeof(SortSelection)));
+        Assert.Equal(8, PrimaryConstructorParameterCount(typeof(SortSelection)));
         Assert.Equal(3, PrimaryConstructorParameterCount(typeof(TemplateFallback)));
     }
 

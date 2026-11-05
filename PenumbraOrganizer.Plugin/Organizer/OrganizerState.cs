@@ -85,8 +85,24 @@ public sealed class OrganizerState
     public void LoadScan(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null,
+        IReadOnlyList<string>? bodyLabels = null) =>
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules, bodyLabels);
+
+    // Overload so the body labels can be passed third, as the labels travel WITH the rows. The
+    // labels parameter is required here so a two-argument call stays unambiguous.
+    public void LoadScan(
+        IEnumerable<OrganizerModRow> scanned,
+        IReadOnlySet<string> previouslyProtectedIdentifiers,
+        IReadOnlyList<string>? bodyLabels,
         IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null) =>
-        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules);
+        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules, bodyLabels);
+
+    /// <summary>
+    /// The body labels of the scan that produced the current rows; null until a scan has published.
+    /// They travel with the rows so the evidence and the priority ranking it share one snapshot.
+    /// </summary>
+    public IReadOnlyList<string>? BodyLabels { get; private set; }
 
     /// <summary>
     /// Whole-state replacement that either fully happens or does not happen at all. Every
@@ -97,7 +113,8 @@ public sealed class OrganizerState
     public void ReplaceScanAtomically(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
-        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null)
+        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null,
+        IReadOnlyList<string>? bodyLabels = null)
     {
         var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
         var replacementFolderRules = previouslyProtectedFolderRules is null
@@ -133,6 +150,7 @@ public sealed class OrganizerState
         _heliosphereUnprotectOverrides = replacementHeliosphereOverrides;
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
+        BodyLabels = bodyLabels;
         HasScanned = true;
         ScanGeneration++;
     }

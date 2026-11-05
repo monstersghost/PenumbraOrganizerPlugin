@@ -1,3 +1,4 @@
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Windows;
@@ -128,5 +129,38 @@ public class SortSelectionTests
     {
         var selection = new SortSelection(SortStrategy.TypeOnly, false, true, true);
         Assert.Equal(new HairPriority(null, false), selection.HairPriority);
+    }
+
+    private static readonly string[] Bodies = ["Bibo+", "Rue+", "TBSE"];
+
+    private static SortSelection WithPriority(BodyPriority? p) =>
+        new(SortStrategy.TypeOnly, true, true, false, SplitBody: true, BodyPriority: p);
+
+    [Fact]
+    public void SortSelection_ReorderingTheBodyPriority_MakesTheSelectionDiffer()
+    {
+        var a = WithPriority(BodyPriority.Default(Bodies));
+        var moved = WithPriority(BodyPriority.Default(Bodies).MoveDown(0));
+
+        Assert.NotEqual(a, moved);
+    }
+
+    [Fact]
+    public void SortSelection_UnchangedContentsInAFreshSnapshot_IsEqual()
+    {
+        // The panel rebuilds the snapshot; a new instance with the same contents must not look stale.
+        Assert.Equal(
+            WithPriority(BodyPriority.Normalize(["Rue+"], Bodies)),
+            WithPriority(BodyPriority.Normalize(["rue+"], Bodies)));
+    }
+
+    [Fact]
+    public void SortSelection_ResetRestoresEqualityWithTheDefault()
+    {
+        var def = WithPriority(BodyPriority.Default(Bodies));
+        var moved = WithPriority(BodyPriority.Default(Bodies).MoveDown(1));
+
+        Assert.NotEqual(def, moved);
+        Assert.Equal(def, WithPriority(BodyPriority.Normalize(null, Bodies)));
     }
 }

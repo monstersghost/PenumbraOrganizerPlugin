@@ -1633,4 +1633,18 @@ public class OrganizerStateTests
         Assert.True(state.Mods.Single().Protected);
         Assert.DoesNotContain("Gear/Feet", state.FolderProtectionRules.Keys);
     }
+
+    [Fact]
+    public void LoadScan_PublishesTheBodyLabelsWithTheRows()
+    {
+        var state = new OrganizerState();
+        Assert.Null(state.BodyLabels);
+
+        state.LoadScan([], new HashSet<string>(), ["Bibo+", "Rue+"]);
+        Assert.Equal(["Bibo+", "Rue+"], state.BodyLabels);
+
+        // A later scan replaces them, so a removed body is gone from the ranking surface at once.
+        state.LoadScan([], new HashSet<string>(), ["Rue+"]);
+        Assert.Equal(["Rue+"], state.BodyLabels);
+    }
 }

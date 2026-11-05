@@ -23,6 +23,7 @@ public sealed partial class MainWindow
         _sortPanel.Draw(
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
             _creatorCanonicalizer.Canonicalize,
+            () => _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels,
             () => _sortHelpRequested = true);
 
         ImGui.Spacing();
