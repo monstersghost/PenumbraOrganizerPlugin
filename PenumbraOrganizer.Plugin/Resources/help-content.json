@@ -3,32 +3,37 @@
     {
       "id": "firstrun.welcome",
       "title": "Welcome",
-      "step": "This plugin tidies the folder tree Penumbra shows you. It never edits, renames or deletes your mod files, and it never changes what a mod does in game.\n\nThis walkthrough is seven short steps. You can leave at any time - it will not come back."
+      "step": "This plugin tidies the folder tree Penumbra shows you. It never edits, renames or deletes your mod files, and it never changes what a mod does in game.\n\nThis walkthrough has eight short steps. As you go, the plugin window behind this one switches tab and outlines what to press. You can leave at any time - it will not come back."
     },
     {
       "id": "firstrun.scan",
       "title": "Step 1: Scan",
-      "step": "Open the Scan tab and press Refresh mod list.\n\nThat reads your library from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so this comes first, and again whenever you install or remove mods."
+      "step": "Open the Scan tab and press Refresh mod list (outlined in the plugin window).\n\nThat reads your library from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so this comes first, and again whenever you install or remove mods."
     },
     {
       "id": "firstrun.protect",
       "title": "Step 2: Protect anything that must not move",
-      "step": "On the Protect tab, tick any mod or folder that should keep exactly where it is. Protected items are skipped by every sort and by Apply.\n\nHeliosphere-managed mods are protected for you automatically, because Heliosphere owns where they live."
+      "step": "On the Protect tab, tick any mod or folder that should keep exactly where it is. Protected items are skipped by every sort and by Apply. Protect all protects everything.\n\nMods from Heliosphere and Proteus are left alone by default. If you use them, a dropdown per tool lets you sort them inside their own folder or treat them like any other mod."
     },
     {
       "id": "firstrun.sort",
       "title": "Step 3: Choose a layout",
-      "step": "On the Sort tab, pick a grouping from Group by, decide whether gear and NPC mods get subfolders, and press Sort.\n\nNothing moves yet. Sort only works out where each mod would go."
+      "step": "On the Sort tab, pick a grouping from Group by, tick whichever splits you want (gear, NPC, hair, body type), and press Sort.\n\nNothing moves yet. Sort only works out where each mod would go. Your choices are remembered for next time."
     },
     {
       "id": "firstrun.review",
       "title": "Step 4: Check the plan",
-      "step": "The Review Changes tab shows every mod's current folder beside the proposed one.\n\nAnything that would block the move is listed at the top in red. Two mods landing on the same path is the usual one, and Protect & Skip All Blocking Mods clears them in one go."
+      "step": "The Review Changes tab shows every mod's current folder beside the proposed one.\n\nAnything that would block the move is listed at the top in red. Two mods landing on the same path is the usual one, and Protect & Skip All Blocking Mods clears them in one go. You can also export the plan to a workbook, edit it in Excel and import it back."
     },
     {
       "id": "firstrun.apply",
       "title": "Step 5: Apply",
-      "step": "When the plan looks right, press Apply on the Review Changes tab. That is the only step in this loop that changes your library.\n\nA backup is taken automatically first, and the History tab can put everything back. Nothing you have done before this point touched anything."
+      "step": "When the plan looks right, press Apply (outlined). That is the only step in this loop that changes your library.\n\nA backup is taken automatically first. If some mods could not be moved, a Show failed mods button names them and says why."
+    },
+    {
+      "id": "firstrun.history",
+      "title": "Step 6: Undo",
+      "step": "The History tab keeps a backup from before every Apply. Press Restore on one to put your library back exactly as it was.\n\nProtection does not block this, so it works even for mods you protected afterwards."
     },
     {
       "id": "firstrun.help",

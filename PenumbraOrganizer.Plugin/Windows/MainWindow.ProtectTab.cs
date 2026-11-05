@@ -17,7 +17,8 @@ public sealed partial class MainWindow
 
     private void DrawProtectTab()
     {
-        using var tab = ImRaii.TabItem("Protect");
+        using var tab = ImRaii.TabItem("Protect", TutorialTabFlags(HighlightTarget.ProtectTab));
+        OutlineLastItem(HighlightTarget.ProtectTab);
         if (!tab)
             return;
 

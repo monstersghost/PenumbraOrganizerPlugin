@@ -198,9 +198,14 @@ public static class HelpTab
     /// True for the one frame after the Sort tab's ? button is pressed: selects this tab, opens the
     /// Sort section and scrolls to it.
     /// </param>
-    public static void Draw(Action? onShowWalkthrough = null, bool showSort = false)
+    public static void Draw(
+        Action? onShowWalkthrough = null, bool showSort = false,
+        Func<ImGuiTabItemFlags>? extraFlags = null, Action? onTabDrawn = null)
     {
-        using var tab = ImRaii.TabItem("Help", showSort ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None);
+        var flags = (showSort ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None)
+            | (extraFlags?.Invoke() ?? ImGuiTabItemFlags.None);
+        using var tab = ImRaii.TabItem("Help", flags);
+        onTabDrawn?.Invoke();
         if (!tab)
             return;
 

@@ -198,6 +198,8 @@ public sealed partial class MainWindow : Window, IDisposable
         if (_lastError != null)
             ImGui.TextColored(PluginTheme.CollisionBad, _lastError);
 
+        RefreshTutorialHighlight();
+
         using (var tabBar = ImRaii.TabBar("MainTabs"))
         {
             if (tabBar)
@@ -212,7 +214,10 @@ public sealed partial class MainWindow : Window, IDisposable
 
                 // A standalone type rather than a MainWindow partial, so its content is reachable
                 // from tests - see HelpTab's own remarks. Tab dispatch stays here regardless.
-                HelpTab.Draw(ShowWalkthrough, _sortHelpRequested);
+                HelpTab.Draw(
+                    ShowWalkthrough, _sortHelpRequested,
+                    () => TutorialTabFlags(HighlightTarget.HelpTab),
+                    () => OutlineLastItem(HighlightTarget.HelpTab));
                 _sortHelpRequested = false;
             }
         }

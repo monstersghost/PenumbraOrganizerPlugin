@@ -22,8 +22,31 @@ public sealed class FirstRunSteps
         HelpTopics.FirstRunSort,
         HelpTopics.FirstRunReview,
         HelpTopics.FirstRunApply,
+        HelpTopics.FirstRunHistory,
         HelpTopics.FirstRunHelp,
     ];
+
+    // What each step points at: the tab to switch to and, optionally, the one button to outline.
+    // A table beside the step order rather than data in the resource, because it is behaviour.
+    private static readonly Dictionary<string, (HighlightTarget Tab, HighlightTarget Button)> Highlights = new()
+    {
+        [HelpTopics.FirstRunWelcome.Id] = (HighlightTarget.None, HighlightTarget.None),
+        [HelpTopics.FirstRunScan.Id] = (HighlightTarget.ScanTab, HighlightTarget.RefreshButton),
+        [HelpTopics.FirstRunProtect.Id] = (HighlightTarget.ProtectTab, HighlightTarget.None),
+        [HelpTopics.FirstRunSort.Id] = (HighlightTarget.SortTab, HighlightTarget.SortButton),
+        [HelpTopics.FirstRunReview.Id] = (HighlightTarget.ReviewTab, HighlightTarget.None),
+        [HelpTopics.FirstRunApply.Id] = (HighlightTarget.ReviewTab, HighlightTarget.ApplyButton),
+        [HelpTopics.FirstRunHistory.Id] = (HighlightTarget.HistoryTab, HighlightTarget.None),
+        [HelpTopics.FirstRunHelp.Id] = (HighlightTarget.HelpTab, HighlightTarget.None),
+    };
+
+    public static bool HasHighlightEntry(HelpTopic topic) => Highlights.ContainsKey(topic.Id);
+
+    /// <summary>The tab the current step points at; None for the welcome and the Penumbra notice.</summary>
+    public HighlightTarget Tab => _penumbraAvailable && Highlights.TryGetValue(Current.Id, out var h) ? h.Tab : HighlightTarget.None;
+
+    /// <summary>The single button the current step points at, if any.</summary>
+    public HighlightTarget Button => _penumbraAvailable && Highlights.TryGetValue(Current.Id, out var h) ? h.Button : HighlightTarget.None;
 
     private readonly IReadOnlyList<HelpTopic> _steps;
     private readonly bool _penumbraAvailable;

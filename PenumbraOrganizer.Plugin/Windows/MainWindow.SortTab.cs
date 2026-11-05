@@ -14,7 +14,8 @@ public sealed partial class MainWindow
 {
     private void DrawSortTab()
     {
-        using var tab = ImRaii.TabItem("Sort");
+        using var tab = ImRaii.TabItem("Sort", TutorialTabFlags(HighlightTarget.SortTab));
+        OutlineLastItem(HighlightTarget.SortTab);
         if (!tab)
             return;
 
@@ -24,7 +25,8 @@ public sealed partial class MainWindow
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
             _creatorCanonicalizer.Canonicalize,
             () => _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels,
-            () => _sortHelpRequested = true);
+            () => _sortHelpRequested = true,
+            () => OutlineLastItem(HighlightTarget.SortButton));
 
         ImGui.Spacing();
         // Collapsed by default: most sorts never touch it. Same controls as before, unchanged.

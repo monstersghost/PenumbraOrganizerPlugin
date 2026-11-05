@@ -100,6 +100,7 @@ public sealed class Plugin : IDalamudPlugin
         };
         // The Help tab's reopen button. Deliberately ignores the flag and never clears it.
         _mainWindow.ShowWalkthrough = _firstRunWindow.Start;
+        _mainWindow.TutorialHighlight = () => _firstRunWindow.CurrentHighlight;
 
         // Runs here, before ScanWork or IndexWork exist and so before any library work can be
         // admitted, because a scan or index build that read the lists first would see the

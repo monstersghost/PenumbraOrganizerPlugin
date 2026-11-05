@@ -606,8 +606,9 @@ rather than to the latest one, so it always describes the version you actually h
 "Open the guide as a PDF" opens the same guide as a PDF, pinned the same way. It is generated from
 this document, so the two cannot describe different versions.
 
-"Show the walkthrough" reopens the guided first run, the five-step tour shown the first time you
-open the plugin. It can be reopened as often as you like.
+"Show the walkthrough" reopens the guided first run, the eight-step tour shown the first time you
+open the plugin. While it runs, the plugin window behind it switches to the tab each step describes and
+outlines the button to press (Refresh mod list, Sort, Apply). It can be reopened as often as you like.
 
 If you upgraded to 0.6.0 from an earlier version, that walkthrough runs once for you too. That is
 deliberate rather than a mistake: 0.6.0 replaced the whole Sort control, changed how NPC names are

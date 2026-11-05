@@ -16,6 +16,7 @@ public static class HelpTopics
     public static readonly HelpTopic FirstRunSort = new("firstrun.sort");
     public static readonly HelpTopic FirstRunReview = new("firstrun.review");
     public static readonly HelpTopic FirstRunApply = new("firstrun.apply");
+    public static readonly HelpTopic FirstRunHistory = new("firstrun.history");
     public static readonly HelpTopic FirstRunHelp = new("firstrun.help");
     public static readonly HelpTopic FirstRunPenumbraUnavailable = new("firstrun.penumbra-unavailable");
 

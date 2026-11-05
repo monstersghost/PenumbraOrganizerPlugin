@@ -14,7 +14,8 @@ public sealed partial class MainWindow
 {
     private void DrawReviewTab()
     {
-        using var tab = ImRaii.TabItem("Review Changes");
+        using var tab = ImRaii.TabItem("Review Changes", TutorialTabFlags(HighlightTarget.ReviewTab));
+        OutlineLastItem(HighlightTarget.ReviewTab);
         if (!tab)
             return;
 
@@ -71,6 +72,7 @@ public sealed partial class MainWindow
         {
             ImGui.BeginDisabled(result.HasIssues || !gates.CanStartApply);
             applyClicked = ImGui.Button("Apply");
+            OutlineLastItem(HighlightTarget.ApplyButton);
             ImGui.EndDisabled();
         }
         // One of two disable reasons, resolved at the call site rather than swept: an unfixable

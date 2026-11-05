@@ -30,6 +30,10 @@ public sealed class FirstRunWindow : Window
         PositionCondition = ImGuiCond.FirstUseEver;
     }
 
+    /// <summary>What the main window should outline right now; nothing unless the walkthrough is open.</summary>
+    public (HighlightTarget Tab, HighlightTarget Button) CurrentHighlight =>
+        IsOpen && _steps.IsWalkthrough ? (_steps.Tab, _steps.Button) : (HighlightTarget.None, HighlightTarget.None);
+
     /// <summary>
     /// Starts a fresh run. Progress is deliberately not resumed - reopening starts at step one.
     /// </summary>

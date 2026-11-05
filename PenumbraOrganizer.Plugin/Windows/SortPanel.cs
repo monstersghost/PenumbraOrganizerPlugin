@@ -190,7 +190,8 @@ public sealed class SortPanel
         Action saveConfig,
         Func<string, string> canonicalizeCreator,
         Func<IReadOnlyList<string>> getBodyLabels,
-        Action? onShowSortHelp = null)
+        Action? onShowSortHelp = null,
+        Action? onSortButtonDrawn = null)
     {
         var bodyLabels = getBodyLabels();
 
@@ -310,6 +311,7 @@ public sealed class SortPanel
         {
             ImGui.BeginDisabled(!states.SortButton.Enabled);
             sortClicked = ImGui.Button("Sort##sort-mods");
+            onSortButtonDrawn?.Invoke();
             ImGui.EndDisabled();
         }
         Help.Tooltip(HelpTopics.SortButton, gates.CanStageProposals ? null : ActivityGateReason);

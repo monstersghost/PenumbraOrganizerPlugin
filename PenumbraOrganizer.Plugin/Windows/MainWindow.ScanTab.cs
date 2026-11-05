@@ -14,7 +14,8 @@ public sealed partial class MainWindow
 {
     private void DrawScanTab()
     {
-        using var tab = ImRaii.TabItem("Scan");
+        using var tab = ImRaii.TabItem("Scan", TutorialTabFlags(HighlightTarget.ScanTab));
+        OutlineLastItem(HighlightTarget.ScanTab);
         if (!tab)
             return;
 
@@ -23,7 +24,9 @@ public sealed partial class MainWindow
         using (PluginTheme.PrimaryButton())
         {
             ImGui.BeginDisabled(!gates.CanScan);
-            if (ImGui.Button("Refresh mod list"))
+            var refreshPressed = ImGui.Button("Refresh mod list");
+            OutlineLastItem(HighlightTarget.RefreshButton);
+            if (refreshPressed)
                 RunScan();
             ImGui.EndDisabled();
         }

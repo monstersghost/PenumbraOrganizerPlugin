@@ -230,4 +230,39 @@ public class FirstRunStepsTests
         // the design intent; this catches it growing into a manual by accretion.
         Assert.InRange(FirstRunSteps.DefaultSteps.Count, 5, 8);
     }
+
+    [Theory]
+    [InlineData(0, HighlightTarget.None, HighlightTarget.None)]
+    [InlineData(1, HighlightTarget.ScanTab, HighlightTarget.RefreshButton)]
+    [InlineData(2, HighlightTarget.ProtectTab, HighlightTarget.None)]
+    [InlineData(3, HighlightTarget.SortTab, HighlightTarget.SortButton)]
+    [InlineData(4, HighlightTarget.ReviewTab, HighlightTarget.None)]
+    [InlineData(5, HighlightTarget.ReviewTab, HighlightTarget.ApplyButton)]
+    [InlineData(6, HighlightTarget.HistoryTab, HighlightTarget.None)]
+    [InlineData(7, HighlightTarget.HelpTab, HighlightTarget.None)]
+    public void EachStep_PointsAtTheTabAndButtonItDescribes(int index, HighlightTarget tab, HighlightTarget button)
+    {
+        var steps = new FirstRunSteps(penumbraAvailable: true);
+        for (var i = 0; i < index; i++)
+            steps.Next();
+
+        Assert.Equal(tab, steps.Tab);
+        Assert.Equal(button, steps.Button);
+    }
+
+    [Fact]
+    public void ThePenumbraUnavailableNotice_PointsAtNothing()
+    {
+        var steps = new FirstRunSteps(penumbraAvailable: false);
+
+        Assert.Equal(HighlightTarget.None, steps.Tab);
+        Assert.Equal(HighlightTarget.None, steps.Button);
+    }
+
+    [Fact]
+    public void EveryDefaultStep_HasAnEntryInTheHighlightTable()
+    {
+        Assert.Equal(8, FirstRunSteps.DefaultSteps.Count);
+        Assert.All(FirstRunSteps.DefaultSteps, t => Assert.True(FirstRunSteps.HasHighlightEntry(t)));
+    }
 }

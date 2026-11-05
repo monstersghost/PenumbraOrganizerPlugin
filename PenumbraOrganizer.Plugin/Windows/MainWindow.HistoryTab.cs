@@ -14,7 +14,8 @@ public sealed partial class MainWindow
 {
     private void DrawHistoryTab()
     {
-        using var tab = ImRaii.TabItem("History");
+        using var tab = ImRaii.TabItem("History", TutorialTabFlags(HighlightTarget.HistoryTab));
+        OutlineLastItem(HighlightTarget.HistoryTab);
         if (!tab)
             return;
 
