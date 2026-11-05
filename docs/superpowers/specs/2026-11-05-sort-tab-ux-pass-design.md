@@ -146,13 +146,23 @@ Both boxes are off by default and per session. The saved body priority applies t
   new home, Group workbook by, Diagnostics). The first-run tutorial, the broader Help tab, the user
   guide, the PDF and handoff notes are deferred.
 
+## Smaller fixes on other tabs (in scope, from the critique)
+
+- **History:** Delete asks for confirmation ("Delete this backup? Your mods are not touched; the
+  saved snapshot is removed for good."), with a destructive-styled confirm button, so a mis-click
+  beside Restore cannot remove a backup.
+- **Scan:** the always-open 150 px "Live events" box becomes a collapsed header
+  "Live events (N)", so an empty log no longer takes a third of the window. The header keeps a
+  stable id so its open state survives the count changing.
+- **Protect:** the two toggle buttons name the action they will perform: "Protect all" or
+  "Unprotect all", and "Protect Heliosphere mods" or "Unprotect Heliosphere mods", chosen from the
+  same state the click already uses.
+
 ## Out of scope
 
 - The first-run tutorial rewrite with on-screen highlights, and the Help tab refresh.
 - User guide, PDF and handoff updates (done last, once the UI has settled).
-- Smaller critique findings, to be taken or left later: History's Delete beside Restore (add a
-  confirm), Protect's two "Toggle" buttons (label the direction), Scan's empty "Live events" box
-  (shrink), and whether the Search tab still earns its place.
+- Whether the Search tab still earns its place: a product decision for the author, not a code change.
 
 ## Testing
 
@@ -176,3 +186,6 @@ In game (the author):
    scan runs, and its result stays visible after a diagnostic export; Open Workbook still opens the
    last workbook export.
 7. Export, import, Review and Apply flow end to end; Diagnostics still produce the dump.
+8. History Delete asks for confirmation; Scan shows "Live events (N)" collapsed; Protect's two buttons read
+   "Protect all" or "Unprotect all" and "Protect Heliosphere mods" or "Unprotect Heliosphere mods"
+   to match what a click does.
