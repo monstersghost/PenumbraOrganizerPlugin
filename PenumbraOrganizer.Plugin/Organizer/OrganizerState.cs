@@ -172,11 +172,18 @@ public sealed class OrganizerState
     // Still a transient override re-asserted on the next Scan - that part is unchanged. What
     // changed is where it lives: in _heliosphereUnprotectOverrides rather than only on row.Protected,
     // so a later recompute triggered by an unrelated control cannot silently reverse it.
+    //
+    // Unprotecting ALSO clears each row's explicit protection. "Protect all" marks every mod as
+    // explicitly protected, Heliosphere ones included, and an explicit protection beats the override
+    // (see IsEffectivelyProtected), so without this "Unprotect Heliosphere mods" after "Protect all"
+    // changed nothing. A protected FOLDER still wins, as it does for every other unprotect.
     public void SetHeliosphereProtection(bool value)
     {
         foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged))
         {
             SetHeliosphereOverride(row.Identifier, unprotected: !value);
+            if (!value)
+                _protectedModIdentifiers.Remove(row.Identifier);
             row.Protected = IsEffectivelyProtectedFull(row);
         }
     }

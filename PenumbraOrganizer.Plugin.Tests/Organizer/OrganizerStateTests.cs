@@ -113,6 +113,53 @@ public class OrganizerStateTests
     }
 
     [Fact]
+    public void ProtectAll_ThenUnprotectHeliosphere_UnprotectsTheHeliosphereMods_AndLeavesTheRest()
+    {
+        // Reported in game: "Protect all" marks every mod as explicitly protected, Heliosphere ones
+        // included, and an explicit protection beats the unprotect override - so "Unprotect
+        // Heliosphere mods" changed nothing. The bulk action is an explicit instruction about those
+        // mods, so it clears their explicit protection as well as setting the override.
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Apple", heliosphere: true), MakeRow("b", "Banana")],
+            new HashSet<string>());
+
+        state.SetAllProtection(true);
+        state.SetHeliosphereProtection(false);
+
+        Assert.False(state.Mods.Single(m => m.Identifier == "a").Protected);
+        Assert.True(state.Mods.Single(m => m.Identifier == "b").Protected);
+    }
+
+    [Fact]
+    public void UnprotectHeliosphere_ThenProtectHeliosphere_ProtectsThemAgain()
+    {
+        var state = new OrganizerState();
+        state.LoadScan([MakeRow("a", "Apple", heliosphere: true)], new HashSet<string>());
+
+        state.SetAllProtection(true);
+        state.SetHeliosphereProtection(false);
+        state.SetHeliosphereProtection(true);
+
+        Assert.True(state.Mods.Single().Protected);
+    }
+
+    [Fact]
+    public void UnprotectAll_ThenProtectHeliosphere_ProtectsOnlyTheHeliosphereMods()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+            [MakeRow("a", "Apple", heliosphere: true), MakeRow("b", "Banana")],
+            new HashSet<string>());
+
+        state.SetAllProtection(false);
+        state.SetHeliosphereProtection(true);
+
+        Assert.True(state.Mods.Single(m => m.Identifier == "a").Protected);
+        Assert.False(state.Mods.Single(m => m.Identifier == "b").Protected);
+    }
+
+    [Fact]
     public void SetAllProtection_True_ProtectsEveryMod()
     {
         var state = new OrganizerState();
