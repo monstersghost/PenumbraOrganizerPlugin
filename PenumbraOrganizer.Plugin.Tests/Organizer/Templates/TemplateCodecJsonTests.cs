@@ -343,4 +343,28 @@ public class TemplateCodecJsonTests
 
         Assert.True(result.Succeeded);
     }
+
+    [Fact]
+    public void DecodeJson_BodyAndHairFlags_AreReadWhenPresent()
+    {
+        var json = ValidJson.Replace(
+            "\"fallbackSplitNpc\": false,",
+            "\"fallbackSplitNpc\": false, \"fallbackSplitHair\": true, \"fallbackSplitGearBody\": true, \"fallbackSplitBodyMods\": true,");
+
+        var fallback = TemplateCodec.DecodeJson(json).Template!.Fallback;
+
+        Assert.True(fallback.SplitHair);
+        Assert.True(fallback.SplitGearBody);
+        Assert.True(fallback.SplitBodyMods);
+    }
+
+    [Fact]
+    public void DecodeJson_AnOlderFileWithoutTheNewFlags_HasThemOff()
+    {
+        var fallback = TemplateCodec.DecodeJson(ValidJson).Template!.Fallback;
+
+        Assert.False(fallback.SplitHair);
+        Assert.False(fallback.SplitGearBody);
+        Assert.False(fallback.SplitBodyMods);
+    }
 }

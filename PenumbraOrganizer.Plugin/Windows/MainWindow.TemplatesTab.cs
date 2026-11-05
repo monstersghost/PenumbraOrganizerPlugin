@@ -260,7 +260,11 @@ public sealed partial class MainWindow
             }
 
             _templatePlan = Organizer.Templates.TemplatePlanner.PlanFromDecoded(
-                decoded, _plugin.OrganizerState.Mods, _creatorCanonicalizer.Canonicalize);
+                decoded, _plugin.OrganizerState.Mods, _creatorCanonicalizer.Canonicalize,
+                new Organizer.Classification.HairPriority(_plugin.Config.HairRaceCode, _plugin.Config.MidlanderFallback),
+                Organizer.BodyTypes.BodyPriority.Normalize(
+                    _plugin.Config.BodyPriority,
+                    _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels));
             _templatePlanTemplate = decoded.Template;
             _templatePlanScanGeneration = _plugin.OrganizerState.ScanGeneration;
             _templateStatus = null;

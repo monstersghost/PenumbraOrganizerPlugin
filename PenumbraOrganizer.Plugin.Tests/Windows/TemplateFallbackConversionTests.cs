@@ -35,22 +35,16 @@ public class TemplateFallbackConversionTests
     // Counts the record's primary-constructor parameters, not its properties: SortSelection also
     // exposes computed properties, so a property count would not mean the same thing.
     //
-    // SortSelection now carries the hair split, the race priority and the body split, none of which
-    // the on-disk template format stores. The conversion drops those four fields on purpose; this
-    // count is what makes adding a fifth value a visible decision rather than a silent one.
-    //
-    // SplitBody was the most recent such decision, and it went the same way as the hair split for
-    // the same reason: a template describes where a layout puts things, and TemplatePlanner's
-    // fallback already computes gear and NPC splits only. Storing the body split would mean a
-    // shared template silently re-foldering a recipient's gear by a body list they may not have the
-    // same version of.
-    //
-    // The seventh and eighth are the two body-split flags (gear, and body mods), which replaced the single body split, and the ninth is the body priority. None of the three is stored by templates, for the same reason the hair split is not.
+    // SortSelection carries nine values; TemplateFallback stores six: grouping, the gear-slot and
+    // NPC splits, and (added later, optional in the file) the hair split and the two body splits.
+    // The hair race, Midlander fallback and body priority are NOT stored: they are the importer's
+    // own settings, so a shared template never re-folders a recipient by someone else's order.
+    // Adding a seventh value on either side must be a visible decision, which this count enforces.
     [Fact]
     public void BothTypes_CarryTheValuesTheyHaveBeenDesignedFor()
     {
         Assert.Equal(9, PrimaryConstructorParameterCount(typeof(SortSelection)));
-        Assert.Equal(3, PrimaryConstructorParameterCount(typeof(TemplateFallback)));
+        Assert.Equal(6, PrimaryConstructorParameterCount(typeof(TemplateFallback)));
     }
 
     private static int PrimaryConstructorParameterCount(Type type) =>

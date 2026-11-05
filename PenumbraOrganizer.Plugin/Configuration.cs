@@ -104,6 +104,9 @@ public sealed class Configuration : IPluginConfiguration
     public string? TemplateExportGrouping { get; set; }
     public bool TemplateExportSplitGear { get; set; }
     public bool TemplateExportSplitNpc { get; set; } = true;
+    public bool TemplateExportSplitHair { get; set; }
+    public bool TemplateExportSplitGearBody { get; set; }
+    public bool TemplateExportSplitBodyMods { get; set; }
 
     /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
     public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;

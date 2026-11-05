@@ -38,6 +38,9 @@ public sealed partial class MainWindow
     private int _exportGroupingIndex = SortPanel.DefaultGroupingIndex;
     private bool _exportSplitGear;
     private bool _exportSplitNpc = true;
+    private bool _exportSplitHair;
+    private bool _exportSplitGearBody;
+    private bool _exportSplitBodyMods;
     private string _exportFilter = string.Empty;
     private string? _exportStatus;
 
@@ -66,6 +69,9 @@ public sealed partial class MainWindow
                 _exportGroupingIndex = SortPanel.GroupingIndexFor(config.TemplateExportGrouping);
                 _exportSplitGear = config.TemplateExportSplitGear;
                 _exportSplitNpc = config.TemplateExportSplitNpc;
+                _exportSplitHair = config.TemplateExportSplitHair;
+                _exportSplitGearBody = config.TemplateExportSplitGearBody;
+                _exportSplitBodyMods = config.TemplateExportSplitBodyMods;
                 _exportOpen = true;
             }
             ImGui.EndDisabled();
@@ -172,6 +178,22 @@ public sealed partial class MainWindow
             MarkTemplateExportDirty();
             SaveExportFallbackChoices();
         }
+        if (ImGui.Checkbox("Split hair by hair number", ref _exportSplitHair))
+        {
+            MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        if (ImGui.Checkbox("Split gear by body type", ref _exportSplitGearBody))
+        {
+            MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        if (ImGui.Checkbox("Split body mods by body type", ref _exportSplitBodyMods))
+        {
+            MarkTemplateExportDirty();
+            SaveExportFallbackChoices();
+        }
+        ImGui.TextDisabled("Hair and body splits use the importer's own hair race and body priority.");
         ImGui.EndDisabled();
     }
 
@@ -183,6 +205,9 @@ public sealed partial class MainWindow
         config.TemplateExportGrouping = SortPanel.Groupings[index].Strategy.ToString();
         config.TemplateExportSplitGear = _exportSplitGear;
         config.TemplateExportSplitNpc = _exportSplitNpc;
+        config.TemplateExportSplitHair = _exportSplitHair;
+        config.TemplateExportSplitGearBody = _exportSplitGearBody;
+        config.TemplateExportSplitBodyMods = _exportSplitBodyMods;
         _plugin.SaveConfig();
     }
 
@@ -193,7 +218,7 @@ public sealed partial class MainWindow
         var index = Math.Clamp(_exportGroupingIndex, 0, SortPanel.Groupings.Length - 1);
         return ToTemplateFallback(
             new SortSelection(SortPanel.Groupings[index].Strategy, _exportSplitGear, _exportSplitNpc,
-                SplitHair: false)); // templates are saved on disk without a hair setting, so hair stays flat here
+                _exportSplitHair, SplitGearBody: _exportSplitGearBody, SplitBodyMods: _exportSplitBodyMods));
     }
 
     /// <summary>
@@ -211,7 +236,8 @@ public sealed partial class MainWindow
     /// see it otherwise. Same reason <see cref="SortSelection"/> itself is public.
     /// </remarks>
     public static TemplateFallback ToTemplateFallback(SortSelection selection) =>
-        new(selection.Strategy, selection.SplitGear, selection.SplitNpc);
+        new(selection.Strategy, selection.SplitGear, selection.SplitNpc,
+            selection.SplitHair, selection.SplitGearBody, selection.SplitBodyMods);
 
     private void DrawTemplateExportFolders()
     {

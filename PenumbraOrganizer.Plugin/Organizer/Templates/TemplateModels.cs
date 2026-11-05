@@ -39,7 +39,16 @@ public static class TemplateJson
 /// consults the category.
 /// </para>
 /// </remarks>
-public sealed record TemplateFallback(SortStrategy Strategy, bool SplitGear, bool SplitNpc);
+public sealed record TemplateFallback(
+    SortStrategy Strategy,
+    bool SplitGear,
+    bool SplitNpc,
+    // Added after the first format release. Absent in an older file, so each defaults to off: an
+    // old template keeps the layout it always produced. Which hair race and which body order the
+    // split uses is the IMPORTER's own setting, never the file's.
+    bool SplitHair = false,
+    bool SplitGearBody = false,
+    bool SplitBodyMods = false);
 
 public enum TemplateWarningCode
 {
@@ -95,6 +104,9 @@ public sealed class OrganizationTemplate
     // hand-written template that omits these gets what the UI would have given it.
     [JsonPropertyName("fallbackSplitGear")] public bool FallbackSplitGear { get; set; }
     [JsonPropertyName("fallbackSplitNpc")] public bool FallbackSplitNpc { get; set; } = true;
+    [JsonPropertyName("fallbackSplitHair")] public bool FallbackSplitHair { get; set; }
+    [JsonPropertyName("fallbackSplitGearBody")] public bool FallbackSplitGearBody { get; set; }
+    [JsonPropertyName("fallbackSplitBodyMods")] public bool FallbackSplitBodyMods { get; set; }
     [JsonPropertyName("folderLabels")] public Dictionary<string, string> FolderLabels { get; set; } = new();
     [JsonPropertyName("folders")] public List<string> Folders { get; set; } = [];
     [JsonPropertyName("entries")] public List<TemplateEntry> Entries { get; set; } = [];

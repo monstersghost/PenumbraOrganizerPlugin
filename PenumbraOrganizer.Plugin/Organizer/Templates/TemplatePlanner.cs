@@ -1,3 +1,5 @@
+using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Templates;
@@ -41,7 +43,9 @@ public static class TemplatePlanner
     public static TemplateApplicationPlan PlanFromDecoded(
         TemplateDecodeResult decoded,
         IReadOnlyCollection<OrganizerModRow> rows,
-        Func<string, string> canonicalizeCreator)
+        Func<string, string> canonicalizeCreator,
+        HairPriority? hairPriority = null,
+        BodyPriority? bodyPriority = null)
     {
         if (!decoded.Succeeded)
         {
@@ -50,14 +54,16 @@ public static class TemplatePlanner
                 nameof(decoded));
         }
 
-        return Plan(decoded.Template!, rows, canonicalizeCreator, decoded.Warnings);
+        return Plan(decoded.Template!, rows, canonicalizeCreator, decoded.Warnings, hairPriority, bodyPriority);
     }
 
     public static TemplateApplicationPlan Plan(
         ValidatedOrganizationTemplate template,
         IReadOnlyCollection<OrganizerModRow> rows,
         Func<string, string> canonicalizeCreator,
-        IReadOnlyList<TemplateWarning>? decodeWarnings = null)
+        IReadOnlyList<TemplateWarning>? decodeWarnings = null,
+        HairPriority? hairPriority = null,
+        BodyPriority? bodyPriority = null)
     {
         var renameFolder = TemplateFolderLabels.Create(template.FolderLabels);
         var warnings = new List<TemplateWarning>(decodeWarnings ?? []);
@@ -99,7 +105,10 @@ public static class TemplatePlanner
 
             var fallback = template.Fallback;
             var (primary, secondary) = SortFolderSelectors.Select(
-                fallback.Strategy, fallback.SplitGear, fallback.SplitNpc, row, canonicalizeCreator, renameFolder);
+                fallback.Strategy, fallback.SplitGear, fallback.SplitNpc, row, canonicalizeCreator, renameFolder,
+                splitHair: fallback.SplitHair, hairPriority: hairPriority,
+                splitGearBody: fallback.SplitGearBody, splitBodyMods: fallback.SplitBodyMods,
+                bodyPriority: bodyPriority);
             destinations[row.Identifier] = SortFolderSelectors.FlattenToFolder(primary, secondary);
             fallbackRows++;
         }
