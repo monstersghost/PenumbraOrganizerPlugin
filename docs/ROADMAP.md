@@ -5,7 +5,21 @@ drift out of sync with `docs/HANDOFF_ORGANIZER_AND_DARK_THEME.md`. Scope guardra
 Phase 1 design (read-only MVP, no shared code beyond two linked files) still apply everywhere
 below unless a phase explicitly says otherwise.
 
-## Where we are (2026-11-04)
+## Where we are (2026-11-05)
+
+- **Unreleased, merged to local `main` (not pushed): the next release after 0.6.2.1.** Body type
+  detection from mod content with a saved priority; the Sort/Review UX pass (three-section Sort tab,
+  Workbook group, saved Sort settings); per-tool modes for Heliosphere and Proteus (protect, sort
+  inside their folder, or treat as normal) with the Proteus managed-mod root option; the Failed mods
+  window; templates carrying the hair and body splits and respecting tool modes; fixes for "Protect
+  all, then Unprotect Heliosphere" and for a mod blocking the folder it should sit in. See
+  `docs/HANDOFF_2026-11-05_BODY_UX_TOOLS.md`. Not yet released: the Help tab's PDF button 404s until
+  a tag that contains the PDF exists, so test it on that release build.
+- **Still to do:** the first-run tutorial rewrite with on-screen highlights; retake the guide's
+  screenshots (the UI mock in `docs/ui-mock/` predates the Sort/Review/Protect changes); decide
+  whether the Search tab earns its place.
+
+## Earlier (2026-11-04)
 
 - **0.6.2.1 — shipped stable, on both channels.** Folder protection became protect/exclude/inherit
   rules with deepest-rule-wins, and the Protect tab's folder list became a collapsible tri-state

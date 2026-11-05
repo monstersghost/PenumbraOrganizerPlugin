@@ -8,8 +8,8 @@ anything the rules below don't recognize stays unclassified.
 
 Sort strategy decides what folder layout to build, given a mod's category and creator (see "Sort
 strategies" below). You choose one explicitly on the Sort tab: a "Group by" dropdown picks the
-strategy, three checkboxes decide whether Gear, NPC and hair mods get subfolders, and the Sort button
-applies the combination.
+strategy, checkboxes decide whether Gear, NPC, hair and body-type splits apply, and the Sort button
+applies the combination. All of these choices are saved between sessions.
 
 Classification happens once during `RunScan()` and is stored on each `OrganizerModRow`. Sorting
 just reads `Category` and `SubCategory` back off that row afterward. Re-sorting doesn't
@@ -166,6 +166,25 @@ agree with that reading, but no real library has confirmed it yet. The manual ch
 
 The **Split hair by hair number** checkbox defaults off and is disabled when Group by is Creator.
 
+## Applying the plan: mods and folders share a namespace
+
+Penumbra gives mods and folders one name space. When a mod sits at a path the sort needs as a
+FOLDER (the mod `Bibo+` at `Body/Bibo+`, while the sort files mods under `Body/Bibo+/...`), nothing
+can move beneath that path until the mod has left it, and the mod's own move would otherwise fail
+with `PathRenameFailed`. `ApplyPlanner.OrderMovesForApply` therefore moves such a mod to a temporary
+path first, then to its real target, before everything else.
+
+## Tool-managed mods (Heliosphere and Proteus)
+
+`OrganizerState.IsEffectivelyProtected` is the single protection rule. A per-tool mode
+(`Protected` / `Sort inside` / `Normal`, saved in `Configuration`) decides whether a tool's mods are
+protected by default; an explicit mod protection or a protected folder still wins. `Sort inside`
+anchors a mod to the first segment of its CURRENT path (`ToolFolders.ApplyAnchor`), unless it is at
+the root, already in one of the sorter's own folders, or already starts with that segment. Templates
+go through the same `ToolAdjustedPath`. Proteus-made mods are those whose `meta.json` author is
+exactly `Proteus`; its managed mod additionally has the directory name `Proteus`, and can be placed at
+the root. See `docs/superpowers/specs/2026-11-05-tool-managed-mods-design.md`.
+
 ## Body-type sub-classification (which body gear was made for)
 
 Unlike the gear and hair passes, this one cannot verify the body from the mesh: a garment made for
@@ -176,7 +195,10 @@ later tier is used only when the earlier ones found no body:
 
 1. **Inside the mod.** Option group names, option names, and the FIRST folder of the mod-relative
    file paths in its config. The mod's own title is not part of this tier.
-2. **The mod's name.** This was the only source before body priority existed.
+2. **The mod's name.** This was the only source before body priority existed. (For a `Body`-category
+   mod the order of tiers 1 and 2 is swapped: a body replacer's own name says which body it IS,
+   while its option groups often name the other bodies it is merely compatible with, so "Yet Another
+   Body+" with a Bibo+ option group files under YAB. `BodyPriorityResolver.Resolve(nameFirst: true)`.)
 3. **The library folders above the mod.** Least reliable (a Heliosphere folder, for example), so last.
 
 For file paths only the first folder counts:

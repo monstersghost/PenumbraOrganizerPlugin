@@ -263,12 +263,12 @@
     {
       "id": "review.diagnostics",
       "title": "Diagnostics",
-      "short": "Troubleshooting tools: export the review as text, open the config file, or create a diagnostic dump to share when something looks wrong."
+      "short": "Troubleshooting tools: export the review as text, open the config file, list the mods the last Apply could not move, or create a diagnostic dump to share."
     },
     {
       "id": "review.export-workbook",
       "title": "Export Workbook",
-      "short": "Writes every mod and its destination to a spreadsheet you can edit outside the game, then bring back with Import Workbook on the Sort tab."
+      "short": "Writes every mod and its destination to a spreadsheet you can edit outside the game, then bring back with Import Workbook in the same Workbook group."
     },
     {
       "id": "review.protect-and-skip",
@@ -368,7 +368,7 @@
     {
       "id": "templates.export-fallback",
       "title": "Fallback grouping",
-      "short": "Where an importer's mods go when your template does not mention them. Same groupings the Sort tab offers, so a template can only ask for a layout this plugin can produce."
+      "short": "Where an importer's mods go when your template does not mention them. Same groupings and splits as the Sort tab; hair and body use the importer's own settings."
     },
     {
       "id": "templates.export-folders",

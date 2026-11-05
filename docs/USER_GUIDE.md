@@ -102,8 +102,9 @@ A mod is protected if **any** of these is true, and the tab tells you which one 
 1. **Its own checkbox**, in the Mods list.
 2. **A folder rule** covering the folder it sits in. The note beside the mod reads
    `(via folder: Gear)`, naming the folder whose rule actually decided it.
-3. **Heliosphere manages it**, shown as `(Heliosphere)`. Heliosphere owns where its mods live, so
-   they are re-protected on every scan no matter how you last left the toggle.
+3. **A tool manages it**, shown as `(Heliosphere)` or `(Proteus)`. By default the plugin leaves
+   these mods where they are. You can change that per tool; see
+   [Heliosphere and Proteus mods](#heliosphere-and-proteus-mods) below.
 
 These are independent. Freeing a mod means clearing whichever source is protecting it, which is why
 the notes name the source rather than only saying "protected".
@@ -140,12 +141,12 @@ empty)**, so a rule can never become invisible.
 #### What an exclude does not free
 
 An exclude withdraws the **folder's** protection and nothing else. Inside an excluded folder, a mod
-you ticked yourself stays protected, and so does a Heliosphere-managed one. That is deliberate:
+you ticked yourself stays protected, and so does a tool-managed one (while its mode is Protected). That is deliberate:
 those are per-mod decisions, and a folder rule has no business reversing them silently.
 
 To clear those as well, use the **Unprotect N inside** button on the folder's row. It clears
-protection from every mod under it at any depth whatever the source - its own tick, Toggle protect
-all, a folder rule, or Heliosphere - and asks first.
+protection from every mod under it at any depth whatever the source - its own tick, Protect all, a
+folder rule, or a tool - and asks first.
 
 ![The confirmation prompt shown by Unprotect N inside](images/protect-unprotect-confirm.png)
 
@@ -157,7 +158,7 @@ no button. Three details worth knowing:
   under its protected parent and everything you just freed would be re-protected.
 - The button never overrides a protected parent on its own. Escaping a parent is the box's job, and
   takes a deliberate click.
-- Unprotecting Heliosphere mods this way lasts the session only: the next Scan re-protects them.
+- Unprotecting a tool's mods this way lasts the session only: the next Scan re-applies the tool's mode.
 
 #### Searching the tree
 
@@ -174,29 +175,50 @@ folders. A protected mod is excluded from every grouping and from Apply: its pro
 stays equal to its current path, and if anything does touch a protected mod, Review Changes flags it
 as a "protected mod changed" error.
 
-Toggle protect all is a true toggle: it protects everything if anything is currently unprotected,
-and unprotects everything otherwise. Toggle Heliosphere protection does the same, scoped to
-[Heliosphere](https://heliosphere.app/)-managed mods (detected by the `hs-` directory prefix, by
-Heliosphere's `[HS] ` name prefix, by a `heliosphere.json` file in the mod folder, or by having been
-recognised as Heliosphere's on any earlier scan; see [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)). That
-last one matters during a Heliosphere update, which briefly removes the mod's folder and writes a
-new one - without it, a scan landing in that moment would see an ordinary mod and offer to move it.
+**Protect all** protects every mod; once everything is protected the same button reads **Unprotect
+all** and clears every protection, including ones you ticked yourself.
 
-Manually unprotecting a non-Heliosphere mod persists across scans; that choice, along with your
-folder rules, is saved to the plugin's own config.
+Manually unprotecting a mod persists across scans; that choice, along with your folder rules, is
+saved to the plugin's own config.
+
+#### Heliosphere and Proteus mods
+
+[Heliosphere](https://heliosphere.app/) and [Proteus](https://github.com/solona-m/proteus) each
+manage some of your mods. Both find their mods by directory rather than by where they sit in
+Penumbra's tree, so the plugin may move them, but you choose. When the scan finds mods from a tool,
+the Protect tab shows a dropdown for it with the number of mods:
+
+- **Protected** (the default): left exactly where they are.
+- **Sort inside their folder**: sorted like any other mod, but kept beneath the top-level folder they
+  already sit in (`Proteus Upscales/Gear/Top/...`). Mods at the very top level, or already in one of
+  the sorter's own folders such as `Gear`, are sorted normally.
+- **Treat as normal**: sorted like everything else.
+
+The choice is saved. A tool with no mods in your library shows no dropdown, so the Proteus controls
+appear only once the scan finds a Proteus-made mod. Heliosphere mods are detected by the `hs-`
+directory prefix, Heliosphere's `[HS] ` name prefix, a `heliosphere.json` file in the mod folder, or
+having been recognised on an earlier scan. Proteus-made mods are the ones whose `meta.json` author is
+exactly `Proteus`.
+
+Proteus also keeps one mod of its own, named `Proteus`. Once it exists, the tab offers **Place the
+Proteus managed mod at the root**, which files that mod at the very top of the library instead of
+inside the Proteus folder.
+
+An explicit protection you set yourself (a ticked mod, or a protected folder) still beats a tool's
+mode.
 
 #### Two things that catch people out
 
 **Protected mods at the top level.** If any protected mods sit at the very top level of your
 library, outside every folder, the tab says so in yellow. That combination is a dead end: protection
 means the plugin never proposes a path, so sorting will never file them away and they stay there
-indefinitely. Heliosphere installs new mods there and they are protected by the same scan that first
-notices them, so this can happen without you doing anything. Untick one and it sorts like any other
+indefinitely. Heliosphere and Proteus install new mods there and, in Protected mode, they are
+protected by the same scan that first notices them, so this can happen without you doing anything. Untick one and it sorts like any other
 mod.
 
-**Protect all, then free one folder.** Toggle protect all writes a tick on every *mod* and ticks no
+**Protect all, then free one folder.** Protect all writes a tick on every *mod* and ticks no
 folder, so there is no folder to untick afterwards and Sort reports "apply to 0 mods". The way to do
-it is Toggle protect all, then **Unprotect N inside** on the one folder you want filed away.
+it is Protect all, then **Unprotect N inside** on the one folder you want filed away.
 
 Protection governs Sort and Apply only. Restoring a snapshot from the History tab reproduces its
 recorded paths regardless of current protection. See History below.
@@ -209,8 +231,13 @@ Choose a grouping, tick whichever splits you want, and press Sort. That computes
 path for every unprotected mod **without moving anything**. Only Apply, on the Review Changes tab,
 calls Penumbra.
 
-The controls are grouped into Gear, NPC and Hair with a rule between each group. The **?** button
-beside Sort opens the Help tab at its Sort section.
+The tab has three sections: **Group by** and the **Sort** button, which are always visible; then
+**Gear, NPC and Hair**; then **Body type**. The two lower sections are collapsed away until you want
+them. The **?** button beside Sort opens the Help tab at its Sort section, and the small **(?)**
+beside a checkbox explains it.
+
+**Everything on this tab is remembered** between sessions: Group by, every checkbox, the hair race,
+the Midlander fallback and the body priority. Only the proposals themselves reset (on a rescan).
 
 #### Group by
 
@@ -226,10 +253,11 @@ This picks the shape of the path:
 A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it is
 easy to find and sort by hand instead of landing somewhere unexpected.
 
-All three split checkboxes are greyed out when Group by is Creator, because grouping by creator
-alone never looks at a mod's type.
+Every split checkbox is greyed out when Group by is Creator, because grouping by creator alone never
+looks at a mod's type. A ticked hair box keeps its two dependent controls visible but greyed, and
+switching Group by back restores everything untouched.
 
-#### The three splits
+#### The splits
 
 **Split gear by equipment slot** puts gear mods in `Gear/Feet`, `Gear/Head` and so on, wherever the
 slot can be determined from a single unambiguous match. Anything ambiguous — a real multi-piece
@@ -256,17 +284,23 @@ Two controls appear under it, and both apply only while Split hair is on:
 - **Midlander fallback.** When a mod uses different numbers across races, this uses the Midlander
   number if male and female Midlanders agree.
 
-Both reset each session. A mod that still does not resolve to one number stays in the plain `Hair`
+A mod that still does not resolve to one number stays in the plain `Hair`
 folder; a race with two hair numbers in the same mod never picks one.
 
-**Split gear and body mods by body type** puts a gear mod in a folder named after the body it was
-made for, such as `Gear/Bibo+/Top`, and a body mod under its own name, such as `Body/Rue+`. The body
-comes before the equipment slot, so everything made for one body sits together instead of being
-spread across the nine slot folders. It is off by default. The slot split is separate: turn that off
-and you get `Gear/Bibo+` with nothing below it.
+**Split gear by body type** puts a gear mod in a folder named after the body it was made for, such
+as `Gear/Bibo+/Top`. The body comes before the equipment slot, so everything made for one body sits
+together instead of being spread across the nine slot folders. It is off by default. The slot split
+is separate: turn that off and you get `Gear/Bibo+` with nothing below it.
+
+**Split body mods by body type** does the same for the body replacers themselves, filing each under
+its own body name, such as `Body/Rue+`. It is a separate checkbox so you can split one kind and not
+the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse.
 
 The body comes from the mod's options and files first (option group names, option names and the
-first folder of its file paths), then its name, then the library folder it sits in. The plugin knows 30 bodies and 120 ways of writing them, including
+first folder of its file paths), then its name, then the library folder it sits in. For a body
+mod the order is reversed: its own name wins over its option groups, because a body replacer often
+carries option groups for the other bodies it is merely compatible with ("Yet Another Body+" ships a
+Bibo+ option and is still a YAB mod). The plugin knows 30 bodies and 120 ways of writing them, including
 `Bibo+`, `Rue+`, `YAB`, `TnF`, `TF3`, `TBSE` and `Neolithe`. Variants go in with their parent, so a
 TBSE-X mod lands in `Gear/TBSE` and a YAB Buff mod in `Gear/YAB`.
 
@@ -285,35 +319,15 @@ replaces it, which is how you remove a spelling that turns out to be wrong inste
 it. The file is read only if it is there, and the plugin says so in the log if it cannot use part of
 it: an entry it had to ignore, or a name you reused that a different body already answers to.
 
-#### The NPC list controls
-
-**Also use the NPC list scraped from the wiki** is off and unavailable in this version. NPC name
-recognition works from a curated list shipped with the plugin, which needs no setup and no network
-access. The opt-in exists for a much larger scraped list; it recognises far more character names at
-the cost of matching some very common words, and stays disabled until that is verified in game.
-
-**Refresh NPC list from wiki** is likewise off in this version. When enabled, it rewrites the
-opt-in scraped list — not the bundled one — with whatever the wiki returns on that run, so names
-the wiki no longer lists are dropped rather than accumulating. Results are shown per category as a
-name total, or a failure reason; a category whose scrape fails keeps what it already held rather
-than being emptied.
-
 #### After sorting
 
 If you change the grouping or any checkbox after sorting, a line appears reminding you that the
 selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
 Sorting again always recomputes from scratch, so it is safe to press repeatedly.
 
-#### Import Workbook
-
-Opens a file picker for an `.xlsx` exported either from this plugin or the standalone app, and
-applies its per-mod destination folders as proposed paths. Use it instead of the built-in groupings
-when you want to hand-edit an assignment list in Excel first. A summary line, plus any errors or
-warnings, appears below the button once the import finishes.
-
 #### Manual assignment
 
-The bottom of the tab assigns a folder to specific mods. Its own **Search mods** box filters the
+A collapsed section at the bottom of the tab, closed by default, assigns a folder to specific mods. Its own **Search mods** box filters the
 list below it, the same way the Protect tab's does. Check the mods you want — protected mods never
 appear here — type a destination folder, and click **Assign N selected mods**. Each checked mod's
 proposed path becomes `{destination}/{ModName}`.
@@ -352,31 +366,47 @@ how many mods will move; confirming calls Penumbra's `SetModPath` for every mod 
 differs from its current path.
 
 The result shows a succeeded and failed count, with Penumbra's own error code as the reason for
-each failure, for example `PathRenameFailed`. Apply also captures a snapshot of your library just
+each failure, for example `PathRenameFailed`. When some mods failed, a **Show failed mods** button
+beside that line opens a small window naming each mod that could not be moved, the reason Penumbra
+gave, and the path it was being moved to. Apply also captures a snapshot of your library just
 before it runs, so you can always get back to where you started — see History below.
 
-#### Exports
+#### Workbook
 
-- **Export** writes every mod's full field set plus the validation result to a plain-text file
-  (`organizer-export.txt`, overwritten each time). If any of your mods are Gear, it adds the
-  one-line slot-resolution summary described under Sort. It is a snapshot to read, not something to
-  re-import.
-- **Export Workbook** writes `organizer-workbook.xlsx`, interoperable with the standalone app: edit
-  it in Excel, then use Import Workbook on the Sort tab to bring your edits back. **Open Workbook**
-  opens the file you just wrote.
-- **Workbook destinations** decides what goes in the workbook's Destination column. The four
-  sorting choices fill it with suggested folders; **Keep current folders (as-is)** fills it with
-  each mod's folder as it stands, which is what you want when you intend to write the layout
-  yourself. Protected mods and mods at the top level of your library get a blank Destination, which
-  means "leave this one alone" on import.
+A **Workbook** group above Apply holds everything for the Excel round trip:
+
+- **Group workbook by** decides what goes in the workbook's Destination column. The four sorting
+  choices fill it with suggested folders; **Keep current folders (as-is)** fills it with each mod's
+  folder as it stands, which is what you want when you intend to write the layout yourself.
+  Protected mods and mods at the top level of your library get a blank Destination, which means
+  "leave this one alone" on import.
+- **Export Workbook** writes `organizer-workbook.xlsx`, interoperable with the standalone app. **Open
+  Workbook** opens the file you just wrote.
+- **Import Workbook** opens a file picker for an `.xlsx` exported from this plugin or the standalone
+  app and applies its per-mod destination folders as proposed paths. Use it instead of the built-in
+  groupings when you want to hand-edit an assignment list in Excel first. It works with a scan
+  loaded and nothing staged, and stays greyed while a scan runs. A summary line, plus any errors or
+  warnings, appears below the buttons once the import finishes.
+
+**Apply** sits below the group, in the plugin's purple, set apart from the rest.
 
 #### Diagnostics
 
-**Show Config File** opens Explorer with the plugin's own settings file (your protected mods and
-folder rules) selected, so you can copy or attach it. **Create Diagnostic Dump** writes a
-plain-text state summary — mod and protection counts, the last Apply/Restore/Folder Cleanup result
-including one from a previous session, and the session's event log — to `organizer-diagnostics.txt`,
-and **Show Dump File** opens Explorer with it selected. Attach that file when reporting a problem.
+A collapsed section, closed by default:
+
+- **Export** writes every mod's full field set plus the validation result to a plain-text file
+  (`organizer-export.txt`, overwritten each time). Each mod lists its detected body type and the
+  evidence behind it, and whether a tool manages it (`ManagedBy:`). If any of your mods are Gear, it
+  adds the one-line slot-resolution summary described under Sort. It is a snapshot to read, not
+  something to re-import.
+- **Show Config File** opens Explorer with the plugin's own settings file (your protected mods, folder
+  rules and Sort choices) selected, so you can copy or attach it.
+- **Failed mods** opens the same window as the button beside the Apply result, for the most
+  recently finished Apply or Restore.
+- **Create Diagnostic Dump** writes a plain-text state summary - mod and protection counts (including
+  Heliosphere- and Proteus-managed ones), the last Apply/Restore/Folder Cleanup result including one
+  from a previous session, and the session's event log - to `organizer-diagnostics.txt`, and **Show
+  Dump File** opens Explorer with it selected. Attach that file when reporting a problem.
 
 #### Orphaned Folders
 
@@ -502,7 +532,14 @@ A few things worth knowing:
   already have. Mods its author never had are placed by the fallback strategy, not left behind.
 - **Matching is on the mod's name**, ignoring case, install suffixes like `_1_1_0`, and bracketed
   tags. A mod you renamed will not match, and will be placed by the fallback strategy instead.
-- **Protected mods are never moved**, the same as with any sort.
+- **Protected mods are never moved**, the same as with any sort. Heliosphere and Proteus mods follow
+  the mode you chose on the Protect tab: under Sort inside their folder, a template still keeps
+  them beneath their tool's folder, and the Proteus managed mod still goes to the root if you asked
+  for that.
+- **The fallback's hair and body splits use your settings.** If the template's author ticked a hair
+  or body split, it turns that split on for the mods the template does not mention, but which hair
+  race and which body order applies is your own Sort tab setting. A template made before these
+  options existed has them off and behaves exactly as it always did.
 - If you rescan your library after previewing, the preview is discarded — preview again before
   applying.
 
@@ -521,7 +558,8 @@ That is what the review screen is for, and there is no way to export without goi
    what you see is your actual library.
 2. Give it a name, and optionally your name and a description.
 3. Pick the **fallback grouping** — where an importer's mods go when your template says nothing
-   about them. These are the same choices the Sort tab offers.
+   about them. These are the same choices the Sort tab offers, including the gear, NPC, hair and
+   body-type splits. Your choices here are remembered for next time.
 4. Go through the folder and mod lists and untick anything you would rather not share. Unticking a
    folder also unticks the mods in it. The search box narrows what you are looking at; **Include
    all** and **Exclude all** always apply to every mod, not only the ones showing.
@@ -533,6 +571,7 @@ Some things worth knowing:
 - **Export uses where your mods are now**, not any proposals sitting on Review Changes. If you have
   sorted but not applied, the template describes your *old* layout, because that is the one your
   library actually has. The screen says so.
+- **Saving closes the creator** and reports "Saved as ..." on the list screen.
 - **Share codes only work for small templates.** A chat message holds about 2000 characters, which
   is roughly a hundred mods. Past that the button is disabled and the screen tells you the length —
   send the file instead.
@@ -578,7 +617,7 @@ Nothing on this tab changes anything - it reads no mods and writes no files.
 Hair mods that ship one folder per race can be filed under the hair number most races use. All
 three controls — Split hair by hair number, Priority race, and Midlander fallback — are on the Sort
 tab and are described under [Sort](#sort) above. Both extra controls apply only while Split hair is
-on, and both reset each session.
+on, and all three are remembered between sessions.
 
 Read the caveat at the bottom of this page before trusting the numbers on a library you care about.
 
@@ -586,8 +625,8 @@ Read the caveat at the bottom of this page before trusting the numbers on a libr
 
 Gear can be put in folders named after the body it was made for, so everything that fits one body
 sits together. That is worth having when you change body and need to know what still works. The
-control is **Split gear and body mods by body type** on the Sort tab, described under [Sort](#sort)
-above.
+controls are **Split gear by body type** and **Split body mods by body type** on the Sort tab,
+described under [Sort](#sort) above.
 
 The body comes from the mod's options and files first, then its name, then the library folders
 above it. Only gear in the Top, Hands, Legs and Feet slots is looked at, so weapons, hats and jewellery never
@@ -595,11 +634,12 @@ get a body folder.
 
 ### Body priority
 
-Under the body-type checkbox on the Sort tab is a collapsed **Body priority** section. When a mod
+In the Body type section of the Sort tab is a collapsed **Body priority** section, always shown. When a mod
 supports more than one body, it is filed under the highest-ranked one. Use the up and down arrows to
-reorder, or **Reset to default**. The order is saved between sessions, and so are the hair priority
-race and the Midlander fallback. The order is applied when you press Sort, so reordering and sorting
-again re-files mods without a rescan. Group by and the split checkboxes are still per-session.
+reorder, or **Reset to default**. A **First-choice body** dropdown moves one body straight to rank 1.
+The order is saved between sessions, and so are the hair priority race, the Midlander fallback,
+Group by and the split checkboxes. The order is applied when you press Sort, so reordering and
+sorting again re-files mods without a rescan.
 
 To add bodies the plugin does not know, create `body-type-list.json` in the configuration folder;
 see [Where files live](#where-files-live). Read the caveat at the bottom of this page first.
@@ -613,7 +653,7 @@ New mods installed since the last sort: Scan again (this picks up the new mods; 
 protection carries over), press Sort again, review, then Apply.
 
 Hand-tuning through Excel: on Review Changes, Export Workbook, edit destinations in Excel, then on
-the Sort tab Import Workbook, review again, then Apply.
+the same tab Import Workbook, review again, then Apply.
 
 Protecting a folder but letting one subfolder sort: on the Protect tab, click the parent folder's
 box until it shows a solid `[x]`, open it, then click the subfolder's box twice - once to give it
@@ -638,7 +678,8 @@ Everything the plugin writes lives under Dalamud's per-plugin config directory:
 `organizer-history.json` for rollback snapshots (Apply, Restore, and manual backups all share this
 one multi-snapshot history), `organizer-folder-backup.json` for Folder Cleanup's own separate
 rollback data, `organizer-export.txt` for the plain-text Review export, `organizer-diagnostics.txt`
-for the diagnostic dump, `organizer-workbook.xlsx` for the last exported workbook, and
+for the diagnostic dump, `organizer-workbook.xlsx` for the last exported workbook, an `operations`
+folder holding one record per Apply or Restore (the Failed mods window reads the newest), and
 `npc-name-list.json` for the NPC/enemy/boss name list, which is seeded on first run and updated in
 place by Refresh. The plugin also READS `body-type-list.json` from the same directory if you
 create one, to add bodies the shipped list does not know or correct one it does; it is never created
@@ -667,7 +708,12 @@ in its title can still be filed under that body: "Rue de la Paix" reads as a Rue
 the proposed paths before you apply them, where one wrong guess is one line to put right. `artemis`
 is the one ordinary word kept on purpose, because it is the only name that body goes by.
 
-Whether Penumbra keeps a folder name containing `+`, `&` or `[` `]` exactly as given has not been
-confirmed in game yet, and twelve of the thirty bodies have a `+` in their name. If `Gear/Bibo+/Top`
-comes back as something else after a Rediscover Mods, turn the body split off and say what the
-folder turned into.
+Folder names with a `+` in them (`Gear/Bibo+/Top`, `Body/Bibo+`) work in game. If a mod is ever
+reported as failed with `PathRenameFailed`, the Failed mods window on the Review Changes tab names
+it and the path it wanted. The usual cause is another mod sitting exactly where a folder is needed;
+the plugin now moves such a mod aside first.
+
+Heliosphere and Proteus behaviour follows from how those tools find their mods (by directory, not by
+Penumbra path), which is why moving their mods is safe in the two non-Protected modes. The
+Proteus controls have only been exercised against test mods, not a real Proteus library; tell us
+on Discord if something there looks wrong.
