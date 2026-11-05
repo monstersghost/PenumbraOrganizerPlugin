@@ -90,7 +90,7 @@ reports a connection error instead of a mod list. Start Penumbra and scan again.
 Protection is what stops the plugin proposing a move for a mod. A protected mod keeps its current
 path through every Sort and is skipped by Apply. Nothing on this tab moves anything by itself.
 
-![The Protect tab: the folder tree with tri-state boxes, and the mod list below it](images/protect-tree.png)
+![The Protect tab: the Heliosphere and Proteus mode dropdowns, the folder tree with tri-state boxes, and the mod list below it](images/protect-tree.png)
 
 A search box at the top filters both lists below it by mod name, author, identifier, current path,
 or folder path. Clear it to see everything again.
@@ -225,7 +225,7 @@ recorded paths regardless of current protection. See History below.
 
 ### Sort
 
-![The Sort tab: grouping, the Gear, NPC and Hair groups, and manual assignment](images/sort.png)
+![The Sort tab: Group by, the Gear, NPC, Hair and Body type sections, the Sort button, and the collapsed Body priority and Manual assignment sections](images/sort.png)
 
 Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
 path for every unprotected mod **without moving anything**. Only Apply, on the Review Changes tab,
@@ -339,7 +339,7 @@ filter, and check more without losing what you already picked.
 
 ### Review Changes
 
-![Review Changes: current and proposed paths side by side, with Orphaned Folders below](images/review-changes.png)
+![Review Changes: current and proposed paths side by side, the Workbook group, Apply, the collapsed-by-default Diagnostics section, and Orphaned Folders below](images/review-changes.png)
 
 The gate between a proposal and your actual library. Everything above this tab is reversible by
 doing nothing; this is where you commit.
@@ -504,7 +504,7 @@ the real answer.
 
 ### Templates
 
-![The Templates tab: an imported template, its preview, and the export button](images/templates.png)
+![The Templates tab: an imported template and its preview against your library](images/templates.png)
 
 A template is an organization layout someone else shared as a `.json` file. Importing one proposes
 where your mods would go: mods you and the template's author both have land in the folder they
@@ -547,6 +547,8 @@ A few things worth knowing:
 
 **Export my layout as a template...** builds a template from your library.
 
+![The template creator: name, fallback grouping and splits, then the folder and mod lists](images/templates-creator.png)
+
 Read this part before you use it: **a template contains a list of your mod names, and anyone you
 send it to can read that list.** That is the whole point of the format — it is how an importer knows
 which of their mods you have an opinion about — but it means exporting is publishing. If any of your
@@ -582,6 +584,8 @@ Some things worth knowing:
   things about one name. Exclude one of them to include the other.
 
 ### Help
+
+![The Help tab: Discord, the guide in your browser, the guide as a PDF, the walkthrough, and the topic list](images/help.png)
 
 Every explanation the plugin holds, at reading length rather than tooltip length. It is grouped into
 collapsible sections: what the plugin does, what is and isn't safe, one section per tab, what to do
@@ -637,6 +641,9 @@ get a body folder.
 In the Body type section of the Sort tab is a collapsed **Body priority** section, always shown. When a mod
 supports more than one body, it is filed under the highest-ranked one. Use the up and down arrows to
 reorder, or **Reset to default**. A **First-choice body** dropdown moves one body straight to rank 1.
+
+![The full priority order, with up and down arrows and Reset to default](images/sort-body-priority.png)
+
 The order is saved between sessions, and so are the hair priority race, the Midlander fallback,
 Group by and the split checkboxes. The order is applied when you press Sort, so reordering and
 sorting again re-files mods without a rescan.
