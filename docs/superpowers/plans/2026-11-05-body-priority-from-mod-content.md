@@ -55,7 +55,7 @@ Tests go in `PenumbraOrganizer.Plugin.Tests/...` mirroring the source folders.
 - Test: `PenumbraOrganizer.Plugin.Tests/Organizer/Classification/BodyTypeMatcherTests.cs`
 
 **Interfaces:**
-- Produces: `IReadOnlyList<string> BodyTypeMatcher.MatchAll(string text)` - every distinct body label whose alias appears in `text`, in longest-alias-first discovery order. An alias whose tokens overlap a token span already claimed by a longer alias is skipped, so "AB Eve" never also reports a body whose alias is just "Eve".
+- Produces: `IReadOnlyList<string> BodyTypeMatcher.MatchAll(string text)` - every distinct body label whose alias appears in `text`, in longest-alias-first discovery order. EVERY accepted occurrence of an alias claims its token span (not just the first), and an alias occurrence overlapping an already-claimed span is skipped, so "AB Eve ... AB Eve" never reports a body whose alias is just "Eve" from the second occurrence. Only the OUTPUT is deduplicated by label; the claiming is per occurrence.
 
 - [ ] **Step 1: Write the failing tests** (append inside `BodyTypeMatcherTests`; the file already has the `Entry` helper)
 
@@ -89,6 +89,28 @@ Tests go in `PenumbraOrganizer.Plugin.Tests/...` mirroring the source folders.
     }
 
     [Fact]
+    public void MatchAll_RepeatedLongAlias_ClaimsEveryOccurrence()
+    {
+        // The second "AB Eve" must not leak a standalone "Eve" once the first one claimed its span.
+        var matcher = new BodyTypeMatcher([Entry("AB Eve", "ab eve"), Entry("Eve", "eve")]);
+
+        Assert.Equal(["AB Eve"], matcher.MatchAll("AB Eve top / AB Eve bottom"));
+        Assert.Equal(["AB Eve", "Eve"], matcher.MatchAll("AB Eve top / Eve bottom").OrderBy(l => l, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public void MatchAll_SeveralAliasesOfOneBody_ClaimTheirOwnSpansAndReportItOnce()
+    {
+        // "bibo" and "bibo+" are both Bibo+; the longer claims its span, the shorter then matches
+        // only an UNclaimed word, and the body is still reported once.
+        var matcher = new BodyTypeMatcher([Entry("Bibo+", "bibo+", "bibo"), Entry("Bibo Plus Extra", "bibo plus")]);
+
+        Assert.Equal(["Bibo Plus Extra", "Bibo+"], matcher.MatchAll("Bibo plus dress for Bibo+ and bibo")
+            .OrderByDescending(l => l.Length).ToArray());
+        Assert.Equal(["Bibo+"], matcher.MatchAll("bibo+ bibo bibo+"));
+    }
+
+    [Fact]
     public void MatchAll_NoTokensOrNoMatch_IsEmpty()
     {
         var matcher = new BodyTypeMatcher([Entry("Bibo+", "bibo+")]);
@@ -112,9 +134,11 @@ Expected: build FAIL, `'BodyTypeMatcher' does not contain a definition for 'Matc
     /// longest-alias-first order as <see cref="Match"/>; the difference is that it keeps going.
     /// </summary>
     /// <remarks>
-    /// An alias is skipped when its tokens fall inside a span a longer alias already claimed, so a
-    /// body whose alias is a word of another body's alias ("eve" in "ab eve") is not reported as a
-    /// second body for the same words.
+    /// Every accepted occurrence claims its tokens, and an occurrence that overlaps a span a longer
+    /// alias already claimed is skipped, so a body whose alias is a word of another body's alias
+    /// ("eve" in "ab eve") is not reported as a second body - including from a REPEAT of the long
+    /// alias, which is why the scan does not stop at an alias's first match. Only the returned
+    /// labels are deduplicated.
     /// </remarks>
     public IReadOnlyList<string> MatchAll(string text)
     {
@@ -127,9 +151,6 @@ Expected: build FAIL, `'BodyTypeMatcher' does not contain a definition for 'Matc
 
         foreach (var alias in _aliases)
         {
-            if (labels.Contains(alias.Label))
-                continue;
-
             for (var start = 0; start + alias.Tokens.Length <= tokens.Length; start++)
             {
                 if (!MatchesAt(tokens, start, alias.Tokens))
@@ -143,8 +164,8 @@ Expected: build FAIL, `'BodyTypeMatcher' does not contain a definition for 'Matc
 
                 for (var i = start; i < start + alias.Tokens.Length; i++)
                     claimed[i] = true;
-                labels.Add(alias.Label);
-                break;
+                if (!labels.Contains(alias.Label))
+                    labels.Add(alias.Label);
             }
         }
 
@@ -892,7 +913,8 @@ git commit -m "feat: per-tier body candidates built from mod content, name and l
 
 **Interfaces:**
 - Produces: `public sealed class BodyPriority : IEquatable<BodyPriority>` with
-  - `IReadOnlyList<string> Labels`
+  - `IReadOnlyList<string> Labels` - a read-only wrapper, NOT the backing array: a caller casting it back to `string[]` or `IList<string>` cannot mutate the snapshot (which would change equality and hashing while `_rank` stayed stale)
+  - `static BodyPriority Repair(IReadOnlyList<string> saved, IEnumerable<string> allLabels, out bool needsSave)` - `Normalize`, plus `needsSave = saved.Count > 0 && !saved.SequenceEqual(result.Labels)`. An EMPTY saved list means "default" and is never rewritten; a non-empty list that normalization changed must be written back, or a removed label keeps its old rank in the file and regains it if the body is ever reintroduced
   - `static BodyPriority Normalize(IEnumerable<string>? saved, IEnumerable<string> allLabels)`
   - `static BodyPriority Default(IEnumerable<string> allLabels)`
   - `int Rank(string label)` (`int.MaxValue` when unknown; ordinal-ignore-case)
@@ -984,6 +1006,55 @@ public class BodyPriorityTests
     }
 
     [Fact]
+    public void Labels_CannotBeUsedToMutateTheSnapshot()
+    {
+        var p = BodyPriority.Default(All);
+        var before = p.GetHashCode();
+
+        Assert.False(p.Labels is string[]);
+        if (p.Labels is IList<string> list)
+            Assert.Throws<NotSupportedException>(() => list[0] = "Hacked");
+
+        Assert.Equal(All, p.Labels);
+        Assert.Equal(before, p.GetHashCode());
+        Assert.Equal(0, p.Rank("Bibo+"));
+    }
+
+    [Fact]
+    public void Repair_NeedsSaveOnlyWhenANonEmptySavedListWasChanged()
+    {
+        Assert.False(RepairNeedsSave([], All));                         // empty = default, never rewritten
+        Assert.False(RepairNeedsSave(["YAB", "Bibo+", "Rue+", "TBSE"], All)); // already normalized
+        Assert.True(RepairNeedsSave(["YAB", "Gone"], All));             // stale label dropped
+        Assert.True(RepairNeedsSave(["YAB"], All));                     // missing bodies appended
+        Assert.True(RepairNeedsSave(["yab", "Bibo+", "Rue+", "TBSE"], All)); // spelling canonicalized
+    }
+
+    private static bool RepairNeedsSave(string[] saved, string[] all)
+    {
+        BodyPriority.Repair(saved, all, out var needsSave);
+        return needsSave;
+    }
+
+    [Fact]
+    public void Repair_RemoveThenReintroduce_DoesNotRestoreTheOldRank()
+    {
+        // Saved with Gone in first place; Gone is removed from the list, the repaired list is
+        // WRITTEN BACK, then Gone returns. It must come back at the end, not at rank 0.
+        var withGone = new[] { "Gone", "YAB", "Rue+", "Bibo+", "TBSE" };
+        var without = All;
+
+        var repaired = BodyPriority.Repair(withGone, without, out var needsSave);
+        Assert.True(needsSave);
+        var persisted = repaired.Labels.ToArray(); // what the panel writes back to config
+
+        var reintroduced = BodyPriority.Repair(persisted, [.. without, "Gone"], out _);
+
+        Assert.Equal("Gone", reintroduced.Labels[^1]);
+        Assert.Equal(["YAB", "Rue+", "Bibo+", "TBSE", "Gone"], reintroduced.Labels);
+    }
+
+    [Fact]
     public void Move_ReordersWithoutMutating_AndEdgesAreNoOps()
     {
         var p = BodyPriority.Default(All);
@@ -1028,17 +1099,35 @@ namespace PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 public sealed class BodyPriority : IEquatable<BodyPriority>
 {
     private readonly string[] _labels;
+    private readonly System.Collections.ObjectModel.ReadOnlyCollection<string> _view;
     private readonly Dictionary<string, int> _rank;
 
     private BodyPriority(string[] labels)
     {
         _labels = labels;
+        // A wrapper, never the array itself: handing out the array would let a caller cast back and
+        // mutate it, changing equality and hashing while _rank stayed stale.
+        _view = Array.AsReadOnly(labels);
         _rank = new Dictionary<string, int>(labels.Length, StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < labels.Length; i++)
             _rank[labels[i]] = i;
     }
 
-    public IReadOnlyList<string> Labels => _labels;
+    public IReadOnlyList<string> Labels => _view;
+
+    /// <summary>
+    /// <see cref="Normalize"/>, and whether the repaired list must be written back. An empty saved
+    /// list means "the default" and is never rewritten, so it keeps following the shipped order.
+    /// A non-empty list that normalization changed IS written back: left as it was, a removed
+    /// body would keep its old rank in the file and regain it if it ever returned.
+    /// </summary>
+    public static BodyPriority Repair(
+        IReadOnlyList<string> saved, IEnumerable<string> allLabels, out bool needsSave)
+    {
+        var result = Normalize(saved, allLabels);
+        needsSave = saved.Count > 0 && !saved.SequenceEqual(result._labels, StringComparer.Ordinal);
+        return result;
+    }
 
     public static BodyPriority Default(IEnumerable<string> allLabels) => Normalize(null, allLabels);
 
@@ -1091,7 +1180,7 @@ public sealed class BodyPriority : IEquatable<BodyPriority>
         if (from < 0 || from >= _labels.Length || to < 0 || to >= _labels.Length)
             return this;
 
-        var copy = (string[])_labels.Clone();
+        var copy = (string[])_labels.Clone(); // a private array, so the returned snapshot owns it
         (copy[from], copy[to]) = (copy[to], copy[from]);
         return new BodyPriority(copy);
     }
@@ -1314,6 +1403,7 @@ git commit -m "feat: resolve a mod's body from tiered candidates and the user pr
 **Interfaces:**
 - Consumes: `ModContentReader.Read`, `BodyCandidateBuilder.Build`, `BodyPriorityResolver.Resolve`, `BodyPriority.Default`.
 - Produces: `OrganizerModRow.BodyCandidates` (`BodyCandidates?`, `init`); `BodyType` keeps meaning "the resolution under the DEFAULT priority" (so the dump and any reader of it keep working).
+- Also produces `ScanProcessor.BodyLabels` (`IReadOnlyList<string>`): the labels of the body list THIS scan's matcher was built from, set in `Prepare` and read by the scan job at publish time exactly as `Warnings` is. Evidence and the priority that ranks it must come from one snapshot (Task 9 publishes it with the rows); a second, independent load after publication could differ if the user edits the list mid-scan.
 - Behavior: for rows of category Gear, Hair or Body there is exactly one `ModContentReader.Read` call; slots and hair evidence come from it. Body evidence is built only when `BodyTypeApplies` is true (so a weapon/hat/ring never has its content searched). A null read stays null for slots (existing `ReadFailure` diagnostic) and sets `ContentReadFailed`.
 
 - [ ] **Step 1: Write the failing tests.** Locate the existing ScanProcessor test fixture (`Glob`), reuse its helper for building a `ScanSeed` and a temp mod directory, then add:
@@ -1371,6 +1461,19 @@ git commit -m "feat: resolve a mod's body from tiered candidates and the user pr
     }
 ```
 
+Add one more test to the same class, using the fixture's way of building a prepared `ScanProcessor`:
+
+```csharp
+    [Fact]
+    public void Prepare_PublishesTheLabelsOfTheListItBuiltItsMatcherFrom()
+    {
+        var processor = PreparedProcessor(); // the fixture's helper: new ScanProcessor(...) then Prepare(CancellationToken.None)
+
+        Assert.Contains("Bibo+", processor.BodyLabels);
+        Assert.Equal(processor.BodyLabels.Count, processor.BodyLabels.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+```
+
 `ProcessGearWithConfig(name, configJson)` is a small helper you add to that test class: create a temp mod directory, write `configJson` to `meta.json`, build a `ScanSeed` for it with a Gear-classifying `ChangedItemKeys` entry the same way the neighbouring tests do, call `Prepare` then `Process`. (The existing `BodyTypeApplies`/gear tests in that file show the exact seed shape; copy it rather than inventing one.)
 
 Add to `OrganizerExportFormatterTests`:
@@ -1423,10 +1526,23 @@ Add to `OrganizerExportFormatterTests`:
     public BodyCandidates? BodyCandidates { get; init; }
 ```
 
-`ScanProcessor.cs` - add field `private BodyPriority _defaultBodyPriority = BodyPriority.Default([]);` and in `Prepare`, after `_bodyTypeMatcher = ...`:
+`ScanProcessor.cs` - add the field and property:
 
 ```csharp
-        _defaultBodyPriority = BodyPriority.Default(bodyResult.Document.Bodies.Select(b => b.Label));
+    private BodyPriority _defaultBodyPriority = BodyPriority.Default([]);
+
+    /// <summary>
+    /// The labels of the body list this scan's matcher was built from. Published with the rows so the
+    /// Sort tab ranks exactly the bodies the evidence was matched against.
+    /// </summary>
+    public IReadOnlyList<string> BodyLabels { get; private set; } = [];
+```
+
+and in `Prepare`, after `_bodyTypeMatcher = ...`:
+
+```csharp
+        BodyLabels = [.. bodyResult.Document.Bodies.Select(b => b.Label)];
+        _defaultBodyPriority = BodyPriority.Default(BodyLabels);
 ```
 
 Replace the gear block, hair block and body block of `Process` (lines 74-121) with:
@@ -1511,12 +1627,15 @@ git commit -m "feat: scan stores tiered body candidates from one shared config w
 
 **Files:**
 - Modify: `PenumbraOrganizer.Plugin/Organizer/SortFolderSelectors.cs` (`Select` signature line 33-42, `Type()` line 61-63)
-- Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs` (the six-arg `Sort` overload, ~lines 517-522)
-- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateSortBodyTests.cs`
+- Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs` (the six-arg `Sort` overload, ~lines 517-522; plus a new `StagedBodyPriority` property)
+- Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerModRow.cs` (`StagedBodyResolution`)
+- Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerExportFormatter.cs` (staged lines) and its caller(s): `Grep "OrganizerExportFormatter.Format("` and pass `state.StagedBodyPriority`
+- Test: `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateSortBodyTests.cs`, `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerExportFormatterTests.cs`
 
 **Interfaces:**
 - Consumes: `BodyPriorityResolver.Resolve`, `BodyPriority`.
 - Produces: `SortFolderSelectors.Select(..., bool splitBody = false, BodyPriority? bodyPriority = null)` and `OrganizerState.Sort(..., bool splitBody = false, BodyPriority? bodyPriority = null)`. With a priority AND candidates on the row the body is resolved live; otherwise the row's stored `BodyType` is used, which keeps every existing caller and test (and the template planner, which passes neither) unchanged.
+  - `OrganizerModRow.StagedBodyResolution` (`BodyResolution?`, `{ get; set; }`) and `OrganizerState.StagedBodyPriority` (`BodyPriority?`, `{ get; private set; }`): the resolution and priority the LAST sort actually used, so a dump after a custom-priority sort explains the proposed folder instead of reporting the scan's default winner. Both are null when the last sort had the body split off.
 
 - [ ] **Step 1: Write the failing tests** (append to `OrganizerStateSortBodyTests`; add `using PenumbraOrganizer.Plugin.Organizer.BodyTypes; using PenumbraOrganizer.Plugin.Organizer.Classification;`)
 
@@ -1576,6 +1695,37 @@ git commit -m "feat: scan stores tiered body candidates from one shared config w
     }
 
     [Fact]
+    public void Sort_RecordsTheResolutionAndPriorityItActuallyUsed_AcrossTwoSorts()
+    {
+        var state = WithMultiBodyMod();
+        var row = state.Mods.Single();
+
+        var rueFirst = BodyPriority.Normalize(["Rue+"], Bodies);
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true, bodyPriority: rueFirst);
+        Assert.Equal(new BodyResolution("Rue+", BodyEvidenceTier.Content, BodyEvidenceSource.Option), row.StagedBodyResolution);
+        Assert.Equal(rueFirst, state.StagedBodyPriority);
+        Assert.Equal("YAB", row.BodyType); // the scan's default-order winner is unchanged and no longer the whole story
+
+        var yabFirst = BodyPriority.Normalize(["YAB"], Bodies);
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true, bodyPriority: yabFirst);
+        Assert.Equal("YAB", row.StagedBodyResolution!.Label);
+        Assert.Equal(yabFirst, state.StagedBodyPriority);
+    }
+
+    [Fact]
+    public void Sort_BodySplitOff_ClearsTheStagedResolutionAndPriority()
+    {
+        var state = WithMultiBodyMod();
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: true,
+            bodyPriority: BodyPriority.Default(Bodies));
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitBody: false);
+
+        Assert.Null(state.Mods.Single().StagedBodyResolution);
+        Assert.Null(state.StagedBodyPriority);
+    }
+
+    [Fact]
     public void Sort_RowsWithoutCandidates_KeepTheirStoredBodyType_EvenWithAPriority()
     {
         var state = WithMods(); // the existing fixture: rows carry BodyType only
@@ -1614,18 +1764,99 @@ Add the helper beside `KnownSegment`:
             : row.BodyType;
 ```
 
-In `OrganizerState.Sort` (the overload with `splitBody`):
+In `OrganizerModRow.cs` add:
 
 ```csharp
-    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
-                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
-                    bool splitBody = false, BodyPriority? bodyPriority = null) =>
-        Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
-                                               splitHair: splitHair, hairPriority: hairPriority,
-                                               splitBody: splitBody, bodyPriority: bodyPriority));
+    /// <summary>
+    /// The body resolution the most recent sort used to stage this row's proposal, or null when that
+    /// sort had the body split off, the row has no candidates, or none matched. Unlike
+    /// <see cref="BodyType"/> (the scan's DEFAULT-order winner) this changes with the priority, so a
+    /// dump after a custom-priority sort explains the folder the row was actually proposed.
+    /// </summary>
+    public BodyResolution? StagedBodyResolution { get; set; }
 ```
 
-(add the `BodyTypes` using to `OrganizerState.cs` if absent).
+In `OrganizerState.cs` add the property and change the `Sort` overload that takes `splitBody` (add the `BodyTypes` using if absent):
+
+```csharp
+    /// <summary>The body priority the last sort used, or null when it had the body split off.</summary>
+    public BodyPriority? StagedBodyPriority { get; private set; }
+
+    public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
+                    Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
+                    bool splitBody = false, BodyPriority? bodyPriority = null)
+    {
+        // Recorded BEFORE the paths are computed, from the same inputs, so the explanation and the
+        // proposal cannot disagree. Cleared when the split is off so a stale one never lingers.
+        StagedBodyPriority = splitBody ? bodyPriority : null;
+        foreach (var row in Mods)
+        {
+            row.StagedBodyResolution = splitBody && bodyPriority is not null
+                ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority)
+                : null;
+        }
+
+        return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
+                                                      splitHair: splitHair, hairPriority: hairPriority,
+                                                      splitBody: splitBody, bodyPriority: bodyPriority));
+    }
+```
+
+`Mods` is the enumerable of rows the tests already use (`state.Mods`); if it is a snapshot copy rather than the live rows, iterate the underlying row collection instead - the assignment must reach the same row objects `Sort` re-paths.
+
+In `OrganizerExportFormatter.cs`, change the signature to `Format(IReadOnlyList<OrganizerModRow> mods, ReviewResult validation, BodyPriority? stagedBodyPriority = null)` (keep the existing parameter types exactly as they are; only append the optional one), emit a header line next to the other counts:
+
+```csharp
+        if (stagedBodyPriority is not null)
+            sb.AppendLine($"Body priority used for the last sort: {string.Join(" > ", stagedBodyPriority.Labels)}");
+```
+
+and, directly after the `BodyEvidence:` line from Task 7:
+
+```csharp
+            if (mod.StagedBodyResolution is { } staged)
+                sb.AppendLine($"StagedBody: {staged.Label} ({staged.Tier}/{staged.Source})");
+```
+
+Update the call site(s) to pass `state.StagedBodyPriority`. Add to `OrganizerExportFormatterTests`:
+
+```csharp
+    [Fact]
+    public void Format_AfterTwoSortsWithDifferentPriorities_ExplainsEachProposal()
+    {
+        var state = new OrganizerState();
+        state.LoadScan(
+        [
+            new OrganizerModRow { Identifier = "m", Name = "Succubus", Author = "Ann",
+                CurrentPath = "Succubus", ProposedPath = "Succubus",
+                Category = ModCategory.Gear, SubCategory = "Top", BodyType = "YAB",
+                BodyCandidates = new BodyCandidates
+                {
+                    Content = [new BodyCandidate("YAB", BodyEvidenceSource.Option),
+                               new BodyCandidate("Rue+", BodyEvidenceSource.Option)],
+                } },
+        ], new HashSet<string>());
+        var bodies = new[] { "YAB", "Rue+" };
+        var review = new ReviewResult([], new Dictionary<string, List<string>>());
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitBody: true,
+            bodyPriority: BodyPriority.Normalize(["Rue+"], bodies));
+        var first = OrganizerExportFormatter.Format([.. state.Mods], review, state.StagedBodyPriority);
+
+        state.Sort(SortStrategy.TypeOnly, true, false, false, s => s, splitBody: true,
+            bodyPriority: BodyPriority.Normalize(["YAB"], bodies));
+        var second = OrganizerExportFormatter.Format([.. state.Mods], review, state.StagedBodyPriority);
+
+        Assert.Contains("Body priority used for the last sort: Rue+ > YAB", first);
+        Assert.Contains("StagedBody: Rue+ (Content/Option)", first);
+        Assert.Contains("ProposedPath: Gear/Rue+/Top/Succubus", first);
+        Assert.Contains("BodyType: YAB", first); // the default winner, still reported, no longer misleading
+
+        Assert.Contains("Body priority used for the last sort: YAB > Rue+", second);
+        Assert.Contains("StagedBody: YAB (Content/Option)", second);
+        Assert.Contains("ProposedPath: Gear/YAB/Top/Succubus", second);
+    }
+```
 
 - [ ] **Step 4: Run**
 
@@ -1647,17 +1878,21 @@ git commit -m "feat: resolve the body against the live priority at sort time" -m
 - Modify: `PenumbraOrganizer.Plugin/Configuration.cs`
 - Modify: `PenumbraOrganizer.Plugin/Windows/SortPanel.cs`
 - Modify: `PenumbraOrganizer.Plugin/Windows/MainWindow.SortTab.cs` (`_sortPanel.Draw(...)` call, line 21-24)
-- Modify: `PenumbraOrganizer.Plugin/Plugin.cs` (body-label cache)
-- Test: `PenumbraOrganizer.Plugin.Tests/ConfigurationTests.cs`, `PenumbraOrganizer.Plugin.Tests/Windows/SortSelectionTests.cs`, `PenumbraOrganizer.Plugin.Tests/Windows/TemplateFallbackConversionTests.cs` (line 50)
+- Modify: `PenumbraOrganizer.Plugin/Organizer/OrganizerState.cs` (`LoadScan` + `BodyLabels`)
+- Modify: the scan job that publishes a finished scan (`Grep "Warnings"` under `LibraryWork/` to find where `ScanProcessor.Warnings` is read) to pass `processor.BodyLabels` to `LoadScan`
+- Modify: `PenumbraOrganizer.Plugin/Windows/HelpTopics.cs`, `HelpTopicUsage.cs`, `HelpTab.cs`, `Resources/help-content.json` (the new `sort.body-priority` topic - registered HERE, before the panel references it)
+- Test: `PenumbraOrganizer.Plugin.Tests/ConfigurationTests.cs`, `PenumbraOrganizer.Plugin.Tests/Windows/SortSelectionTests.cs`, `PenumbraOrganizer.Plugin.Tests/Windows/TemplateFallbackConversionTests.cs` (line 50), `PenumbraOrganizer.Plugin.Tests/Organizer/OrganizerStateTests.cs`
 
 **Interfaces:**
-- Consumes: `BodyPriority`, `BodyTypeListStore.LoadForMatching`.
+- Consumes: `BodyPriority`, `BodyPriority.Repair`, `ScanProcessor.BodyLabels`, `BodyTypeListStore.LoadForMatching`.
 - Produces:
   - `Configuration.BodyPriority` (`List<string>`), `Configuration.HairRaceCode` (`string?`), `Configuration.MidlanderFallback` (`bool`).
   - `SortSelection` gains an 8th primary-constructor parameter `BodyPriority? BodyPriority = null`.
-  - `SortPanel.Draw(..., Func<IReadOnlyList<string>> getBodyLabels, Action? onShowSortHelp = null)`.
-  - `Plugin.BodyLabels` (`IReadOnlyList<string>`, replaced by reference on refresh) and `Plugin.RefreshBodyLabels()`.
-- Persists: priority list, hair race, Midlander fallback. Group by and the four split checkboxes stay session state.
+  - `OrganizerState.LoadScan(rows, knownIdentifiers, IReadOnlyList<string>? bodyLabels = null)` and `OrganizerState.BodyLabels` (`IReadOnlyList<string>?`, null until a scan has published). The labels travel WITH the rows, so the evidence and the priority that ranks it share one snapshot of the body list; there is no second load after publication.
+  - `SortPanel.Draw(..., Func<IReadOnlyList<string>> getBodyLabels, Action? onShowSortHelp = null)`; `MainWindow` supplies `() => state.BodyLabels ?? _plugin.BundledBodyLabels`.
+  - `Plugin.BundledBodyLabels` (`IReadOnlyList<string>`): loaded ONCE in the constructor from `BodyTypeListStore.LoadForMatching`, used only before the first scan so the panel is usable on a fresh load. After a scan the published snapshot always wins.
+  - `sort.body-priority` help topic.
+- Persists: priority list, hair race, Midlander fallback. A normalized priority that differs from the saved non-empty list is WRITTEN BACK (`BodyPriority.Repair`). Group by and the four split checkboxes stay session state.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1728,6 +1963,24 @@ git commit -m "feat: resolve the body against the live priority at sort time" -m
     }
 ```
 
+`OrganizerStateTests.cs`:
+
+```csharp
+    [Fact]
+    public void LoadScan_PublishesTheBodyLabelsWithTheRows()
+    {
+        var state = new OrganizerState();
+        Assert.Null(state.BodyLabels);
+
+        state.LoadScan([], new HashSet<string>(), ["Bibo+", "Rue+"]);
+        Assert.Equal(["Bibo+", "Rue+"], state.BodyLabels);
+
+        // A later scan replaces them, so a removed body is gone from the ranking surface at once.
+        state.LoadScan([], new HashSet<string>(), ["Rue+"]);
+        Assert.Equal(["Rue+"], state.BodyLabels);
+    }
+```
+
 `TemplateFallbackConversionTests.cs` line 50: change `Assert.Equal(7, ...SortSelection...)` to `Assert.Equal(8, ...)` and extend the comment: the new field is the body priority, deliberately not stored by templates for the same reason the hair priority and body split are not (a shared template must not re-folder a recipient's gear against a body list they may hold a different version of). `TemplateFallback` stays at 3.
 
 - [ ] **Step 2: Run and see them fail.** `--filter "FullyQualifiedName~ConfigurationTests|FullyQualifiedName~SortSelectionTests|FullyQualifiedName~TemplateFallbackConversionTests"` -> build FAIL.
@@ -1751,6 +2004,22 @@ git commit -m "feat: resolve the body against the live priority at sort time" -m
     /// <summary>The Midlander hair fallback. A set-once preference.</summary>
     public bool MidlanderFallback { get; set; }
 ```
+
+**Help topic first** (so everything below compiles). In `HelpTopics.cs` add after `SortSplitBody`:
+`public static readonly HelpTopic SortBodyPriority = new("sort.body-priority");`
+add `HelpTopics.SortBodyPriority,` after `HelpTopics.SortSplitBody,` in `HelpTopicUsage.cs` (~line 35) and in the Sort section of `HelpTab.cs` (~line 121), and add to `Resources/help-content.json` after the `sort.split-body` entry:
+
+```json
+    {
+      "id": "sort.body-priority",
+      "title": "Body priority",
+      "short": "When a mod supports more than one body, it is filed under whichever of them ranks highest here. Mods that name only one body are not affected. Move a body with the arrows; your order is saved."
+    },
+```
+
+**Scan labels travel with the rows.** In `OrganizerState` add `public IReadOnlyList<string>? BodyLabels { get; private set; }` and give `LoadScan` a trailing optional parameter `IReadOnlyList<string>? bodyLabels = null` that sets it (keep the existing parameters and behavior; every current caller and test still compiles). In the scan job's publish step, pass `processor.BodyLabels` the same place `processor.Warnings` is read. Do NOT call `BodyTypeListStore` again after publication.
+
+`Plugin.cs`: add `public IReadOnlyList<string> BundledBodyLabels { get; }` assigned once in the constructor from `BodyTypeListStore.LoadForMatching(<the same config directory the scan is given>).Document.Bodies.Select(b => b.Label)` (use whatever the file already calls to get that directory; grep `new ScanProcessor(`). It is only the pre-scan fallback.
 
 `SortPanel.cs`:
 
@@ -1799,13 +2068,20 @@ public readonly record struct SortSelection(
             _midlanderFallback = config.MidlanderFallback;
         }
 
-        // Re-repaired only when the label list is a new instance, i.e. after a rescan changed the
-        // body list, so this costs nothing per frame. Normalize drops stale labels and appends new
-        // bodies, so a saved list from an older build or a different user list is always valid.
+        // Re-repaired only when the label list is a new instance, i.e. after a rescan published a
+        // different body list, so this costs nothing per frame. Repair drops stale labels and
+        // appends new bodies, and WRITES THE RESULT BACK when it changed a non-empty saved list:
+        // left in the file, a removed body would keep its old rank and regain it if it returned.
+        // An empty saved list means "default" and stays empty, following the shipped order.
         if (!ReferenceEquals(_bodyLabelsSeen, bodyLabels))
         {
             _bodyLabelsSeen = bodyLabels;
-            _bodyPriority = BodyPriority.Normalize(config.BodyPriority, bodyLabels);
+            _bodyPriority = BodyPriority.Repair(config.BodyPriority, bodyLabels, out var needsSave);
+            if (needsSave)
+            {
+                config.BodyPriority = [.. _bodyPriority.Labels];
+                saveConfig();
+            }
         }
 ```
 
@@ -1868,7 +2144,13 @@ and the method:
         ImGui.EndChild();
 
         if (ImGui.Button("Reset to default##body-priority-reset"))
-            SetBodyPriority(config, saveConfig, BodyPriority.Default(bodyLabels));
+        {
+            // An EMPTY saved list is what "default" means, so a reset keeps following the shipped
+            // order across releases instead of freezing today's order into the file.
+            _bodyPriority = BodyPriority.Default(bodyLabels);
+            config.BodyPriority = [];
+            saveConfig();
+        }
 
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortBodyPriority, splitsApply ? null : SplitsInapplicableReason);
@@ -1900,28 +2182,13 @@ If the repo's other `BeginChild` uses show a different overload shape (e.g. with
         }
 ```
 
-`Plugin.cs`: find where the plugin's config directory is available (grep `new ScanProcessor(` / `GetPluginConfigDirectory`) and where a finished scan is published to `OrganizerState` (grep `LoadScan`). Add:
-
-```csharp
-    /// <summary>The current body labels, in list order. A new instance after each refresh, which is how SortPanel knows to re-repair the saved priority.</summary>
-    public IReadOnlyList<string> BodyLabels { get; private set; } = [];
-
-    public void RefreshBodyLabels()
-    {
-        var result = BodyTypeListStore.LoadForMatching(PluginInterface.GetPluginConfigDirectory());
-        BodyLabels = [.. result.Document.Bodies.Select(b => b.Label)];
-    }
-```
-
-Call `RefreshBodyLabels()` once at the end of the constructor and again where a completed scan is published (after `LoadScan`), so a user-list edit is picked up by the rescan the user already runs. (`GetPluginConfigDirectory` is a property/method on the injected plugin interface; use whatever the file already calls for the scan.) Warnings from the load are already surfaced by the scan, so ignore `result.Warnings` here.
-
-`MainWindow.SortTab.cs` - pass it:
+`MainWindow.SortTab.cs` - pass the labels (the lambda returns the SAME instance every frame until a scan publishes another, which is what the panel's reference check relies on):
 
 ```csharp
         _sortPanel.Draw(
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
             _creatorCanonicalizer.Canonicalize,
-            () => _plugin.BodyLabels,
+            () => _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels,
             () => _sortHelpRequested = true);
 ```
 
@@ -1942,36 +2209,28 @@ git commit -m "feat: saved body priority, hair race and Midlander fallback, with
 ### Task 10: Help, docs and the full run
 
 **Files:**
-- Modify: `PenumbraOrganizer.Plugin/Windows/HelpTopics.cs` (add `SortBodyPriority = new("sort.body-priority")` after `SortSplitBody`)
-- Modify: `PenumbraOrganizer.Plugin/Windows/HelpTopicUsage.cs` (add `HelpTopics.SortBodyPriority,` after `SortSplitBody`, ~line 35)
-- Modify: `PenumbraOrganizer.Plugin/Windows/HelpTab.cs` (add it to the Sort section list after `SortSplitBody`, ~line 121)
-- Modify: `PenumbraOrganizer.Plugin/Resources/help-content.json` (the `sort.split-body` entry at line 169; new entry)
+- Modify: `PenumbraOrganizer.Plugin/Resources/help-content.json` (the `sort.split-body` entry at line 169)
 - Modify: `docs/USER_GUIDE.md`, `docs/HOW_SORTING_WORKS.md`, `docs/testing/2026-11-04-body-type-sorting-checklist.md`
 - Test: the existing help-content tests (find with `Grep "help-content" PenumbraOrganizer.Plugin.Tests`)
 
-**Interfaces:** none produced; consumes `HelpTopics.SortBodyPriority` already used by `SortPanel` (Task 9, which does not compile without it - so do the three C# lines of this task FIRST if Task 9 was built before it).
+**Interfaces:** none produced. The `sort.body-priority` topic was registered in Task 9 (the panel references it, so it had to exist before that build).
 
-- [ ] **Step 1: Add the topic.** Add the three C# lines above. In `help-content.json` replace the `sort.split-body` `short` and add the new entry after it:
+- [ ] **Step 1: Update the split-body copy.** In `help-content.json` replace the `sort.split-body` `short`. Do NOT say a mod with no body "is left where it was": ordinary sorting can still move it, only the body subfolder is absent.
 
 ```json
     {
       "id": "sort.split-body",
       "title": "Split body by body type",
-      "short": "Puts gear in a folder named after the body it was made for, as Gear/Bibo+/Top. Body mods too. The body comes from the mod's options and files first, then its name, then the folder it sits in. A mod that shows none is left where it was."
-    },
-    {
-      "id": "sort.body-priority",
-      "title": "Body priority",
-      "short": "When a mod supports more than one body, it is filed under whichever of them ranks highest here. Mods that name only one body are not affected. Move a body with the arrows; your order is saved."
+      "short": "Puts gear in a folder named after the body it was made for, as Gear/Bibo+/Top. Body mods too. The body comes from the mod's options and files first, then its name, then the folder it sits in. If none of those names a body, no body subfolder is added."
     },
 ```
 
-Optionally run the copy past the `design:ux-copy` skill before committing; keep the same plain voice as the neighbouring entries.
+Search the docs and help for the same "left where it was" / "left flat" wording about body types (`Grep -i "left where it was|body.*left"` under `docs` and `Resources`) and make the same correction wherever it describes the body split. Optionally run the copy past the `design:ux-copy` skill; keep the plain voice of the neighbouring entries.
 
 - [ ] **Step 2: Run the help tests**
 
 Run: `dotnet test PenumbraOrganizer.Plugin.Tests/PenumbraOrganizer.Plugin.Tests.csproj --filter "FullyQualifiedName~Help"`
-Expected: PASS. A failure naming `sort.body-priority` means one of the three registration lists (usage, HelpTab section, content json) is missing it.
+Expected: PASS.
 
 - [ ] **Step 3: Update the docs.**
   - `docs/HOW_SORTING_WORKS.md`, "Body-type sub-classification": replace "name only" with the three tiers (inside the mod, then its name, then its library folder), the file-path rule table, that the priority list resolves ties and applies at sort time, and that a mod whose config cannot be read falls back to its name.
@@ -2007,3 +2266,12 @@ git commit -m "docs: body priority and content detection in help, guide and chec
 - Single Sort tab, no rename, collapsed section with arrows and reset, same disabling as the checkbox: Task 9.
 - Help topic, docs, checklist, PDF: Task 10.
 - Type consistency: `BodyCandidates`/`BodyCandidate`/`BodyEvidenceSource` (Task 4) are used unchanged in Tasks 6-8; `BodyEvidenceTier` and `BodyResolution` (Task 6) only in Task 6/7; `BodyPriority` members `Normalize`, `Default`, `Rank`, `MoveUp`, `MoveDown`, `Labels` (Task 5) match every later use; `ModContent` (Task 3) matches Task 4's test helper and Task 7.
+
+## Revision after plan review (2026-11-05)
+
+- `MatchAll` claims every accepted occurrence's span and deduplicates only the output labels (Task 1, repeated-long-alias and same-body-aliases tests).
+- `BodyPriority.Labels` is a read-only wrapper over a private array, with a mutation-protection test (Task 5).
+- Diagnostics explain the actual placement: `OrganizerModRow.StagedBodyResolution` and `OrganizerState.StagedBodyPriority` are recorded by each sort, and the dump shows the priority used plus `StagedBody:` per row, tested across two sorts with different priorities (Task 8).
+- Evidence and priority share one body-list snapshot: `ScanProcessor.BodyLabels` is published with the rows through `LoadScan`; there is no second load after publication. `Plugin.BundledBodyLabels` is only the pre-first-scan fallback (Tasks 7, 9).
+- A repaired non-empty priority is written back to config via `BodyPriority.Repair`; an empty list stays "default"; Reset writes an empty list. Remove, reload, reintroduce is tested (Tasks 5, 9).
+- The help topic is registered in Task 9, before the panel references it. The split-body copy says "no body subfolder is added" rather than "left where it was" (Task 10).
