@@ -81,7 +81,34 @@ public sealed partial class MainWindow
             Help.Tooltip(HelpTopics.HistoryDeleteSnapshot, gates.CanCreateBackup ? null : ActivityGateReason);
             if (deleteButtonClicked)
             {
-                DeleteHistorySnapshot(snapshot.Id);
+                _pendingDeleteSnapshotId = snapshot.Id;
+                ImGui.OpenPopup("Delete snapshot?");
+            }
+
+            if (_pendingDeleteSnapshotId == snapshot.Id)
+                ImGui.SetNextWindowSize(new Vector2(StandardPopupWidth, 0), ImGuiCond.Appearing);
+            if (_pendingDeleteSnapshotId == snapshot.Id && ImGui.BeginPopupModal("Delete snapshot?"))
+            {
+                ImGui.TextWrapped($"Delete this backup? {title}");
+                ImGui.TextWrapped("Your mods are not touched. The saved snapshot is removed for good and cannot be recovered.");
+                // The destructive choice is coloured and is not the first button, so a reflexive
+                // Enter or click on the left cannot confirm it.
+                if (ImGui.Button("Cancel"))
+                {
+                    _pendingDeleteSnapshotId = null;
+                    ImGui.CloseCurrentPopup();
+                }
+                ImGui.SameLine();
+                ImGui.PushStyleColor(ImGuiCol.Text, PluginTheme.CollisionBad);
+                var confirmDelete = ImGui.Button("Yes, delete");
+                ImGui.PopStyleColor();
+                if (confirmDelete)
+                {
+                    DeleteHistorySnapshot(snapshot.Id);
+                    _pendingDeleteSnapshotId = null;
+                    ImGui.CloseCurrentPopup();
+                }
+                ImGui.EndPopup();
             }
 
             if (_pendingRestoreSnapshotId == snapshot.Id)

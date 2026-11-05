@@ -102,13 +102,13 @@
     },
     {
       "id": "protect.toggle-all",
-      "title": "Toggle protect all",
-      "short": "Protects every mod if any are unprotected, and unprotects them all otherwise. A protected mod keeps its current folder through every Sort and Apply."
+      "title": "Protect all / Unprotect all",
+      "short": "Protects every mod if any are unprotected; when all are protected, the button reads Unprotect all and clears them. A protected mod keeps its current folder through every Sort and Apply."
     },
     {
       "id": "protect.toggle-heliosphere",
-      "title": "Toggle Heliosphere protection",
-      "short": "Protects or unprotects every Heliosphere-managed mod at once. Unprotecting lasts this session only - the next Scan re-protects them, since Heliosphere owns where they live."
+      "title": "Protect / Unprotect Heliosphere mods",
+      "short": "Protects or unprotects (the button names which) every Heliosphere-managed mod at once. Unprotecting lasts this session only - the next Scan re-protects them, since Heliosphere owns where they live."
     },
     {
       "id": "protect.folders",
@@ -288,7 +288,7 @@
     {
       "id": "history.delete-snapshot",
       "title": "Delete snapshot",
-      "short": "Deletes this backup permanently. Your mods are not touched - only the saved snapshot goes, and it cannot be recovered afterwards."
+      "short": "Deletes this backup permanently, after you confirm. Your mods are not touched - only the saved snapshot goes, and it cannot be recovered afterwards."
     },
     {
       "id": "search.build-index",
