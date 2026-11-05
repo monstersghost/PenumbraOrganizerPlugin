@@ -127,8 +127,18 @@ public sealed partial class MainWindow
             else if (operationState.RequiresRecovery)
                 ImGui.TextColored(PluginTheme.CollisionBad, "Apply requires recovery - see the plugin log.");
             else
+            {
                 ImGui.TextUnformatted($"Last Apply: {operationState.Stage} ({operationState.SuccessfulTargets}/{operationState.TotalTargets} succeeded).");
+                if (operationState.SuccessfulTargets < operationState.TotalTargets)
+                {
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton("Show failed mods##show-failures"))
+                        OpenFailureWindow();
+                }
+            }
         }
+
+        DrawFailureWindow();
 
         ImGui.Spacing();
         DrawDiagnosticsGroup();
@@ -219,6 +229,12 @@ public sealed partial class MainWindow
         Help.Tooltip(HelpTopics.ReviewShowConfigFile);
 
         ImGui.SameLine();
+        if (ImGui.Button("Failed mods"))
+            OpenFailureWindow();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Lists the mods the most recent Apply or Restore could not move, with the reason Penumbra gave.");
+
+        ImGui.SameLine();
         if (ImGui.Button("Create Diagnostic Dump"))
             _lastDiagnosticDumpPath = CreateDiagnosticDump();
         Help.Tooltip(HelpTopics.ReviewDiagnosticDump);
@@ -232,6 +248,56 @@ public sealed partial class MainWindow
             if (ImGui.Button("Show Dump File"))
                 OpenContainingFolder(_lastDiagnosticDumpPath);
         }
+    }
+
+    private Organizer.Operations.LastOperationFailureReport? _failureReport;
+    private bool _failureWindowOpen;
+
+    // Read once when opened, not per frame: it is a handful of small file reads.
+    private void OpenFailureWindow()
+    {
+        _failureReport = Organizer.Operations.LastOperationFailures.Load(_plugin.OperationsRoot);
+        _failureWindowOpen = true;
+    }
+
+    private void DrawFailureWindow()
+    {
+        if (!_failureWindowOpen)
+            return;
+
+        ImGui.SetNextWindowSize(new Vector2(640, 300), ImGuiCond.Appearing);
+        if (!ImGui.Begin("Failed mods##failed-mods-window", ref _failureWindowOpen))
+        {
+            ImGui.End();
+            return;
+        }
+
+        var report = _failureReport;
+        if (report is null)
+        {
+            ImGui.TextWrapped("No finished operation was found on disk.");
+        }
+        else if (report.Failures.Count == 0)
+        {
+            ImGui.TextWrapped($"The last {report.Type} (finished {report.UpdatedAt.ToLocalTime():g}) had no failed mods.");
+        }
+        else
+        {
+            ImGui.TextWrapped(
+                $"The last {report.Type} (finished {report.UpdatedAt.ToLocalTime():g}) could not move "
+                + $"{report.Failures.Count} mod(s). \"Wanted\" is the path it was being moved to.");
+            ImGui.Separator();
+            foreach (var failure in report.Failures)
+            {
+                ImGui.TextColored(PluginTheme.CollisionBad, StripImGuiIdMarkers(failure.ModName));
+                ImGui.TextWrapped($"Reason: {failure.Reason}");
+                if (failure.TargetPath.Length > 0)
+                    ImGui.TextWrapped($"Wanted: {failure.TargetPath}");
+                ImGui.Spacing();
+            }
+        }
+
+        ImGui.End();
     }
 
     private void DrawOrphanedFoldersSection()
