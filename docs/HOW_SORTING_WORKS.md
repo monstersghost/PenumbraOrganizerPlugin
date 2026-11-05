@@ -168,10 +168,36 @@ The **Split hair by hair number** checkbox defaults off and is disabled when Gro
 
 ## Body-type sub-classification (which body gear was made for)
 
-Unlike the gear and hair passes, this one reads the mod's **name**, and it has to: a garment made for
-Bibo+ replaces its own equipment set, not the body's models, and nothing in its files names the body.
-Proteus establishes the same fact by mesh and UV correspondence against the body's own meshes, which
-is far more work than a sort should do. So a match here is a STATED intent, not a verified one.
+Unlike the gear and hair passes, this one cannot verify the body from the mesh: a garment made for
+Bibo+ replaces its own equipment set, not the body's models. Proteus establishes the fact by mesh and
+UV correspondence against the body's own meshes, which is far more work than a sort should do. So a
+match here is a STATED intent, not a verified one. The statement is looked for in three tiers, and a
+later tier is used only when the earlier ones found no body:
+
+1. **Inside the mod.** Option group names, option names, and the FIRST folder of the mod-relative
+   file paths in its config. The mod's own title is not part of this tier.
+2. **The mod's name.** This was the only source before body priority existed.
+3. **The library folders above the mod.** Least reliable (a Heliosphere folder, for example), so last.
+
+For file paths only the first folder counts:
+
+| Path | Counts? |
+|---|---|
+| `Prestige YAB+/top.mdl` | yes, first folder names YAB+ |
+| `Bibo+/chest.tex` | yes |
+| `shared/Bibo/file.tex` | no, Bibo is not the first folder |
+| `common/textures/rue.tex` | no |
+| `rue_top.mdl` (root file) | no, no folder |
+
+When a mod's content supports more than one body, the user's body priority list (Sort tab, Body
+priority section) picks the highest-ranked. The list is applied when Sort is pressed, not at scan
+time, so reordering it and sorting again re-files mods without a rescan. A mod whose config cannot
+be read falls back to its name. A mod with no body anywhere gets no body subfolder; ordinary sorting
+can still move it.
+
+The diagnostic dump shows why a mod landed where it did: a `BodyEvidence:` line per mod (the
+candidates found, by tier) and, after a sort, a `StagedBody:` line plus a "Body priority used for
+the last sort" header line.
 
 Two things gate it, in this order, in `ScanProcessor.Process`:
 
@@ -184,7 +210,7 @@ Two things gate it, in this order, in `ScanProcessor.Process`:
    case that motivates this: it replaces `chara/weapon/...`, resolves no equipment slot, and yet
    classifies as `Gear` like any other item. Slots that could not be read count as no evidence, not
    as permission. This needs no extra disk read - the gear pass above already resolved these slots.
-2. Only then does `BodyTypeMatcher.Match` look at the name.
+2. Only then is the evidence above gathered, with `BodyTypeMatcher.Match` doing the name matching.
 
 The matcher lower-cases invariantly and splits on everything that is not a letter, a digit or `+`.
 Keeping `+` attached is the whole reason it does not reuse `NpcNameMatcher`'s tokenizer, which treats

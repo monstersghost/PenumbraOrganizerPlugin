@@ -265,8 +265,8 @@ comes before the equipment slot, so everything made for one body sits together i
 spread across the nine slot folders. It is off by default. The slot split is separate: turn that off
 and you get `Gear/Bibo+` with nothing below it.
 
-The body comes from the mod's name. Nothing inside a dress says which body it was cut for, so the
-name is all there is to go on. The plugin knows 30 bodies and 120 ways of writing them, including
+The body comes from the mod's options and files first (option group names, option names and the
+first folder of its file paths), then its name, then the library folder it sits in. The plugin knows 30 bodies and 120 ways of writing them, including
 `Bibo+`, `Rue+`, `YAB`, `TnF`, `TF3`, `TBSE` and `Neolithe`. Variants go in with their parent, so a
 TBSE-X mod lands in `Gear/TBSE` and a YAB Buff mod in `Gear/YAB`.
 
@@ -275,9 +275,8 @@ are the four pieces a body mod replaces. Weapons, hats, earrings, necklaces, bra
 never get a body folder, so a weapon called "Artemis Bow" stays where it is instead of being filed
 under the Artemis body.
 
-A mod whose name matches no body the plugin knows is left where it would have gone otherwise.
-Because this works from names, a mod that merely happens to have a body's name in its title can end
-up filed under it. Review Changes shows every move before anything happens, so one wrong guess is
+A mod with no body anywhere gets no body subfolder; ordinary sorting can still place it. A mod that
+merely happens to have a body's name in its title can end up filed under it. Review Changes shows every move before anything happens, so one wrong guess is
 one line to put right.
 
 You can add bodies it does not know, or fix one it has wrong, by creating `body-type-list.json` in
@@ -590,9 +589,17 @@ sits together. That is worth having when you change body and need to know what s
 control is **Split gear and body mods by body type** on the Sort tab, described under [Sort](#sort)
 above.
 
-The body comes from the mod's name, because nothing inside a dress says which body it was cut for.
-Only gear in the Top, Hands, Legs and Feet slots is looked at, so weapons, hats and jewellery never
+The body comes from the mod's options and files first, then its name, then the library folders
+above it. Only gear in the Top, Hands, Legs and Feet slots is looked at, so weapons, hats and jewellery never
 get a body folder.
+
+### Body priority
+
+Under the body-type checkbox on the Sort tab is a collapsed **Body priority** section. When a mod
+supports more than one body, it is filed under the highest-ranked one. Use the up and down arrows to
+reorder, or **Reset to default**. The order is saved between sessions, and so are the hair priority
+race and the Midlander fallback. The order is applied when you press Sort, so reordering and sorting
+again re-files mods without a rescan. Group by and the split checkboxes are still per-session.
 
 To add bodies the plugin does not know, create `body-type-list.json` in the configuration folder;
 see [Where files live](#where-files-live). Read the caveat at the bottom of this page first.
@@ -651,12 +658,14 @@ Hair numbers are read from the mod's files, and also from the EST entries in its
 value has not yet been confirmed in game to be the hair number. If a mod is filed under a number that
 is not the hair it replaces, turn Split hair off and report the mod name and both numbers on Discord.
 
-Body types come from the mod's **name**, not its files, because nothing inside a dress says which
-body it was cut for. That cuts both ways. A mod whose title does not mention its body will not be
-filed under one, even though it was made for a body. And a mod that merely has a body's name in its
-title can be filed under that body: "Rue de la Paix" reads as a Rue+ garment. Look over the proposed
-paths before you apply them, where one wrong guess is one line to put right. `artemis` is the one
-ordinary word kept on purpose, because it is the only name that body goes by.
+Body types are read from the mod's options and files first, then its name, then its library
+folder. A mod titled for one body whose options offer only other bodies now files by its options, so
+some mods that filed by name before will move after a rescan. Review Changes shows every move before
+anything is applied. A mod whose config cannot be read falls back to its name. A mod whose content
+and name never mention its body will not be filed under one, and a mod that merely has a body's name
+in its title can still be filed under that body: "Rue de la Paix" reads as a Rue+ garment. Look over
+the proposed paths before you apply them, where one wrong guess is one line to put right. `artemis`
+is the one ordinary word kept on purpose, because it is the only name that body goes by.
 
 Whether Penumbra keeps a folder name containing `+`, `&` or `[` `]` exactly as given has not been
 confirmed in game yet, and twelve of the thirty bodies have a `+` in their name. If `Gear/Bibo+/Top`
