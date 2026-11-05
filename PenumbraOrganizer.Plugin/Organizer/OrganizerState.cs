@@ -82,20 +82,15 @@ public sealed class OrganizerState
 
     // previouslyProtectedFolderRules defaults to null (treated as empty) so every existing call
     // site across this test project that predates folder protection keeps compiling unchanged.
+    //
+    // bodyLabels is deliberately LAST: the third parameter is positional in many existing callers,
+    // so a body-labels call names it (`bodyLabels: ...`). There used to be a second overload that
+    // took the labels third; it made `LoadScan(rows, ids, null)` ambiguous, so it is gone.
     public void LoadScan(
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
         IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null,
         IReadOnlyList<string>? bodyLabels = null) =>
-        ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules, bodyLabels);
-
-    // Overload so the body labels can be passed third, as the labels travel WITH the rows. The
-    // labels parameter is required here so a two-argument call stays unambiguous.
-    public void LoadScan(
-        IEnumerable<OrganizerModRow> scanned,
-        IReadOnlySet<string> previouslyProtectedIdentifiers,
-        IReadOnlyList<string>? bodyLabels,
-        IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null) =>
         ReplaceScanAtomically(scanned, previouslyProtectedIdentifiers, previouslyProtectedFolderRules, bodyLabels);
 
     /// <summary>

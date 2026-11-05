@@ -90,8 +90,55 @@ public sealed class SortPanel
     private static readonly string[] HairRaceLabels =
         ["None", .. HairRaceCodes.All.Select(r => $"{r.Race} {(r.Gender == "Male" ? Male : Female)}")];
 
-    private static string? HairRaceCodeAt(int index) =>
+    // public, with HairRaceIndexFor and RefreshBodyPriority below: the pure decisions inside Draw,
+    // reachable from the test project (no InternalsVisibleTo) without touching ImGui.
+    public static string? HairRaceCodeAt(int index) =>
         index == 0 ? null : HairRaceCodes.All[index - 1].Code;
+
+    /// <summary>
+    /// The combo index for a saved race code: 0 (None) for null, and for a code this build's race
+    /// table does not contain, so a stale saved value can neither throw nor select a random row.
+    /// The inverse of <see cref="HairRaceCodeAt"/>.
+    /// </summary>
+    public static int HairRaceIndexFor(string? raceCode)
+    {
+        if (raceCode is null)
+            return 0;
+
+        var index = 0;
+        foreach (var race in HairRaceCodes.All)
+        {
+            index++;
+            if (race.Code == raceCode)
+                return index;
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Decides whether the saved body priority must be re-validated this frame, and does it.
+    /// Null means "nothing to do"; otherwise the repaired priority, with <paramref name="needsSave"/>
+    /// saying whether the saved list changed and must be written back.
+    /// </summary>
+    /// <remarks>
+    /// Nothing happens for an EMPTY label list: Repair against it would drop every saved entry and
+    /// report a save, wiping the user's ranking if the body list ever loaded empty. And nothing
+    /// happens while the label list is the same instance as last time, which is how a scan that
+    /// published a different body list is told apart from a frame that did not.
+    /// </remarks>
+    public static BodyPriority? RefreshBodyPriority(
+        IReadOnlyList<string> bodyLabels,
+        IReadOnlyList<string>? labelsSeen,
+        IReadOnlyList<string>? saved,
+        out bool needsSave)
+    {
+        needsSave = false;
+        if (bodyLabels.Count == 0 || ReferenceEquals(labelsSeen, bodyLabels))
+            return null;
+
+        return BodyPriority.Repair(saved, bodyLabels, out needsSave);
+    }
 
     // A rule and a coloured heading above each mod-type group. The rule is ImGui's own separator,
     // so the groups read as separate without a new widget.
@@ -116,22 +163,18 @@ public sealed class SortPanel
         if (!_prefsLoaded)
         {
             _prefsLoaded = true;
-            var raceIndex = config.HairRaceCode is null
-                ? 0
-                : Array.FindIndex(HairRaceCodes.All.ToArray(), r => r.Code == config.HairRaceCode) + 1;
-            _hairRaceIndex = Math.Max(raceIndex, 0);
+            _hairRaceIndex = HairRaceIndexFor(config.HairRaceCode);
             _midlanderFallback = config.MidlanderFallback;
         }
 
-        // Re-repaired only when the label list is a new instance, i.e. after a rescan published a
-        // different body list, so this costs nothing per frame. Repair drops stale labels and
-        // appends new bodies, and WRITES THE RESULT BACK when it changed a non-empty saved list.
-        // An empty saved list means "default" and stays empty. Guarded on a non-empty label list:
-        // Repair against an empty list would report needsSave and wipe the user's saved ranking.
-        if (bodyLabels.Count > 0 && !ReferenceEquals(_bodyLabelsSeen, bodyLabels))
+        // Re-repaired only when a scan published a different body list (see RefreshBodyPriority), so
+        // this costs nothing per frame. Repair drops stale labels and appends new bodies, and the
+        // result is WRITTEN BACK when it changed a non-empty saved list. An empty saved list means
+        // "default" and stays empty.
+        if (RefreshBodyPriority(bodyLabels, _bodyLabelsSeen, config.BodyPriority, out var needsSave) is { } repaired)
         {
             _bodyLabelsSeen = bodyLabels;
-            _bodyPriority = BodyPriority.Repair(config.BodyPriority, bodyLabels, out var needsSave);
+            _bodyPriority = repaired;
             if (needsSave)
             {
                 config.BodyPriority = [.. _bodyPriority.Labels];

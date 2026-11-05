@@ -1640,11 +1640,24 @@ public class OrganizerStateTests
         var state = new OrganizerState();
         Assert.Null(state.BodyLabels);
 
-        state.LoadScan([], new HashSet<string>(), ["Bibo+", "Rue+"]);
+        state.LoadScan([], new HashSet<string>(), bodyLabels: ["Bibo+", "Rue+"]);
         Assert.Equal(["Bibo+", "Rue+"], state.BodyLabels);
 
         // A later scan replaces them, so a removed body is gone from the ranking surface at once.
-        state.LoadScan([], new HashSet<string>(), ["Rue+"]);
+        state.LoadScan([], new HashSet<string>(), bodyLabels: ["Rue+"]);
         Assert.Equal(["Rue+"], state.BodyLabels);
+    }
+
+    [Fact]
+    public void LoadScan_ANullThirdArgument_IsUnambiguous_AndMeansNoFolderRules()
+    {
+        // The reason the second overload was removed: with two overloads taking a nullable third
+        // parameter, this call was CS0121. It must compile and mean "no previously protected rules".
+        var state = new OrganizerState();
+
+        state.LoadScan([], new HashSet<string>(), null);
+
+        Assert.Null(state.BodyLabels);
+        Assert.Empty(state.ProtectedFolders);
     }
 }
