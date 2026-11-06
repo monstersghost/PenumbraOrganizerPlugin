@@ -2,7 +2,7 @@
 
 Load the build, scan a real library, then check each item.
 
-- [ ] Split body mods on: Rue+ add-ons land under `Body/Rue+/Skeleton`, `Physics` and `Hands and Feet`, and the replacer under `Replacer`. Count the mods per folder on the real library and see that they look right.
+- [ ] Split body mods on: Rue+ add-ons land under `Body/Rue+/Skeleton`, `Physics` and `Hands and Feet`, the replacer under `Replacer`, lingerie and undies under `SFW`, and tail, ear and horn mods under `Body/Tails, Ears and Horns` (check that an Au Ra horn mod and a Viera ear mod both land there: the `/obj/zear/` file rule is a guess). Count the mods per folder on the real library and see that they look right.
 - [ ] A replacer that ships a `.sklb` stays in Replacer.
 - [ ] Split body mods off: body mods stay as `Body/<mod>`.
 - [ ] Check my collection with exactly one body replacer enabled shows that body; Make first choice moves it to rank 1, and it survives a restart.

@@ -22,7 +22,7 @@ below unless a phase explicitly says otherwise.
   whether the Search tab earns its place.
 
 - **Built, awaiting in-game check:** body parts and the collection check. With Split body mods on,
-  each body splits into Replacer, Skeleton, Physics and Hands and Feet (`Body/Rue+/Skeleton/<mod>`),
+  each body splits into Replacer, Skeleton, Physics, Hands and Feet and SFW, with tails, ears and horns in `Body/Tails, Ears and Horns` (`Body/Rue+/Skeleton/<mod>`),
   and **Check my collection** suggests the first-choice body from the active Penumbra collection.
   Checklist: `docs/testing/2026-11-06-body-parts-checklist.md`.
 
