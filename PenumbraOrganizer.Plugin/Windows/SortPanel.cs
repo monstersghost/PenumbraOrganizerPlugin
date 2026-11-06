@@ -100,8 +100,6 @@ public sealed class SortPanel
         config.SortSplitHairByRace = _splitHairByRace;
         saveConfig();
     }
-    private bool _sharedHandsFeet;
-    private bool _splitHairByRace;
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
@@ -109,6 +107,8 @@ public sealed class SortPanel
     private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
     private bool _splitGearBody;         // off: no body folders until asked, like gear and hair
     private bool _splitBodyMods;
+    private bool _sharedHandsFeet;           // off: hands and feet stay under their body
+    private bool _splitHairByRace;           // off: hair keeps the 0.6.4.0 layout
     private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;

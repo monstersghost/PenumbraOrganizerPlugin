@@ -66,6 +66,21 @@ public class HairRaceFoldersTests
     }
 
     [Fact]
+    public void NumbersOfOneThousandOrMore_ArePaddedNotTruncated() =>
+        Assert.Equal("Viera/1234", Tail(By(("1801", [1234]))));
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("10000")]
+    [InlineData("abc")]
+    public void InvalidStoredNumber_FallsBackToTheMultiRaceFolder(string stored) =>
+        Assert.Equal("Multi-race", Tail(null, stored: stored));
+
+    [Fact]
+    public void PriorityWithNoRaceData_IsPlainMultiRace() =>
+        Assert.Equal("Multi-race", Tail(null, new HairPriority(null, true), stored: "7"));
+
+    [Fact]
     public void Select_AppliesTheTemplateRenameToHairOnly()
     {
         var row = new OrganizerModRow

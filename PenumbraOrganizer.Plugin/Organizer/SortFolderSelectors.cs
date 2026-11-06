@@ -72,6 +72,7 @@ public static class SortFolderSelectors
                 return tail is null ? root : $"{root}/{tail}";
             }
             // Hair split by race: the template rename applies to "Hair" only; the race tail is appended.
+            // The priority race only matters for the number, so it is ignored while splitHair is off.
             if (opts.SplitHairByRace && row.Category == ModCategory.Hair)
             {
                 var hairRoot = TypeFolder(row.Category, null, renameFolder);

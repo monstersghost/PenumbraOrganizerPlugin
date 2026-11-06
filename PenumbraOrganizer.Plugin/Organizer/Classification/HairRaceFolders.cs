@@ -8,7 +8,7 @@ public static class HairRaceFolders
 {
     public const string MultiRace = "Multi-race";
 
-    /// <param name="flat">Every hair number the mod uses; unused here beyond the resolver.</param>
+    /// <param name="flat">Every hair number the mod uses; passed to <see cref="HairPriorityResolver"/> only.</param>
     /// <param name="byRace">Hair numbers per race and gender folder code, or null when none were read.</param>
     /// <param name="priority">Null means no priority; the stored scan-time number is used for Multi-race.</param>
     /// <param name="storedNumber">The number the scan stored on the row, used for Multi-race with no priority.</param>
