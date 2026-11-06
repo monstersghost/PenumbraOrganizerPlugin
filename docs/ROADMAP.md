@@ -5,32 +5,24 @@ drift out of sync with `docs/HANDOFF_ORGANIZER_AND_DARK_THEME.md`. Scope guardra
 Phase 1 design (read-only MVP, no shared code beyond two linked files) still apply everywhere
 below unless a phase explicitly says otherwise.
 
-## Where we are (2026-11-05)
+## Where we are (2026-11-07)
 
-- **Unreleased, merged to local `main` (not pushed): the next release after 0.6.2.1.** Body type
-  detection from mod content with a saved priority; the Sort/Review UX pass (three-section Sort tab,
-  Workbook group, saved Sort settings); per-tool modes for Heliosphere and Proteus (protect, sort
-  inside their folder, or treat as normal) with the Proteus managed-mod root option; the Failed mods
-  window; templates carrying the hair and body splits and respecting tool modes; fixes for "Protect
-  all, then Unprotect Heliosphere" and for a mod blocking the folder it should sit in. Numbered gear
-  folders (`00. Sets`, `01.`-`09.` slots, bodies from `10.`) when both gear splits are on, and
-  three-digit hair folders (`Hair/002`); see `docs/RELEASE_NOTES_0.6.4.0.md`. See
-  `docs/HANDOFF_2026-11-05_BODY_UX_TOOLS.md`. Not yet released: the Help tab's PDF button 404s until
-  a tag that contains the PDF exists, so test it on that release build.
-- **Still to do:** the first-run tutorial rewrite with on-screen highlights; retake the guide's
-  screenshots (the UI mock in `docs/ui-mock/` predates the Sort/Review/Protect changes); decide
-  whether the Search tab earns its place.
-
-- **Built, awaiting in-game check:** body parts and the collection check. With Split body mods on,
-  the Body folder is numbered, with shared folders (Skeleton, Physics, Tails, Ears and Horns) on top and numbered bodies by priority holding Replacer, SFW and Hands and Feet (`Body/Rue+/Skeleton/<mod>`),
-  and **Check my collection** suggests the first-choice body from the active Penumbra collection.
-  Checklist: `docs/testing/2026-11-06-body-parts-checklist.md`.
-
-- **Built on a branch, awaiting in-game check:** two more split options, both off
-  by default: **Hands and feet in a shared folder** (needs the slot split) and **Split hair by race**
-  (`Hair/<race>` and `Hair/Multi-race`). Checklist: `docs/testing/2026-11-06-body-parts-checklist.md`.
-- **Later:** per-category settings records and presets, splitting Sets by slot combination,
-  race-specific gear.
+- **0.6.5.0 - shipped stable, both channels, announced on Discord.** Everything since 0.6.3.0: Body type
+  detection from mod content with a saved priority; the Sort/Review UX pass; per-tool modes for
+  Heliosphere and Proteus; numbered Gear and Body folders and three-digit hair (first seen in the
+  quiet 0.6.4.0 testing build); **Check my collection**; the Unprotect fix; and two new off-by-default
+  Sort options, **Hands and feet in a shared folder** and **Split hair by race**. Notes:
+  `docs/RELEASE_NOTES_0.6.5.0.md`; handoff: `docs/HANDOFF_2026-11-07_HANDS_FEET_HAIR_RACE.md`.
+  Verified in game on one PC; the large library is not checked yet.
+- The `0.6.5.0` tag was moved once (to `834269a`) so the Help tab's guide and PDF links serve the
+  rebuilt PDF and the new Sort screenshot. The release zip did not change.
+- **Still to do:** the first-run tutorial rewrite with on-screen highlights; retake the remaining
+  mock-up screenshots in game; decide whether the Search tab earns its place; test the Help PDF button
+  on a release build.
+- **Later:** make templates and the workbook export follow the two new options ("same as the Sort
+  tab"); publish the "every mod type we touch" table on Discord and in the plugin help (regenerate it
+  from `ModTypeClassifier`); per-category settings records and presets; splitting Sets by slot
+  combination; race-specific gear.
 
 ## Earlier (2026-11-04)
 
