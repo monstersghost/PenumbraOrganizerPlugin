@@ -187,8 +187,15 @@ public static class FolderProtectionTree
         // post-click state, the sync records it, and the next frame forces what was recorded.
         ImGui.SetNextItemOpen(searching || expanded.Contains(node.Path), ImGuiCond.Always);
 
+        // The node spans the whole row (SpanAvailWidth) and the "Unprotect N inside" button is drawn
+        // on top of it afterwards. ImGui hands a click to the FIRST item under the cursor unless that
+        // item allows overlap (SetItemAllowOverlap, just below the node), so without it the click
+        // lands on the node and only toggles the folder: the button looks clickable and does nothing.
+
         // "###" discards the label (which embeds live counts) from the ID hash, so the ID is stable.
         var open = ImGui.TreeNodeEx($"{label}###protect-folder-node-{node.Path}", flags);
+        // Applies to the item just submitted, so it must follow the node.
+        ImGui.SetItemAllowOverlap();
         // On the label, not the cycle button: that button already shows a tooltip naming the rule's
         // source, and ImGui binds a tooltip to the last submitted item, so two on one item fight.
         Help.Tooltip(HelpTopics.ProtectFolderRuleCycle);
