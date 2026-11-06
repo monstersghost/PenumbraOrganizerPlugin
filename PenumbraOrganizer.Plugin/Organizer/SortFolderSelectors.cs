@@ -71,6 +71,14 @@ public static class SortFolderSelectors
                 var tail = bodyLayout.Tail(row.BodyPart, ResolveBody(row, bodyPriority));
                 return tail is null ? root : $"{root}/{tail}";
             }
+            // Hair split by race: the template rename applies to "Hair" only; the race tail is appended.
+            if (opts.SplitHairByRace && row.Category == ModCategory.Hair)
+            {
+                var hairRoot = TypeFolder(row.Category, null, renameFolder);
+                return hairRoot is null
+                    ? null
+                    : $"{hairRoot}/{HairRaceFolders.Tail(row.HairFlat, row.HairByRaceCode, hairPriority, row.SubCategory, splitHair)}";
+            }
             var sub = row.SubCategory;
             // A priority only changes a hair row's number, and only while hair is split. With no
             // priority the resolver's step 3 returns the number the scan stored, so the output is
