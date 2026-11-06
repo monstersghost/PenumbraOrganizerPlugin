@@ -225,7 +225,7 @@ recorded paths regardless of current protection. See History below.
 
 ### Sort
 
-![The Sort tab: Group by, the Gear, NPC, Hair and Body type sections, the Sort button, and the collapsed Body priority and Manual assignment sections](images/sort.png)
+![The Sort tab: Group by, the Gear, NPC, Hair and Body type sections including the two optional split checkboxes, the Sort button, and the Body priority section](images/sort.png)
 
 Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
 path for every unprotected mod **without moving anything**. Only Apply, on the Review Changes tab,
