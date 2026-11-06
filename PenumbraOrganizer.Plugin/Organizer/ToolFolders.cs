@@ -22,14 +22,25 @@ public static class ToolFolders
     /// <summary>Whether a top-level folder name is one the sorter itself creates (case-insensitive).</summary>
     public static bool IsSorterFolder(string folderName) => SorterFolders.Contains(folderName);
 
-    public static string ApplyAnchor(string currentPath, string normalPath)
+    /// <summary>
+    /// The top folder a mod would be kept under, or null when it has none (at the root, or already
+    /// inside one of the sorter's own folders). Numbered layouts are built per anchor so a tool's
+    /// bodies do not take numbers from the plain folders.
+    /// </summary>
+    public static string? AnchorOf(string currentPath)
     {
         var slash = currentPath.IndexOf('/');
         if (slash <= 0)
-            return normalPath;
+            return null;
 
         var anchor = currentPath[..slash];
-        if (SorterFolders.Contains(anchor))
+        return SorterFolders.Contains(anchor) ? null : anchor;
+    }
+
+    public static string ApplyAnchor(string currentPath, string normalPath)
+    {
+        var anchor = AnchorOf(currentPath);
+        if (anchor is null)
             return normalPath;
 
         var normalFirst = normalPath.Split('/')[0];

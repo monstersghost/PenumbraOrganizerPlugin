@@ -50,6 +50,32 @@ public class OrganizerStateToolPolicyTests
     }
 
     [Fact]
+    public void SortInside_NumbersATools_BodiesSeparatelyFromThePlainFolders()
+    {
+        static OrganizerModRow BodyRow(string id, string body, string path, bool hs) => new()
+        {
+            Identifier = id, Name = id, Author = "A", CurrentPath = path, ProposedPath = path,
+            Category = ModCategory.Body, BodyType = body, HeliosphereManaged = hs,
+        };
+
+        var state = StateWith(new ToolPolicy(ToolMode.SortInside, ToolMode.Protected, false),
+            BodyRow("plainRue", "Rue+", "Body/plainRue", hs: false),
+            BodyRow("plainTbse", "TBSE", "Body/plainTbse", hs: false),
+            BodyRow("hsYab", "YAB", "Heliosphere/hsYab", hs: true),
+            BodyRow("hsRue", "Rue+", "Heliosphere/hsRue", hs: true));
+
+        state.Sort(SortStrategy.TypeOnly, splitGear: false, splitNpc: false, splitHair: false,
+            name => name, splitBodyMods: true);
+
+        string PathOf(string id) => state.Mods.Single(m => m.Identifier == id).ProposedPath;
+        // The plain folder is contiguous from 10; the tool's folder starts again at 10 on its own.
+        Assert.StartsWith("Body/10. Rue+/", PathOf("plainRue"));
+        Assert.StartsWith("Body/11. TBSE/", PathOf("plainTbse"));
+        Assert.StartsWith("Heliosphere/Body/10. Rue+/", PathOf("hsRue"));
+        Assert.StartsWith("Heliosphere/Body/11. YAB/", PathOf("hsYab"));
+    }
+
+    [Fact]
     public void TheTwoToolsHaveIndependentModes()
     {
         var state = StateWith(new ToolPolicy(ToolMode.Protected, ToolMode.Normal, false),

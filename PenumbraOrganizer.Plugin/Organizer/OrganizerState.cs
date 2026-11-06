@@ -626,18 +626,36 @@ public sealed class OrganizerState
                 : null;
         }
 
-        var gearLayout = SortFolderSelectors.BuildGearLayout(
-            _mods.Values.Where(m => !m.Protected), splitGear, splitGearBody, bodyPriority);
+        // One numbered layout per anchor root. A tool's mods kept under their own folder (Heliosphere,
+        // sort-inside) are numbered among themselves, so they do not leave gaps in the plain folders.
+        var layouts = _mods.Values.Where(m => !m.Protected)
+            .GroupBy(AnchorRootOf)
+            .ToDictionary(
+                g => g.Key,
+                g => (Gear: SortFolderSelectors.BuildGearLayout(g, splitGear, splitGearBody, bodyPriority),
+                      Body: SortFolderSelectors.BuildBodyLayout(g, splitBodyMods, bodyPriority)),
+                StringComparer.OrdinalIgnoreCase);
 
-        var bodyLayout = SortFolderSelectors.BuildBodyLayout(
-            _mods.Values.Where(m => !m.Protected), splitBodyMods, bodyPriority);
-
-        return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
-                                                      splitHair: splitHair, hairPriority: hairPriority,
-                                                      splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
-                                                      bodyPriority: bodyPriority, gearLayout: gearLayout,
-                                                      bodyLayout: bodyLayout));
+        return Sort(row =>
+        {
+            var layout = layouts[AnchorRootOf(row)];
+            return SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
+                                              splitHair: splitHair, hairPriority: hairPriority,
+                                              splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
+                                              bodyPriority: bodyPriority, gearLayout: layout.Gear,
+                                              bodyLayout: layout.Body);
+        });
     }
+
+    // The folder a row's numbered layout belongs to: its anchor when the tool's mode keeps it under
+    // one, otherwise "" (the plain folders). Mirrors ToolAdjustedPath's decision.
+    private string AnchorRootOf(OrganizerModRow row) =>
+        ToolModeOf(row) == ToolMode.SortInside ? ToolFolders.AnchorOf(row.CurrentPath) ?? "" : "";
+
+    private ToolMode ToolModeOf(OrganizerModRow row) =>
+        row.ProteusRole == ProteusRole.Made ? _toolPolicy.Proteus
+        : row.HeliosphereManaged ? _toolPolicy.Heliosphere
+        : ToolMode.Normal;
 
     /// <summary>
     /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes
@@ -697,11 +715,7 @@ public sealed class OrganizerState
         if (row.ProteusRole == ProteusRole.Managed)
             return _toolPolicy.ProteusManagedAtRoot ? PenumbraPathSemantics.FixName(row.Name) : builtPath;
 
-        var mode = row.ProteusRole == ProteusRole.Made ? _toolPolicy.Proteus
-            : row.HeliosphereManaged ? _toolPolicy.Heliosphere
-            : ToolMode.Normal;
-
-        return mode == ToolMode.SortInside
+        return ToolModeOf(row) == ToolMode.SortInside
             ? ToolFolders.ApplyAnchor(row.CurrentPath, builtPath)
             : builtPath;
     }
