@@ -166,6 +166,11 @@
       "short": "Puts gear mods in Gear/Feet, Gear/Head and so on instead of a single Gear folder. Mods whose slot could not be identified stay in Gear."
     },
     {
+      "id": "sort.shared-hands-feet",
+      "title": "Hands and feet in a shared folder",
+      "short": "Gloves, gauntlets, boots and nails fit most bodies, so they go in Gear/03. Hands and Gear/05. Feet, not under each body. Tops, legs and sets still go under their body. Needs the slot split."
+    },
+    {
       "id": "sort.split-npc",
       "title": "Split NPC mods by kind",
       "short": "Puts NPC mods in NPC/NPCs, NPC/Bosses or NPC/Enemies. Turn it off to keep every NPC mod in one NPC folder."
@@ -184,6 +189,11 @@
       "id": "sort.split-hair",
       "title": "Split hair by hair number",
       "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115, padded to three digits (Hair/002) so Penumbra lists them in order. Several numbers or unreadable files: stays in Hair."
+    },
+    {
+      "id": "sort.split-hair-by-race",
+      "title": "Split hair by race",
+      "short": "One-race hair files under its race: Hair/Viera/115. Hair for several races, or with no race found, goes under Hair/Multi-race. With the hair number split off you get just the race folder."
     },
     {
       "id": "sort.split-gear-body",

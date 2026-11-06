@@ -33,8 +33,10 @@ public static class HelpTopicUsage
         // Sort - SortPanel.cs and MainWindow.SortTab.cs
         HelpTopics.SortGrouping,
         HelpTopics.SortSplitGear,
+        HelpTopics.SortSharedHandsFeet,
         HelpTopics.SortSplitNpc,
         HelpTopics.SortSplitHair,
+        HelpTopics.SortSplitHairByRace,
         HelpTopics.SortSplitGearBody,
         HelpTopics.SortSplitBodyMods,
         HelpTopics.SortFirstChoiceBody,

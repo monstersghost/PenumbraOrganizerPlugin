@@ -119,8 +119,10 @@ public static class HelpTab
         [
             HelpTopics.SortGrouping,
             HelpTopics.SortSplitGear,
+            HelpTopics.SortSharedHandsFeet,
             HelpTopics.SortSplitNpc,
             HelpTopics.SortSplitHair,
+            HelpTopics.SortSplitHairByRace,
             HelpTopics.SortSplitGearBody,
             HelpTopics.SortSplitBodyMods,
             HelpTopics.SortFirstChoiceBody,

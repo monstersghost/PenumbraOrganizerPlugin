@@ -100,6 +100,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool SortSplitGearBody { get; set; }
     public bool SortSplitBodyMods { get; set; }
 
+    /// <summary>Gear: hands and feet in the plain slot folders, not under a body. Off keeps 0.6.4.0 behavior.</summary>
+    public bool SortSharedHandsFeet { get; set; }
+
+    /// <summary>Hair: split by race, with a Multi-race folder. Off keeps 0.6.4.0 behavior.</summary>
+    public bool SortSplitHairByRace { get; set; }
+
     /// <summary>The template creator's fallback grouping (a <c>SortStrategy</c> name) and its two splits.</summary>
     public string? TemplateExportGrouping { get; set; }
     public bool TemplateExportSplitGear { get; set; }

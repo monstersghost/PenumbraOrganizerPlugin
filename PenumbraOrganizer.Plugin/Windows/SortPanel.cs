@@ -21,7 +21,7 @@ public readonly record struct SortSelection(
     SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
     string? HairRaceCode = null, bool MidlanderFallback = false,
     bool SplitGearBody = false, bool SplitBodyMods = false,
-    BodyPriority? BodyPriority = null)
+    BodyPriority? BodyPriority = null, LayoutOptions Layout = default)
 {
     // By Creator never consults category, so no split can change its output. All four checkboxes
     // are disabled when this is false.
@@ -86,7 +86,8 @@ public sealed class SortPanel
         if (config.SortGrouping == name
             && config.SortSplitGear == _splitGear && config.SortSplitNpc == _splitNpc
             && config.SortSplitHair == _splitHair && config.SortSplitGearBody == _splitGearBody
-            && config.SortSplitBodyMods == _splitBodyMods)
+            && config.SortSplitBodyMods == _splitBodyMods
+            && config.SortSharedHandsFeet == _sharedHandsFeet && config.SortSplitHairByRace == _splitHairByRace)
             return;
 
         config.SortGrouping = name;
@@ -95,8 +96,12 @@ public sealed class SortPanel
         config.SortSplitHair = _splitHair;
         config.SortSplitGearBody = _splitGearBody;
         config.SortSplitBodyMods = _splitBodyMods;
+        config.SortSharedHandsFeet = _sharedHandsFeet;
+        config.SortSplitHairByRace = _splitHairByRace;
         saveConfig();
     }
+    private bool _sharedHandsFeet;
+    private bool _splitHairByRace;
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
@@ -212,6 +217,8 @@ public sealed class SortPanel
             _splitHair = config.SortSplitHair;
             _splitGearBody = config.SortSplitGearBody;
             _splitBodyMods = config.SortSplitBodyMods;
+            _sharedHandsFeet = config.SortSharedHandsFeet;
+            _splitHairByRace = config.SortSplitHairByRace;
         }
 
         // Re-repaired only when a scan published a different body list (see RefreshBodyPriority), so
@@ -241,13 +248,15 @@ public sealed class SortPanel
         // its visible and enabled state from SortLayout, which is what the tests pin.
         var strategy = Groupings[_groupingIndex].Strategy;
         var states = SortLayout.Compute(
-            strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals);
+            strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, _splitGear);
         var splitReason = !gates.CanStageProposals ? ActivityGateReason
             : strategy == SortStrategy.CreatorOnly ? SplitsInapplicableReason
             : null;
 
         GroupHeading("Gear");
         DrawCheckbox("Split gear by equipment slot", ref _splitGear, states.SplitGear, HelpTopics.SortSplitGear, splitReason);
+        if (states.SharedHandsFeet.Visible)
+            DrawCheckbox("Hands and feet in a shared folder", ref _sharedHandsFeet, states.SharedHandsFeet, HelpTopics.SortSharedHandsFeet, splitReason);
 
         GroupHeading("NPC");
         DrawCheckbox("Split NPC mods by kind", ref _splitNpc, states.SplitNpc, HelpTopics.SortSplitNpc, splitReason);
@@ -270,6 +279,7 @@ public sealed class SortPanel
 
         GroupHeading("Hair");
         DrawCheckbox("Split hair by hair number", ref _splitHair, states.SplitHair, HelpTopics.SortSplitHair, splitReason);
+        DrawCheckbox("Split hair by race", ref _splitHairByRace, states.SplitHairByRace, HelpTopics.SortSplitHairByRace, splitReason);
         if (states.PriorityRace.Visible)
         {
             ImGui.BeginDisabled(!states.PriorityRace.Enabled);
@@ -307,7 +317,8 @@ public sealed class SortPanel
         PersistSortChoices(config, saveConfig, strategy);
 
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority);
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
+            new LayoutOptions(_sharedHandsFeet, _splitHairByRace));
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan
@@ -325,7 +336,7 @@ public sealed class SortPanel
         {
             state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
                 canonicalizeCreator, selection.HairPriority, selection.SplitGearBody, selection.SplitBodyMods,
-                selection.BodyPriority);
+                selection.BodyPriority, selection.Layout);
             _lastSorted = selection;
         }
 
