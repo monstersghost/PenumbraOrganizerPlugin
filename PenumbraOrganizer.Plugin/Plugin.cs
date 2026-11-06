@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     internal readonly Penumbra.Api.IpcSubscribers.GetModListAdapter GetModListAdapterIpc;
     internal readonly Penumbra.Api.IpcSubscribers.SetModPath SetModPathIpc;
     internal readonly Organizer.Operations.OperationController OperationController;
+    public Organizer.Operations.ActiveCollectionReader ActiveCollectionReader { get; }
     public readonly Organizer.OrganizerState OrganizerState = new();
     public LibrarySearch.ChangedItemIndex? LibraryIndex { get; private set; }
     public string? LibraryIndexError { get; private set; }
@@ -114,6 +115,7 @@ public sealed class Plugin : IDalamudPlugin
         GetModListAdapterIpc = new Penumbra.Api.IpcSubscribers.GetModListAdapter(PluginInterface);
         SetModPathIpc = new Penumbra.Api.IpcSubscribers.SetModPath(PluginInterface);
         var operationsAdapter = new Organizer.Operations.PenumbraOperationsAdapter(PluginInterface);
+        ActiveCollectionReader = new Organizer.Operations.ActiveCollectionReader(PluginInterface);
         var operationsDiagnosticsSink = new Organizer.Operations.FileDiagnosticsSink(
             Organizer.Operations.OperationBundlePaths.DiagnosticsLogPath(OperationsRoot));
         OperationController = new Organizer.Operations.OperationController(

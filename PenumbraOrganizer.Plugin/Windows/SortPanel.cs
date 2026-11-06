@@ -2,6 +2,7 @@ using Dalamud.Bindings.ImGui;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Operations;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -183,6 +184,10 @@ public sealed class SortPanel
         ImGui.TextColored(PluginTheme.ChangedGood, title);
     }
 
+    private string? _collectionBody;      // the single body the last check found
+    private string? _collectionMessage;   // shown under the button after a check
+    private string? _collectionLabel;     // which collection was read, for the messages
+
     public void Draw(
         OrganizerState state,
         ActivityGates gates,
@@ -191,7 +196,8 @@ public sealed class SortPanel
         Func<string, string> canonicalizeCreator,
         Func<IReadOnlyList<string>> getBodyLabels,
         Action? onShowSortHelp = null,
-        Action? onSortButtonDrawn = null)
+        Action? onSortButtonDrawn = null,
+        Func<CollectionRead?>? readEnabledMods = null)
     {
         var bodyLabels = getBodyLabels();
 
@@ -333,7 +339,8 @@ public sealed class SortPanel
             ImGui.TextDisabled("Selection changed since the last sort.");
 
         ImGui.Spacing();
-        DrawBodyPriority(config, saveConfig, bodyLabels, states, anyBodySplit: _splitGearBody || _splitBodyMods);
+        DrawBodyPriority(config, saveConfig, bodyLabels, states, anyBodySplit: _splitGearBody || _splitBodyMods,
+            state, readEnabledMods);
     }
 
     // One checkbox: not drawn when hidden, greyed when disabled, and its tooltip always carries the
@@ -375,7 +382,8 @@ public sealed class SortPanel
     // First-choice dropdown is the common path and the full ranked list is nested beneath it.
     private void DrawBodyPriority(
         Configuration config, Action saveConfig, IReadOnlyList<string> bodyLabels,
-        SortControlStates states, bool anyBodySplit)
+        SortControlStates states, bool anyBodySplit,
+        OrganizerState state, Func<CollectionRead?>? readEnabledMods)
     {
         var open = ImGui.CollapsingHeader("Body priority##body-priority");
         // Right after the header it explains: Help.Tooltip binds to the last submitted item, so a
@@ -403,6 +411,50 @@ public sealed class SortPanel
                 ImGui.EndCombo();
             }
             Help.Tooltip(HelpTopics.SortFirstChoiceBody);
+        }
+
+        if (readEnabledMods is not null)
+        {
+            if (ImGui.SmallButton("Check my collection##check-collection"))
+            {
+                var read = readEnabledMods();
+                if (read is null)
+                {
+                    _collectionBody = null;
+                    _collectionLabel = null;
+                    _collectionMessage = "Could not read your active collection. Is Penumbra running?";
+                }
+                else
+                {
+                    _collectionLabel = $"{(read.IsPlayerCollection ? "Player collection" : "Selected collection")} \"{read.Name}\"";
+                    _collectionBody = ActiveCollectionBodyDetector.Detect(
+                        state.Mods, read.EnabledModDirectories, _bodyPriority);
+                    _collectionMessage = _collectionBody is null
+                        ? $"{_collectionLabel}: no single body replacer found (none, or several, enabled)."
+                        : null;
+                }
+            }
+            Help.Tooltip(HelpTopics.SortCheckCollection);
+
+            if (_collectionBody is { } suggested)
+            {
+                if (string.Equals(FirstChoice(_bodyPriority), suggested, StringComparison.OrdinalIgnoreCase))
+                    ImGui.TextDisabled($"{_collectionLabel} has one enabled body replacer, {suggested}, already your first choice.");
+                else
+                {
+                    // Metadata wording on purpose: this counts enabled replacer mods, it does not prove which
+                    // body's files win in game (mod priority and options can still decide that).
+                    ImGui.TextUnformatted($"{_collectionLabel} has one enabled body replacer: {suggested}.");
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton("Make first choice##collection-first"))
+                    {
+                        SetBodyPriority(config, saveConfig, _bodyPriority.MoveToTop(suggested));
+                        _collectionBody = null;
+                    }
+                }
+            }
+            else if (_collectionMessage is not null)
+                ImGui.TextDisabled(_collectionMessage);
         }
 
         if (ImGui.CollapsingHeader("Full priority order##body-priority-full"))

@@ -285,6 +285,14 @@ exception, because it is the only name that body has.
 The **Split gear and body mods by body type** checkbox defaults off and is disabled when Group by is
 Creator.
 
+**Check my collection** sits in the Sort tab's Body priority section. It reads the mods enabled in
+your active collection (the one that affects your character, or Penumbra's selected collection when
+that is unavailable) and counts only body replacer mods. If exactly one body is enabled it names it
+and offers **Make first choice**; with none or several it says so and changes nothing. It says which
+collection it read. It counts enabled replacer mods from their metadata; it does not prove which
+body's files win in game, because mod priority and options can still decide that.
+ With it on, the Body folder is numbered so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and Horns` are shared and sit on top, then your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding `00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod with no body stays directly in `Body`. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
+
 ## Sort strategies
 
 Given each mod's `Category`, `SubCategory` (from classification above), and `Author`, one entry

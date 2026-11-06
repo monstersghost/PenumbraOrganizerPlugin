@@ -629,10 +629,14 @@ public sealed class OrganizerState
         var gearLayout = SortFolderSelectors.BuildGearLayout(
             _mods.Values.Where(m => !m.Protected), splitGear, splitGearBody, bodyPriority);
 
+        var bodyLayout = SortFolderSelectors.BuildBodyLayout(
+            _mods.Values.Where(m => !m.Protected), splitBodyMods, bodyPriority);
+
         return Sort(row => SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
                                                       splitHair: splitHair, hairPriority: hairPriority,
                                                       splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
-                                                      bodyPriority: bodyPriority, gearLayout: gearLayout));
+                                                      bodyPriority: bodyPriority, gearLayout: gearLayout,
+                                                      bodyLayout: bodyLayout));
     }
 
     /// <summary>

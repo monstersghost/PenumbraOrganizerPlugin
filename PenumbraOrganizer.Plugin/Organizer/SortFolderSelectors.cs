@@ -43,7 +43,8 @@ public static class SortFolderSelectors
         bool splitGearBody = false,
         bool splitBodyMods = false,
         BodyPriority? bodyPriority = null,
-        GearFolderLayout? gearLayout = null)
+        GearFolderLayout? gearLayout = null,
+        BodyFolderLayout? bodyLayout = null)
     {
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
@@ -57,6 +58,16 @@ public static class SortFolderSelectors
                 var gearFolder = gearLayout.Folder(
                     row.SubCategory, BodyFor(row, splitGearBody, splitBodyMods, bodyPriority));
                 return renameFolder is null ? gearFolder : renameFolder(gearFolder);
+            }
+            // The numbered Body layout owns Body rows while body mods are split. The template rename
+            // applies to "Body" only; the numbered tail is appended after it.
+            if (bodyLayout is not null && splitBodyMods && row.Category == ModCategory.Body)
+            {
+                var root = TypeFolder(row.Category, null, renameFolder);
+                if (root is null)
+                    return null;
+                var tail = bodyLayout.Tail(row.BodyPart, ResolveBody(row, bodyPriority));
+                return tail is null ? root : $"{root}/{tail}";
             }
             var sub = row.SubCategory;
             // A priority only changes a hair row's number, and only while hair is split. With no
@@ -72,8 +83,19 @@ public static class SortFolderSelectors
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
             // Not flattened the way the three above are: a body type is its own segment on the row,
             // never a value in SubCategory, so turning the split off is simply not passing it.
-            return TypeFolder(row.Category, sub, renameFolder,
-                BodyFor(row, splitGearBody, splitBodyMods, bodyPriority));
+            // Tails, ears and horns belong to no body: Body/Tails, Ears and Horns/<mod>, with or
+            // without a resolved body, whenever body mods are split.
+            if (row.Category == ModCategory.Body && splitBodyMods && row.BodyPart == BodyPart.TailsEarsHorns)
+            {
+                var bodyFolder = TypeFolder(row.Category, sub, renameFolder);
+                return bodyFolder is null ? null : $"{bodyFolder}/{BodyPartFolders.Folder(BodyPart.TailsEarsHorns)}";
+            }
+            var body = BodyFor(row, splitGearBody, splitBodyMods, bodyPriority);
+            var folder = TypeFolder(row.Category, sub, renameFolder, body);
+            // The part goes AFTER the template rename so a template's label for Body/<body> keeps matching.
+            return folder is not null && body is not null && splitBodyMods && row.Category == ModCategory.Body
+                ? $"{folder}/{BodyPartFolders.Folder(row.BodyPart)}"
+                : folder;
         }
 
         return strategy switch
@@ -155,6 +177,18 @@ public static class SortFolderSelectors
         splitGear && splitGearBody
             ? GearFolderLayout.Build(
                 rows.Where(r => r.Category == ModCategory.Gear).Select(r => ResolveBody(r, priority)), priority)
+            : null;
+
+    /// <summary>
+    /// The numbered Body layout for the rows about to be placed by the Body rule, or null unless body
+    /// mods are split. Only the parts that sit under a body count towards a body's number.
+    /// </summary>
+    public static BodyFolderLayout? BuildBodyLayout(
+        IEnumerable<OrganizerModRow> rows, bool splitBodyMods, BodyPriority? priority) =>
+        splitBodyMods
+            ? BodyFolderLayout.Build(
+                rows.Where(r => r.Category == ModCategory.Body && !BodyFolderLayout.IsShared(r.BodyPart))
+                    .Select(r => ResolveBody(r, priority)), priority)
             : null;
 
     private static string? ResolveBody(OrganizerModRow row, BodyPriority? priority) =>

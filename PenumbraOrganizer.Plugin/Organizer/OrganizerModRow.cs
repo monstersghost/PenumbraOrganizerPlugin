@@ -48,6 +48,12 @@ public sealed class OrganizerModRow
     public string? BodyType { get; init; }
 
     /// <summary>
+    /// Which part of a body setup a Body-category mod is (replacer, skeleton, physics, hands and feet).
+    /// Set at scan time; used only when the body-mods split is on. Replacer for every other row.
+    /// </summary>
+    public Classification.BodyPart BodyPart { get; init; } = Classification.BodyPart.Replacer;
+
+    /// <summary>
     /// The body resolution the most recent sort used to stage this row's proposal, or null when that
     /// sort had the body split off, the row has no candidates, or none matched. Unlike
     /// <see cref="BodyType"/> (the scan's DEFAULT-order winner) this changes with the priority, so a
