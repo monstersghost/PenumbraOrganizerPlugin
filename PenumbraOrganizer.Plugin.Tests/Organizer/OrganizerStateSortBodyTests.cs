@@ -57,7 +57,7 @@ public class OrganizerStateSortBodyTests
         Assert.Equal("Gear/10. Bibo+/02. Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
         Assert.Equal("Gear/11. TBSE/00. Sets/TBSE Outfit", PathOf(state, "unslotted"));
         Assert.Equal("Gear/02. Top/Plain Robe", PathOf(state, "bodiless"));
-        Assert.Equal("Body/Rue+/Rue+ Body", PathOf(state, "bodymod"));
+        Assert.Equal("Body/Rue+/Replacer/Rue+ Body", PathOf(state, "bodymod"));
     }
 
     [Fact]
@@ -318,7 +318,7 @@ public class OrganizerStateSortBodyTests
             splitGearBody: false, splitBodyMods: true);
 
         Assert.Equal("Gear/Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
-        Assert.Equal("Body/Rue+/Rue+ Body", PathOf(state, "bodymod"));
+        Assert.Equal("Body/Rue+/Replacer/Rue+ Body", PathOf(state, "bodymod"));
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public class OrganizerStateSortBodyTests
             splitGearBody: true, splitBodyMods: true);
 
         Assert.Equal("Gear/10. Bibo+/02. Top/Bibo+ Medieval Dress", PathOf(state, "dress"));
-        Assert.Equal("Body/Rue+/Rue+ Body", PathOf(state, "bodymod"));
+        Assert.Equal("Body/Rue+/Replacer/Rue+ Body", PathOf(state, "bodymod"));
     }
 
     [Fact]
@@ -425,7 +425,7 @@ public class OrganizerStateSortBodyTests
         state.Sort(SortStrategy.TypeOnly, true, false, false, Canon, splitGearBody: false, splitBodyMods: true,
             bodyPriority: BodyPriority.Normalize(["Bibo+"], Bodies));
 
-        Assert.Equal("Body/YAB/Yet Another Body+", PathOf(state, "yab"));
+        Assert.Equal("Body/YAB/Replacer/Yet Another Body+", PathOf(state, "yab"));
         Assert.Equal("YAB", state.Mods.Single().StagedBodyResolution!.Label);
     }
 
