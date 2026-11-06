@@ -202,6 +202,12 @@
       "short": "Your main body. A mod that supports several bodies is filed under this one when it offers it. The others follow the order in the full list below."
     },
     {
+      "id": "sort.check-collection",
+      "title": "Check my collection",
+      "short": "Reads the mods enabled in your active collection and suggests that body as your first choice. Nothing changes unless you press Make first choice.",
+      "body": "It counts only body replacer mods that are enabled in the collection. Gear, and add-ons such as skeletons or physics, are ignored because they say what they fit, not which body you wear.\n\nIf your collection uses several bodies, or none, it shows nothing to suggest and says so."
+    },
+    {
       "id": "sort.body-priority",
       "title": "Body priority",
       "short": "When a mod supports more than one body, it is filed under whichever of them ranks highest here. Mods that name only one body are not affected. Move a body with the arrows; your order is saved."

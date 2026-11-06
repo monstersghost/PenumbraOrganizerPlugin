@@ -26,7 +26,8 @@ public sealed partial class MainWindow
             _creatorCanonicalizer.Canonicalize,
             () => _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels,
             () => _sortHelpRequested = true,
-            () => OutlineLastItem(HighlightTarget.SortButton));
+            () => OutlineLastItem(HighlightTarget.SortButton),
+            () => _plugin.ActiveCollectionReader.ReadEnabledModDirectories());
 
         ImGui.Spacing();
         // Collapsed by default: most sorts never touch it. Same controls as before, unchanged.

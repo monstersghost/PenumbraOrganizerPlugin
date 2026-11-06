@@ -38,6 +38,7 @@ public static class HelpTopicUsage
         HelpTopics.SortSplitGearBody,
         HelpTopics.SortSplitBodyMods,
         HelpTopics.SortFirstChoiceBody,
+        HelpTopics.SortCheckCollection,
         HelpTopics.SortBodyPriority,
         HelpTopics.SortPriorityRace,
         HelpTopics.SortMidlanderFallback,
