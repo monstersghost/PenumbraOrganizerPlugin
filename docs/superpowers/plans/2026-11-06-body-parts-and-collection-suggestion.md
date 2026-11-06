@@ -21,7 +21,9 @@
 
 ---
 
-### Task 0: Amend the spec with three decisions found while planning
+### Task 0: Amend the spec with decisions found while planning and reviewing
+
+**DONE** (applied directly to the spec after the 2026-11-06 external review, including the hands-and-feet body-model rule, the package-not-selection note, the metadata wording and the visible collection source). Skip the steps below; they are kept only as the record of the first three amendments.
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-11-06-body-parts-and-collection-detection-design.md`
@@ -109,6 +111,33 @@ public sealed class BodyPartClassifierTests
             ["chara/human/c0101/obj/body/b0001/model/c0101b0001_top.mdl", "a/skl.sklb"]));
 
     [Theory]
+    [InlineData("chara/human/c0101/obj/body/b0001/model/c0101b0001_glv.mdl")]
+    [InlineData("CHARA\\human\\c0101\\obj\\body\\b0001\\model\\c0101b0001_sho.MDL")]
+    public void Hand_or_foot_body_models_alone_are_hands_and_feet(string path) =>
+        Assert.Equal(BodyPart.HandsAndFeet, BodyPartClassifier.Classify("Pretty thing", [path]));
+
+    [Fact]
+    public void Hand_and_foot_models_together_are_hands_and_feet() =>
+        Assert.Equal(BodyPart.HandsAndFeet, BodyPartClassifier.Classify("x",
+            ["chara/human/c0101/obj/body/b0001/model/c0101b0001_glv.mdl",
+             "chara/human/c0101/obj/body/b0001/model/c0101b0001_sho.mdl"]));
+
+    [Fact]
+    public void Hand_model_with_a_torso_model_is_a_replacer() =>
+        Assert.Equal(BodyPart.Replacer, BodyPartClassifier.Classify("x",
+            ["chara/human/c0101/obj/body/b0001/model/c0101b0001_glv.mdl",
+             "chara/human/c0101/obj/body/b0001/model/c0101b0001_top.mdl"]));
+
+    [Fact]
+    public void Body_model_with_an_unknown_suffix_is_a_replacer() =>
+        Assert.Equal(BodyPart.Replacer, BodyPartClassifier.Classify("x",
+            ["chara/human/c0101/obj/body/b0001/model/c0101b0001_zzz.mdl"]));
+
+    [Fact]
+    public void Null_and_empty_paths_are_skipped() =>
+        Assert.Equal(BodyPart.Skeleton, BodyPartClassifier.Classify("x", [null!, "", "a/skl.sklb"]));
+
+    [Theory]
     [InlineData("Rue+ Skeleton", BodyPart.Skeleton)]
     [InlineData("Jiggle physics pack", BodyPart.Physics)]
     [InlineData("Rue+ Hands", BodyPart.HandsAndFeet)]
@@ -191,14 +220,19 @@ public static class BodyPartClassifier
     private static readonly Regex SkeletonName = new(@"\b(skeleton|skel)\b", Opts);
     private static readonly Regex PhysicsName = new(@"\b(physics|jiggle|bounce)\b", Opts);
     private static readonly Regex HandsFeetName = new(@"\b(hands?|feet|foot|nails|toenails|claws)\b", Opts);
+    // c0101b0001_glv.mdl: the slot suffix names the body piece (top, glv = hands, dwn = legs, sho = feet).
+    private static readonly Regex BodySlotSuffix = new(@"_([a-z]{3})\.mdl$", Opts);
 
     public static BodyPart Classify(string name, IEnumerable<string>? gamePaths)
     {
-        bool skeleton = false, physics = false, bodyModel = false;
+        bool skeleton = false, physics = false;
+        var bodyModelSlots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (gamePaths is not null)
         {
             foreach (var raw in gamePaths)
             {
+                if (string.IsNullOrEmpty(raw))
+                    continue;
                 var path = raw.Replace('\\', '/');
                 if (path.EndsWith(".sklb", StringComparison.OrdinalIgnoreCase)
                     || path.EndsWith(".skp", StringComparison.OrdinalIgnoreCase))
@@ -207,13 +241,15 @@ public static class BodyPartClassifier
                     physics = true;
                 else if (path.EndsWith(".mdl", StringComparison.OrdinalIgnoreCase)
                          && path.Contains("/obj/body/", StringComparison.OrdinalIgnoreCase))
-                    bodyModel = true;
+                    bodyModelSlots.Add(BodySlotSuffix.Match(path) is { Success: true } m ? m.Groups[1].Value : "?");
             }
         }
 
-        // A replacer often ships a skeleton beside its body models; the models win.
-        if (bodyModel)
-            return BodyPart.Replacer;
+        // Body models decide it before skeleton or physics files do, because a replacer often ships
+        // a skeleton beside its models. Models for the hands (glv) and feet (sho) ONLY are an add-on
+        // for those parts; anything with a torso (top), legs (dwn) or an unknown slot is a Replacer.
+        if (bodyModelSlots.Count > 0)
+            return bodyModelSlots.All(s => s is "glv" or "sho") ? BodyPart.HandsAndFeet : BodyPart.Replacer;
         if (skeleton && physics)
             return BodyPart.Replacer;
         if (skeleton)
@@ -338,7 +374,8 @@ Run the Step 2 command, then the whole suite: `dotnet test PenumbraOrganizer.Plu
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A PenumbraOrganizer.Plugin PenumbraOrganizer.Plugin.Tests
+git add PenumbraOrganizer.Plugin/Organizer/Classification/ModContentReader.cs PenumbraOrganizer.Plugin/Organizer/OrganizerModRow.cs PenumbraOrganizer.Plugin/LibraryWork/Pure/ScanProcessor.cs PenumbraOrganizer.Plugin.Tests/Organizer/Classification/ModContentReaderGamePathTests.cs
+git diff --cached --name-status   # confirm only those four files
 git commit -m "feat: record a Body mod's part on its row at scan time
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
@@ -419,7 +456,7 @@ In `SortFolderSelectors.Type()`, replace the final `return TypeFolder(...)` with
 var body = BodyFor(row, splitGearBody, splitBodyMods, bodyPriority);
 var folder = TypeFolder(row.Category, sub, renameFolder, body);
 // The part goes AFTER the template rename so a template's label for Body/<body> keeps matching.
-return folder is not null && body is not null && row.Category == ModCategory.Body
+return folder is not null && body is not null && splitBodyMods && row.Category == ModCategory.Body
     ? $"{folder}/{BodyPartFolders.Folder(row.BodyPart)}"
     : folder;
 ```
@@ -431,7 +468,9 @@ Run the Step 2 command (PASS), then `dotnet test PenumbraOrganizer.Plugin.Tests 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A PenumbraOrganizer.Plugin PenumbraOrganizer.Plugin.Tests
+git add PenumbraOrganizer.Plugin/Organizer/SortFolderSelectors.cs PenumbraOrganizer.Plugin.Tests/Organizer/BodyPartSortTests.cs
+# plus ONLY the existing test files whose expectations you deliberately updated in Step 4
+git diff --cached --name-status   # confirm nothing else is staged
 git commit -m "feat: file Body mods under a part folder when splitting body mods
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
@@ -570,7 +609,7 @@ If `Resolve`'s return type exposes the label differently, adapt to match `SortFo
 - Modify: `PenumbraOrganizer.Plugin/Plugin.cs` (next to `new Organizer.Operations.PenumbraOperationsAdapter(PluginInterface)`, line ~116)
 
 **Interfaces:**
-- Produces: `public sealed class ActiveCollectionReader(IDalamudPluginInterface pluginInterface)` with `IReadOnlySet<string>? ReadEnabledModDirectories()` (null when unavailable). `Plugin.ActiveCollectionReader` public property.
+- Produces: `public sealed class ActiveCollectionReader(IDalamudPluginInterface pluginInterface)` with `CollectionRead? ReadEnabledModDirectories()` (null when unavailable); `record CollectionRead(string Name, bool IsPlayerCollection, IReadOnlySet<string> EnabledModDirectories)`. `Plugin.ActiveCollectionReader` public property.
 
 - [ ] **Step 1: Implement**
 
@@ -599,40 +638,48 @@ public sealed class ActiveCollectionReader
         _allSettings = new GetAllModSettings(pluginInterface);
     }
 
-    public IReadOnlySet<string>? ReadEnabledModDirectories()
+    public CollectionRead? ReadEnabledModDirectories()
     {
         try
         {
-            var id = PlayerCollectionId() ?? CurrentCollectionId();
-            if (id is null)
+            var player = PlayerCollection();
+            var found = player ?? CurrentCollection();
+            if (found is not { } collection)
                 return null;
 
-            var (ec, settings) = _allSettings.Invoke(id.Value);
+            var (ec, settings) = _allSettings.Invoke(collection.Id);
             if (ec != PenumbraApiEc.Success || settings is null)
                 return null;
 
-            return settings.Where(kv => kv.Value.Item1)
+            var enabled = settings.Where(kv => kv.Value.Item1)
                 .Select(kv => kv.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // The source travels with the answer so the UI can say WHICH collection was read.
+            return new CollectionRead(collection.Name, IsPlayerCollection: player is not null, enabled);
         }
-        catch (IpcError)
+        catch (Exception)
         {
+            // Called from the draw path: any failure (Penumbra missing, IPC error, a changed shape)
+            // must read as "could not check", never as an exception in the render loop.
             return null;
         }
     }
 
-    private Guid? PlayerCollectionId()
+    private (Guid Id, string Name)? PlayerCollection()
     {
         var (valid, _, collection) = _forObject.Invoke(0);
-        return valid && collection.Id != Guid.Empty ? collection.Id : null;
+        return valid && collection.Id != Guid.Empty ? (collection.Id, collection.Name) : null;
     }
 
-    private Guid? CurrentCollectionId()
+    private (Guid Id, string Name)? CurrentCollection()
     {
         var current = _current.Invoke(ApiCollectionType.Current);
-        return current is { } c && c.Id != Guid.Empty ? c.Id : null;
+        return current is { } c && c.Id != Guid.Empty ? (c.Id, c.Name) : null;
     }
 }
+
+/// <summary>Which collection was read, whether it was the player's or Penumbra's selected one, and its enabled mods.</summary>
+public sealed record CollectionRead(string Name, bool IsPlayerCollection, IReadOnlySet<string> EnabledModDirectories);
 ```
 The exact tuple shapes of `Invoke` come from Penumbra.Api 5.15.1. Build, and if the compiler disagrees, fix the destructuring to the shapes it reports (the docs XML at `~/.nuget/packages/penumbra.api/5.15.1/lib/net10.0-windows7.0/Penumbra.Api.xml` describes them: `GetCollectionForObject` returns (valid, individual-assigned, (Guid Id, string Name)); `GetCollection` returns a nullable (Guid Id, string Name); `GetAllModSettings` returns (PenumbraApiEc, Dictionary<string, (bool Enabled, int Priority, Dictionary<string, List<string>> Settings, bool Inherited, bool Temporary)>?)). Do not change the public shape of `ReadEnabledModDirectories`.
 
@@ -663,24 +710,27 @@ ActiveCollectionReader = new Organizer.Operations.ActiveCollectionReader(PluginI
 private string? _collectionBody;      // the single body the last check found
 private string? _collectionMessage;   // shown under the button after a check
 ```
-Add a last parameter to `Draw`: `Func<IReadOnlySet<string>?>? readEnabledMods = null`, and pass it plus `state` to `DrawBodyPriority` (add parameters `OrganizerState state, Func<IReadOnlySet<string>?>? readEnabledMods`).
+Add a last parameter to `Draw`: `Func<CollectionRead?>? readEnabledMods = null`, and pass it plus `state` to `DrawBodyPriority` (add parameters `OrganizerState state, Func<CollectionRead?>? readEnabledMods`). Add a field `private string? _collectionLabel;` (for example `Player collection "Main"` or `Selected collection "Testing"`).
 - [ ] **Step 3: UI.** In `DrawBodyPriority`, immediately after the First-choice combo block's `Help.Tooltip(...)`, add:
 ```csharp
 if (readEnabledMods is not null)
 {
     if (ImGui.SmallButton("Check my collection##check-collection"))
     {
-        var enabled = readEnabledMods();
-        if (enabled is null)
+        var read = readEnabledMods();
+        if (read is null)
         {
             _collectionBody = null;
+            _collectionLabel = null;
             _collectionMessage = "Could not read your active collection. Is Penumbra running?";
         }
         else
         {
-            _collectionBody = ActiveCollectionBodyDetector.Detect(state.Mods, enabled, _bodyPriority);
+            _collectionLabel = $"{(read.IsPlayerCollection ? "Player collection" : "Selected collection")} \"{read.Name}\"";
+            _collectionBody = ActiveCollectionBodyDetector.Detect(
+                state.Mods, read.EnabledModDirectories, _bodyPriority);
             _collectionMessage = _collectionBody is null
-                ? "Your active collection does not use exactly one body."
+                ? $"{_collectionLabel}: no single body replacer found (none, or several, enabled)."
                 : null;
         }
     }
@@ -689,10 +739,12 @@ if (readEnabledMods is not null)
     if (_collectionBody is { } suggested)
     {
         if (string.Equals(FirstChoice(_bodyPriority), suggested, StringComparison.OrdinalIgnoreCase))
-            ImGui.TextDisabled($"Your active collection uses {suggested}, already your first choice.");
+            ImGui.TextDisabled($"{_collectionLabel} has one enabled body replacer, {suggested}, already your first choice.");
         else
         {
-            ImGui.TextUnformatted($"Your active collection uses {suggested}.");
+            // Metadata wording on purpose: this counts enabled replacer mods, it does not prove which
+            // body's files win in game (mod priority and options can still decide that).
+            ImGui.TextUnformatted($"{_collectionLabel} has one enabled body replacer: {suggested}.");
             ImGui.SameLine();
             if (ImGui.SmallButton("Make first choice##collection-first"))
             {
@@ -706,7 +758,7 @@ if (readEnabledMods is not null)
 }
 ```
 Keep it inside the existing `BeginDisabled(!states.FirstChoiceBody.Enabled)` scope so the activity gate applies.
-- [ ] **Step 4: Wire.** In `MainWindow.SortTab.cs` append to the `_sortPanel.Draw(` call: `() => _plugin.ActiveCollectionReader.ReadEnabledModDirectories()`.
+- [ ] **Step 4: Wire.** In `MainWindow.SortTab.cs` append to the `_sortPanel.Draw(` call: `() => _plugin.ActiveCollectionReader.ReadEnabledModDirectories()` (it returns `CollectionRead?`).
 - [ ] **Step 5: Verify.** `dotnet build PenumbraOrganizer.Plugin --nologo -v q` (0 errors) then `dotnet test PenumbraOrganizer.Plugin.Tests --nologo -v q` (all PASS, including the help-topic tests).
 - [ ] **Step 6: Commit** `feat: suggest the first-choice body from the active collection` (with trailer).
 
