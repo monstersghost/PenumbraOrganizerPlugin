@@ -14,3 +14,10 @@ digits (`Hair/002`). With only one gear split on, the layout is unchanged.
 - e) Workbooks exported earlier use the old names.
 - f) Reordering Body priority, or gaining or losing gear for a body, renumbers the body folders and moves those mods once.
 - g) Hair numbers of 1000 or more are not padded (accepted limitation).
+
+## Also in this build: Body folders and collection check
+
+- With **Split body mods by body type** on, `Body/` is numbered: `00. Skeleton`, `01. Physics`, `02. Tails, Ears and Horns` (shared by every body), then bodies from `10.` in Body priority order, each holding `00. Replacer`, `01. SFW`, `02. Hands and Feet`. Mods with no body stay flat in `Body/`.
+- **Check my collection** (Sort tab, Body priority) suggests a first-choice body from the mods enabled in your collection. It only suggests; you confirm.
+- Fixed: the **Unprotect N inside** button on the Protect tab now receives clicks.
+- The first sort moves Body mods once; History restores the old layout. Part detection (hands/feet, ears/horns) is name- and file-path based and may misfile some mods.
