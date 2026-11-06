@@ -76,26 +76,28 @@ Hair rules fixed by the judge (they replace the draft in section 2 where they di
 - The one shared "does this row get a body folder" check feeds both layout building and lookup, so Shared
   hands and feet cannot make `GearFolderLayout.Folder` throw.
 
-## Release scope (superseded in part by the decisions above; see the open question below)
+## Release scope (final, 2026-11-06)
 
-One release carries everything below; there is no refactor-only release.
+The release carries only the two splits above, on top of 0.6.4.0 behavior:
 
-1. The per-category settings records, a one-time migration from the old flags, and Recommended / Flat / Custom
-   presets. Defaults reproduce 0.6.4.0 output.
-2. The two new options above (Gear hands and feet; Hair split by race).
-3. The universal options on every category: sort this category (off leaves its mods where they are), folder
-   name, group by creator inside the category, numbered folders on or off.
-4. The remaining category options from the earlier proposal, each defaulting to today's behavior:
-   - Gear: a `Sets` folder for multi-slot mods on or off; which slots get body folders (all, body-fitted only,
-     Sets only); body-free gear in the root slots or in a `General` folder.
-   - Body: each part's folder (Replacer, SFW, Hands and Feet, Skeleton, Physics, Tails/Ears/Horns) on or off;
-     shared parts on top or under each body.
-   - NPC: split by NPCs, Enemies, Bosses (as today).
-   - Animation and VFX: split by kind; one shared parent or separate folders (as today).
-   - Unknown: move to `Review` or leave in place.
-5. The Advanced section of the Sort tab, one collapsible section per category, each with a live sample path.
-6. The template planner and Check my collection read the records. Docs, help text and the in-game checklist
-   cover every option.
+1. Gear **Hands and feet**: `Under the body` (default) or `Shared`.
+2. Hair **Split by race** (default off), with the single-race and Multi-race rules above.
 
-Items 3 and 4 beyond the two named options are carried over from the proposal; the author said "the rest is
-good" for categories not discussed, so they stay at today's behavior unless changed.
+Each is one persisted option in Configuration with the default reproducing 0.6.4.0 output exactly. Both are
+mirrored where a rolled-back build would read them, so rolling back does not change a saved layout. The sorter
+and the template planner use the same placement code for both options, so the preview and the sort agree.
+Docs, help text and the in-game checklist cover both.
+
+Not in this release, and kept as the direction for later ones: the per-category settings records, migration,
+Recommended / Flat / Custom presets, the universal options (sort this category, folder name, creator grouping,
+numbering), the Advanced section with live sample paths, template format v2, the Sets split by slot combination,
+and the judge's amendments for Keep results and folder renames (they only matter once those options exist).
+
+## Tests
+
+- Defaults reproduce 0.6.4.0: the existing suite passes unchanged.
+- Hands and feet Shared and Under the body, with the gear body split on and off, with protected rows, with a
+  Heliosphere sort-inside tool folder; no body takes a number only for hands or feet mods; never throws.
+- Hair: single race with one number, single race with several numbers, multi-race, no evidence, Midlander
+  fallback and priority race on multi-race only, number split on and off, three-digit padding.
+- Sorting twice changes nothing; the template planner produces the same folders as Sort for both options.
