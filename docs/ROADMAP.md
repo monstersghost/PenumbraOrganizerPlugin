@@ -21,6 +21,11 @@ below unless a phase explicitly says otherwise.
   screenshots (the UI mock in `docs/ui-mock/` predates the Sort/Review/Protect changes); decide
   whether the Search tab earns its place.
 
+- **Built, awaiting in-game check:** body parts and the collection check. With Split body mods on,
+  each body splits into Replacer, Skeleton, Physics and Hands and Feet (`Body/Rue+/Skeleton/<mod>`),
+  and **Check my collection** suggests the first-choice body from the active Penumbra collection.
+  Checklist: `docs/testing/2026-11-06-body-parts-checklist.md`.
+
 ## Earlier (2026-11-04)
 
 - **0.6.2.1 — shipped stable, on both channels.** Folder protection became protect/exclude/inherit

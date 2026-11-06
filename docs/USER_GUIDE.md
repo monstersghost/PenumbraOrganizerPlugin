@@ -312,6 +312,13 @@ What moves and what stops matching after you update:
 its own body name, such as `Body/Rue+`. It is a separate checkbox so you can split one kind and not
 the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse. With it on, each body also splits by part: Replacer, Skeleton, Physics and Hands and Feet. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
+**Check my collection** sits in the Sort tab's Body priority section. It reads the mods enabled in
+your active collection (the one that affects your character, or Penumbra's selected collection when
+that is unavailable) and counts only body replacer mods. If exactly one body is enabled it names it
+and offers **Make first choice**; with none or several it says so and changes nothing. It says which
+collection it read. It counts enabled replacer mods from their metadata; it does not prove which
+body's files win in game, because mod priority and options can still decide that.
+
 The body comes from the mod's options and files first (option group names, option names and the
 first folder of its file paths), then its name, then the library folder it sits in. For a body
 mod the order is reversed: its own name wins over its option groups, because a body replacer often

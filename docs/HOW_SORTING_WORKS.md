@@ -283,7 +283,15 @@ and `KnownNonBodies_AreNotAliases` fails if one is re-added. `artemis` is the si
 exception, because it is the only name that body has.
 
 The **Split gear and body mods by body type** checkbox defaults off and is disabled when Group by is
-Creator. With it on, each body also splits by part: Replacer, Skeleton, Physics and Hands and Feet. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
+Creator.
+
+**Check my collection** sits in the Sort tab's Body priority section. It reads the mods enabled in
+your active collection (the one that affects your character, or Penumbra's selected collection when
+that is unavailable) and counts only body replacer mods. If exactly one body is enabled it names it
+and offers **Make first choice**; with none or several it says so and changes nothing. It says which
+collection it read. It counts enabled replacer mods from their metadata; it does not prove which
+body's files win in game, because mod priority and options can still decide that.
+ With it on, each body also splits by part: Replacer, Skeleton, Physics and Hands and Feet. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
 ## Sort strategies
 
