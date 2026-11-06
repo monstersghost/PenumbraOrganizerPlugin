@@ -91,6 +91,9 @@ public static class TemplatePlanner
         var gearLayout = SortFolderSelectors.BuildGearLayout(
             fallbackEligibleRows, template.Fallback.SplitGear, template.Fallback.SplitGearBody, bodyPriority);
 
+        var bodyLayout = SortFolderSelectors.BuildBodyLayout(
+            fallbackEligibleRows, template.Fallback.SplitBodyMods, bodyPriority);
+
         foreach (var row in rows)
         {
             // Protected rows are excluded here for reporting, and again by OrganizerState.Sort's
@@ -121,7 +124,7 @@ public static class TemplatePlanner
                 fallback.Strategy, fallback.SplitGear, fallback.SplitNpc, row, canonicalizeCreator, renameFolder,
                 splitHair: fallback.SplitHair, hairPriority: hairPriority,
                 splitGearBody: fallback.SplitGearBody, splitBodyMods: fallback.SplitBodyMods,
-                bodyPriority: bodyPriority, gearLayout: gearLayout);
+                bodyPriority: bodyPriority, gearLayout: gearLayout, bodyLayout: bodyLayout);
             destinations[row.Identifier] = SortFolderSelectors.FlattenToFolder(primary, secondary);
             fallbackRows++;
         }
