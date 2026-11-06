@@ -8,7 +8,8 @@ public sealed record ModContent(
     ModHairFileReader.HairEvidence Hair,
     IReadOnlyList<string> GroupNames,
     IReadOnlyList<string> OptionNames,
-    IReadOnlyList<string> FileValues);
+    IReadOnlyList<string> FileValues,
+    IReadOnlyList<string>? GamePaths = null);
 
 /// <summary>
 /// One walk per mod feeding the equipment-slot, hair and body logic. Before this, each reader
@@ -28,11 +29,13 @@ public static class ModContentReader
         var groups = new List<string>();
         var options = new List<string>();
         var values = new List<string>();
+        var gamePaths = new List<string>();
 
         var ok = ModConfigFileWalker.TryWalk(modDirectory, new ConfigVisitor
         {
             OnFileKey = path =>
             {
+                gamePaths.Add(path);
                 ModEquipmentFileReader.CollectFromFileKey(path, slots);
                 ModHairFileReader.CollectFromFileKey(path, flat, byRace);
             },
@@ -45,6 +48,6 @@ public static class ModContentReader
             OnName = (kind, name) => (kind == ConfigNameKind.Group ? groups : options).Add(name),
         });
 
-        return ok ? new ModContent(slots, ModHairFileReader.Freeze(flat, byRace), groups, options, values) : null;
+        return ok ? new ModContent(slots, ModHairFileReader.Freeze(flat, byRace), groups, options, values, gamePaths) : null;
     }
 }

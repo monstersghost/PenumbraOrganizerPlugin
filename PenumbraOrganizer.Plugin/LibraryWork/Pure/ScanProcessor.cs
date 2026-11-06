@@ -127,6 +127,10 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
                 bodyCandidates, _defaultBodyPriority, nameFirst: classification.Category == ModCategory.Body)?.Label;
         }
 
+        var bodyPart = classification.Category == ModCategory.Body
+            ? BodyPartClassifier.Classify(item.Name, content?.GamePaths)
+            : BodyPart.Replacer;
+
         return new OrganizerModRow
         {
             Identifier = item.Identifier,
@@ -141,6 +145,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             SubCategory = classification.SubCategory,
             BodyType = bodyType,
             BodyCandidates = bodyCandidates,
+            BodyPart = bodyPart,
             HairFlat = hairEvidence?.Flat,
             HairByRaceCode = hairEvidence?.ByRaceCode,
             GearSlotDiagnostic = gearSlotDiagnostic,
