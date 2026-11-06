@@ -193,7 +193,8 @@
     {
       "id": "sort.split-body-mods",
       "title": "Split body mods by body type",
-      "short": "Body mods are body replacers (Rue+, YAB...) and SFW variants filed under Body. This groups them under Body/<body>/. Leave it off if you keep one mod per body."
+      "short": "Body mods are body replacers (Rue+, YAB...) and SFW variants filed under Body. This groups them under Body/<body>/. Leave it off if you keep one mod per body.",
+      "body": "With it on, each body also splits by part: Replacer, Skeleton, Physics and Hands and Feet. A mod that is not clearly a part stays in Replacer."
     },
     {
       "id": "sort.first-choice-body",

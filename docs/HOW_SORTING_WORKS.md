@@ -283,7 +283,7 @@ and `KnownNonBodies_AreNotAliases` fails if one is re-added. `artemis` is the si
 exception, because it is the only name that body has.
 
 The **Split gear and body mods by body type** checkbox defaults off and is disabled when Group by is
-Creator.
+Creator. With it on, each body also splits by part: Replacer, Skeleton, Physics and Hands and Feet. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
 ## Sort strategies
 

@@ -310,7 +310,7 @@ What moves and what stops matching after you update:
 
 **Split body mods by body type** does the same for the body replacers themselves, filing each under
 its own body name, such as `Body/Rue+`. It is a separate checkbox so you can split one kind and not
-the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse.
+the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse. With it on, each body also splits by part: Replacer, Skeleton, Physics and Hands and Feet. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
 The body comes from the mod's options and files first (option group names, option names and the
 first folder of its file paths), then its name, then the library folder it sits in. For a body
