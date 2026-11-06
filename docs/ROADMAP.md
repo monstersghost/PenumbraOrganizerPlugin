@@ -26,6 +26,12 @@ below unless a phase explicitly says otherwise.
   and **Check my collection** suggests the first-choice body from the active Penumbra collection.
   Checklist: `docs/testing/2026-11-06-body-parts-checklist.md`.
 
+- **Shipped in the 0.6.4.0 testing build, awaiting in-game check:** two more split options, both off
+  by default: **Hands and feet in a shared folder** (needs the slot split) and **Split hair by race**
+  (`Hair/<race>` and `Hair/Multi-race`). Checklist: `docs/testing/2026-11-06-body-parts-checklist.md`.
+- **Later:** per-category settings records and presets, splitting Sets by slot combination,
+  race-specific gear.
+
 ## Earlier (2026-11-04)
 
 - **0.6.2.1 — shipped stable, on both channels.** Folder protection became protect/exclude/inherit

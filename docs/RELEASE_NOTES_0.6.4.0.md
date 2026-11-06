@@ -21,3 +21,9 @@ digits (`Hair/002`). With only one gear split on, the layout is unchanged.
 - **Check my collection** (Sort tab, Body priority) suggests a first-choice body from the mods enabled in your collection. It only suggests; you confirm.
 - Fixed: the **Unprotect N inside** button on the Protect tab now receives clicks.
 - The first sort moves Body mods once; History restores the old layout. Part detection (hands/feet, ears/horns) is name- and file-path based and may misfile some mods.
+
+## Two more split options
+
+- **Hands and feet in a shared folder** (needs the slot split): gloves, gauntlets, boots and nails go to `Gear/03. Hands` and `Gear/05. Feet` instead of under each body.
+- **Split hair by race**: one-race hair goes under its race (`Hair/Viera`), several races or none under `Hair/Multi-race`.
+- Both are off by default, so nothing moves unless you tick them.

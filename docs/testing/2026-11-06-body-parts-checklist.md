@@ -10,3 +10,7 @@ Load the build, scan a real library, then check each item.
 - [ ] Which collection it reads (your player's collection, or Penumbra's Current when they differ) matches what the message says.
 - [ ] Review Changes shows every move before Apply.
 - [ ] Carried over, not yet verified: the First-choice dropdown after arrow moves and a restart, and keyboard activation of the (?) popup.
+- [ ] Tick Hands and feet in a shared folder (with the slot split) and sort: `Gear/03. Hands` and `Gear/05. Feet` gain the hands and feet mods, and no body folder holds a hands or feet slot.
+- [ ] A body that only had hands or feet mods vanishes from the Gear folders.
+- [ ] Tick Split hair by race and sort: a one-race hair mod files under its race, and a known multi-race hair mod under `Hair/Multi-race`.
+- [ ] Untick both and sort: the old layout returns.

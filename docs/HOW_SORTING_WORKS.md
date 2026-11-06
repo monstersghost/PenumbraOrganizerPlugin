@@ -156,6 +156,14 @@ sort, with no gaps. Gear whose slot is unresolved or that touches several slots 
 (under its body folder when a body was found). Hair folders are padded to three digits (`Hair/002`);
 numbers of 1000 or more are written as is.
 
+### Hands and feet in a shared folder
+
+The **Hands and feet in a shared folder** option (off by default) needs the slot split. Gear whose
+single resolved slot is `Hands` or `Feet` (gloves, gauntlets, boots, nails) then skips the body
+folders and goes to `Gear/03. Hands` or `Gear/05. Feet`. Tops, legs, sets and every other slot keep
+their body folder. A body that only had hands or feet gear no longer gets a folder, and the body
+numbers close up. With the option off, hands and feet sit under each body as before.
+
 ## Hair sub-classification (hair number)
 
 A mod classified `Hair` (its `Customization:` keys point at hair, which beats body and skin) gets
@@ -185,6 +193,21 @@ agree with that reading, but no real library has confirmed it yet. The manual ch
 `docs/testing/2026-11-01-hair-number-sorting-checklist.md` is where that happens.
 
 The **Split hair by hair number** checkbox defaults off and is disabled when Group by is Creator.
+
+### Split hair by race
+
+The **Split hair by race** checkbox (off by default) adds a race folder below `Hair/`, built by
+`HairRaceFolders.Tail` from the per-race numbers the same reader collects (race codes map to a race
+name, so male and female folders of one race count as that race):
+
+- Hair files for exactly one race go under that race: `Hair/Viera`. Priority race and the Midlander
+  fallback do not apply here.
+- Hair files for several races, or with no race found, go under `Hair/Multi-race`.
+- With Split hair by hair number also on, a one-race mod that uses exactly one number gets it
+  appended (`Hair/Viera/115`, padded to three digits); a one-race mod with several numbers stays in the
+  race folder. In `Hair/Multi-race` the number comes from the Priority race rule when one is set, and
+  otherwise from the number stored at scan time (`Hair/Multi-race/115`).
+- With the number split off, you get just the race folder.
 
 ## Applying the plan: mods and folders share a namespace
 
