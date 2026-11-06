@@ -51,6 +51,50 @@ public sealed class BodyPartClassifierTests
         Assert.Equal(BodyPart.Replacer, BodyPartClassifier.Classify("x",
             ["chara/human/c0101/obj/body/b0001/model/c0101b0001_zzz.mdl"]));
 
+    [Theory]
+    [InlineData("[B] Fluffy Tail - 3")]
+    [InlineData("[Myth] Oni Horns _ Small")]
+    [InlineData("Nhagi - Mausi - Ears n Tail - Miqo F")]
+    [InlineData("VULPIN [MIQO'TE MALE TAILS]")]
+    public void Tail_ear_and_horn_names_are_tails_ears_and_horns(string name) =>
+        Assert.Equal(BodyPart.TailsEarsHorns, BodyPartClassifier.Classify(name, []));
+
+    [Theory]
+    [InlineData("chara/human/c0101/obj/tail/t0001/model/c0101t0001_til.mdl")]
+    [InlineData("chara/human/c0801/obj/zear/z0001/model/c0801z0001_zer.mdl")]
+    public void Tail_and_ear_model_files_are_tails_ears_and_horns(string path) =>
+        Assert.Equal(BodyPart.TailsEarsHorns, BodyPartClassifier.Classify("Something", [path]));
+
+    [Fact]
+    public void A_tail_mod_that_ships_physics_is_still_tails() =>
+        Assert.Equal(BodyPart.TailsEarsHorns, BodyPartClassifier.Classify("Fluffy Tail", ["a/tail.phyb", "a/skl.sklb"]));
+
+    [Fact]
+    public void A_body_model_beats_a_tail_signal() =>
+        Assert.Equal(BodyPart.Replacer, BodyPartClassifier.Classify("Rue+ with tail",
+            ["chara/human/c0101/obj/body/b0001/model/c0101b0001_top.mdl"]));
+
+    [Theory]
+    [InlineData("Elegy - Ivette Bra & Panties")]
+    [InlineData("Yet Another Lingerie Set++")]
+    [InlineData("Calvin Klein Undies")]
+    [InlineData("Pythia Body 3.0 - SFW Gear Addon")]
+    [InlineData("Cute bikini")]
+    public void Clothing_that_covers_the_body_is_sfw(string name) =>
+        Assert.Equal(BodyPart.Sfw, BodyPartClassifier.Classify(name, []));
+
+    [Fact]
+    public void Sfw_keywords_do_not_match_inside_words() =>
+        Assert.Equal(BodyPart.Replacer, BodyPartClassifier.Classify("Brasserie body", []));
+
+    [Fact]
+    public void Sfw_folder_name() =>
+        Assert.Equal("SFW", BodyPartFolders.Folder(BodyPart.Sfw));
+
+    [Fact]
+    public void Tails_folder_name() =>
+        Assert.Equal("Tails, Ears and Horns", BodyPartFolders.Folder(BodyPart.TailsEarsHorns));
+
     [Fact]
     public void Null_and_empty_paths_are_skipped() =>
         Assert.Equal(BodyPart.Skeleton, BodyPartClassifier.Classify("x", [null!, "", "a/skl.sklb"]));

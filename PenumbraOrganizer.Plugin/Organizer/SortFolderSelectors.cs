@@ -72,6 +72,13 @@ public static class SortFolderSelectors
             if (!splitHair) sub = FlattenHairSubCategory(row.Category, sub);
             // Not flattened the way the three above are: a body type is its own segment on the row,
             // never a value in SubCategory, so turning the split off is simply not passing it.
+            // Tails, ears and horns belong to no body: Body/Tails, Ears and Horns/<mod>, with or
+            // without a resolved body, whenever body mods are split.
+            if (row.Category == ModCategory.Body && splitBodyMods && row.BodyPart == BodyPart.TailsEarsHorns)
+            {
+                var bodyFolder = TypeFolder(row.Category, sub, renameFolder);
+                return bodyFolder is null ? null : $"{bodyFolder}/{BodyPartFolders.Folder(BodyPart.TailsEarsHorns)}";
+            }
             var body = BodyFor(row, splitGearBody, splitBodyMods, bodyPriority);
             var folder = TypeFolder(row.Category, sub, renameFolder, body);
             // The part goes AFTER the template rename so a template's label for Body/<body> keeps matching.

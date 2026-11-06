@@ -26,6 +26,26 @@ public sealed class BodyPartSortTests
         Assert.Equal(expected, Type(Row(ModCategory.Body, "Rue+", part), true));
 
     [Fact]
+    public void Sfw_part_folder() =>
+        Assert.Equal("Body/Rue+/SFW", Type(Row(ModCategory.Body, "Rue+", BodyPart.Sfw), true));
+
+    [Theory]
+    [InlineData("Rue+")]
+    [InlineData(null)]
+    public void Tails_ears_and_horns_ignore_the_body(string? body) =>
+        Assert.Equal("Body/Tails, Ears and Horns",
+            Type(Row(ModCategory.Body, body, BodyPart.TailsEarsHorns), true));
+
+    [Fact]
+    public void Tails_stay_flat_when_the_flag_is_off() =>
+        Assert.Equal("Body", Type(Row(ModCategory.Body, null, BodyPart.TailsEarsHorns), false));
+
+    [Fact]
+    public void Tails_folder_takes_the_template_rename_of_Body() =>
+        Assert.Equal("Bodies/Tails, Ears and Horns",
+            Type(Row(ModCategory.Body, null, BodyPart.TailsEarsHorns), true, f => f.Replace("Body", "Bodies")));
+
+    [Fact]
     public void Flag_off_leaves_the_flat_body_folder() =>
         Assert.Equal("Body", Type(Row(ModCategory.Body, "Rue+", BodyPart.Skeleton), false));
 
