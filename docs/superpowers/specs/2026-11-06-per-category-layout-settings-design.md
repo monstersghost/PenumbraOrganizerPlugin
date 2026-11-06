@@ -60,6 +60,26 @@ Replacer, SFW, Hands and Feet) stays as built.
   priority-race interaction.
 - Docs, help text and the in-game checklist are updated with each option.
 
-## Open points
+## Release scope (decided 2026-11-06)
 
-- Whether the first release ships the record refactor alone or together with these two options.
+One release carries everything below; there is no refactor-only release.
+
+1. The per-category settings records, a one-time migration from the old flags, and Recommended / Flat / Custom
+   presets. Defaults reproduce 0.6.4.0 output.
+2. The two new options above (Gear hands and feet; Hair split by race).
+3. The universal options on every category: sort this category (off leaves its mods where they are), folder
+   name, group by creator inside the category, numbered folders on or off.
+4. The remaining category options from the earlier proposal, each defaulting to today's behavior:
+   - Gear: a `Sets` folder for multi-slot mods on or off; which slots get body folders (all, body-fitted only,
+     Sets only); body-free gear in the root slots or in a `General` folder.
+   - Body: each part's folder (Replacer, SFW, Hands and Feet, Skeleton, Physics, Tails/Ears/Horns) on or off;
+     shared parts on top or under each body.
+   - NPC: split by NPCs, Enemies, Bosses (as today).
+   - Animation and VFX: split by kind; one shared parent or separate folders (as today).
+   - Unknown: move to `Review` or leave in place.
+5. The Advanced section of the Sort tab, one collapsible section per category, each with a live sample path.
+6. The template planner and Check my collection read the records. Docs, help text and the in-game checklist
+   cover every option.
+
+Items 3 and 4 beyond the two named options are carried over from the proposal; the author said "the rest is
+good" for categories not discussed, so they stay at today's behavior unless changed.
