@@ -168,7 +168,7 @@
     {
       "id": "sort.shared-hands-feet",
       "title": "Hands and feet in a shared folder",
-      "short": "Gloves, gauntlets, boots and nails fit most bodies, so they go in Gear/03. Hands and Gear/05. Feet, not under each body. Tops, legs and sets still go under their body. Needs the slot split."
+      "short": "Gloves, boots and nails fit most bodies, so they go in Gear/03. Hands and Gear/05. Feet, not under each body. Tops, legs and sets stay under their body. Needs both gear splits, slot and body."
     },
     {
       "id": "sort.split-npc",

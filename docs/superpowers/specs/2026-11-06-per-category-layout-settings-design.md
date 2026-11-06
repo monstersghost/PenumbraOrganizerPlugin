@@ -83,9 +83,10 @@ The release carries only the two splits above, on top of 0.6.4.0 behavior:
 1. Gear **Hands and feet**: `Under the body` (default) or `Shared`.
 2. Hair **Split by race** (default off), with the single-race and Multi-race rules above.
 
-Each is one persisted option in Configuration with the default reproducing 0.6.4.0 output exactly. Both are
-mirrored where a rolled-back build would read them, so rolling back does not change a saved layout. The sorter
-and the template planner use the same placement code for both options, so the preview and the sort agree.
+Each is one persisted option in Configuration with the default reproducing 0.6.4.0 output exactly. An older
+build ignores the unknown settings and sorts as before, so no rollback mirror is needed. The template planner is
+NOT given the options (decided while planning): a template applies today's layout for these two splits, and a
+later release adds them to the template and workbook flows.
 Docs, help text and the in-game checklist cover both.
 
 Not in this release, and kept as the direction for later ones: the per-category settings records, migration,

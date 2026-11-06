@@ -23,7 +23,7 @@ public readonly record struct SortSelection(
     bool SplitGearBody = false, bool SplitBodyMods = false,
     BodyPriority? BodyPriority = null, LayoutOptions Layout = default)
 {
-    // By Creator never consults category, so no split can change its output. All four checkboxes
+    // By Creator never consults category, so no split can change its output. All split checkboxes
     // are disabled when this is false.
     public bool SplitsApply => Strategy != SortStrategy.CreatorOnly;
 

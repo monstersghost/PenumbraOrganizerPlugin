@@ -301,7 +301,7 @@ and each holds the same numbered slot folders (`10. Rue+/02. Top`). Reordering B
 body gaining or losing gear, renumbers the body folders. With only one of the two splits on, the
 layout is as before, without numbers.
 
-**Hands and feet in a shared folder** (off by default, and it needs Split gear by equipment slot)
+**Hands and feet in a shared folder** (off by default; it needs Split gear by equipment slot and only does anything with Split gear by body type on)
 files gloves, gauntlets, boots and nails under `Gear/03. Hands` and `Gear/05. Feet` instead of under
 each body, since they fit most bodies. Tops, legs and sets still go under their body. A body that
 only had hands or feet mods no longer gets a folder.
