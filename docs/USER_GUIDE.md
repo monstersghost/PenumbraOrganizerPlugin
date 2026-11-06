@@ -310,7 +310,7 @@ What moves and what stops matching after you update:
 
 **Split body mods by body type** does the same for the body replacers themselves, filing each under
 its own body name, such as `Body/Rue+`. It is a separate checkbox so you can split one kind and not
-the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse. With it on, each body also splits by part: Replacer, Skeleton, Physics, Hands and Feet and SFW (clothing that covers the body, like lingerie). Tail, ear and horn mods go to their own `Body/Tails, Ears and Horns` folder, whichever body is picked. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
+the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse. With it on, the Body folder is numbered so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and Horns` are shared and sit on top, then your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding `00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod with no body stays directly in `Body`. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
 **Check my collection** sits in the Sort tab's Body priority section. It reads the mods enabled in
 your active collection (the one that affects your character, or Penumbra's selected collection when

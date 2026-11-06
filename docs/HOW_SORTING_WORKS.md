@@ -291,7 +291,7 @@ that is unavailable) and counts only body replacer mods. If exactly one body is 
 and offers **Make first choice**; with none or several it says so and changes nothing. It says which
 collection it read. It counts enabled replacer mods from their metadata; it does not prove which
 body's files win in game, because mod priority and options can still decide that.
- With it on, each body also splits by part: Replacer, Skeleton, Physics, Hands and Feet and SFW (clothing that covers the body, like lingerie). Tail, ear and horn mods go to their own `Body/Tails, Ears and Horns` folder, whichever body is picked. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
+ With it on, the Body folder is numbered so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and Horns` are shared and sit on top, then your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding `00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod with no body stays directly in `Body`. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
 ## Sort strategies
 
