@@ -60,7 +60,23 @@ Replacer, SFW, Hands and Feet) stays as built.
   priority-race interaction.
 - Docs, help text and the in-game checklist are updated with each option.
 
-## Release scope (decided 2026-11-06)
+## Split decisions (2026-11-06, after the debate and judge)
+
+The author decided the new splits are exactly two: **Gear hands and feet shared or under the body**, and **Hair
+split by race with a Multi-race folder**. Cut from this release: Gear "which slots get body folders", the Gear
+`General` folder, and Body "shared parts under each body". Deferred to a later release: splitting `Sets` by slot
+combination (the judge's top-value follow-up), race-specific gear, Face/Skin/Minion/Animation sub-splits.
+
+Hair rules fixed by the judge (they replace the draft in section 2 where they differ):
+- A single-race mod files under its own race, `Hair/<race>/<NNN>`, only if that race has exactly one hair
+  number; otherwise `Hair/<race>/<mod>`. The priority race and Midlander fallback never apply to it.
+- A mod covering several races, or with no race evidence, files under `Hair/Multi-race`, numbered by the existing
+  priority-race and Midlander rule. The Multi-race folder is the "multi-race indicator".
+- The hair folder code gets a validated race-and-number path; today it accepts a bare number only.
+- The one shared "does this row get a body folder" check feeds both layout building and lookup, so Shared
+  hands and feet cannot make `GearFolderLayout.Folder` throw.
+
+## Release scope (superseded in part by the decisions above; see the open question below)
 
 One release carries everything below; there is no refactor-only release.
 
