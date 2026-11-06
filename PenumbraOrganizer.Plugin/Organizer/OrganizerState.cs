@@ -611,7 +611,8 @@ public sealed class OrganizerState
     /// </summary>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
                     Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
-                    bool splitGearBody = false, bool splitBodyMods = false, BodyPriority? bodyPriority = null)
+                    bool splitGearBody = false, bool splitBodyMods = false, BodyPriority? bodyPriority = null,
+                    LayoutOptions? options = null)
     {
         // Recorded BEFORE the paths are computed, from the same inputs, so the explanation and the
         // proposal cannot disagree. A resolution is kept only for rows whose own category's flag is
@@ -632,7 +633,7 @@ public sealed class OrganizerState
             .GroupBy(AnchorRootOf)
             .ToDictionary(
                 g => g.Key,
-                g => (Gear: SortFolderSelectors.BuildGearLayout(g, splitGear, splitGearBody, bodyPriority),
+                g => (Gear: SortFolderSelectors.BuildGearLayout(g, splitGear, splitGearBody, bodyPriority, options),
                       Body: SortFolderSelectors.BuildBodyLayout(g, splitBodyMods, bodyPriority)),
                 StringComparer.OrdinalIgnoreCase);
 
@@ -643,7 +644,7 @@ public sealed class OrganizerState
                                               splitHair: splitHair, hairPriority: hairPriority,
                                               splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
                                               bodyPriority: bodyPriority, gearLayout: layout.Gear,
-                                              bodyLayout: layout.Body);
+                                              bodyLayout: layout.Body, options: options);
         });
     }
 

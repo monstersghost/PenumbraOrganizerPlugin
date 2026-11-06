@@ -35,15 +35,16 @@ public class TemplateFallbackConversionTests
     // Counts the record's primary-constructor parameters, not its properties: SortSelection also
     // exposes computed properties, so a property count would not mean the same thing.
     //
-    // SortSelection carries nine values; TemplateFallback stores six: grouping, the gear-slot and
+    // SortSelection carries ten values; TemplateFallback stores six: grouping, the gear-slot and
     // NPC splits, and (added later, optional in the file) the hair split and the two body splits.
+    // The tenth, Layout, holds the two layout options and is NOT stored in templates.
     // The hair race, Midlander fallback and body priority are NOT stored: they are the importer's
     // own settings, so a shared template never re-folders a recipient by someone else's order.
     // Adding a seventh value on either side must be a visible decision, which this count enforces.
     [Fact]
     public void BothTypes_CarryTheValuesTheyHaveBeenDesignedFor()
     {
-        Assert.Equal(9, PrimaryConstructorParameterCount(typeof(SortSelection)));
+        Assert.Equal(10, PrimaryConstructorParameterCount(typeof(SortSelection)));
         Assert.Equal(6, PrimaryConstructorParameterCount(typeof(TemplateFallback)));
     }
 

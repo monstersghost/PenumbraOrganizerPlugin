@@ -11,6 +11,8 @@ public readonly record struct SortControlStates(
     ControlState SplitGear,
     ControlState SplitNpc,
     ControlState SplitHair,
+    ControlState SharedHandsFeet,
+    ControlState SplitHairByRace,
     ControlState PriorityRace,
     ControlState MidlanderFallback,
     ControlState SplitGearBody,
@@ -38,7 +40,8 @@ public readonly record struct SortControlStates(
 public static class SortLayout
 {
     public static SortControlStates Compute(
-        SortStrategy strategy, bool splitHair, bool scrapedFeatureEnabled, bool activityGateOpen)
+        SortStrategy strategy, bool splitHair, bool scrapedFeatureEnabled, bool activityGateOpen,
+        bool splitGear = false)
     {
         var splitsApply = strategy != SortStrategy.CreatorOnly;
         var splitEnabled = splitsApply && activityGateOpen;
@@ -48,6 +51,8 @@ public static class SortLayout
             SplitGear: new(true, splitEnabled),
             SplitNpc: new(true, splitEnabled),
             SplitHair: new(true, splitEnabled),
+            SharedHandsFeet: new(splitGear, splitEnabled),
+            SplitHairByRace: new(true, splitEnabled),
             PriorityRace: new(splitHair, splitEnabled),
             MidlanderFallback: new(splitHair, splitEnabled),
             SplitGearBody: new(true, splitEnabled),

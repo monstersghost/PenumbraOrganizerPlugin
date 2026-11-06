@@ -44,8 +44,10 @@ public static class SortFolderSelectors
         bool splitBodyMods = false,
         BodyPriority? bodyPriority = null,
         GearFolderLayout? gearLayout = null,
-        BodyFolderLayout? bodyLayout = null)
+        BodyFolderLayout? bodyLayout = null,
+        LayoutOptions? options = null)
     {
+        var opts = options ?? default;
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
 
@@ -56,7 +58,7 @@ public static class SortFolderSelectors
             if (gearLayout is not null && row.Category == ModCategory.Gear)
             {
                 var gearFolder = gearLayout.Folder(
-                    row.SubCategory, BodyFor(row, splitGearBody, splitBodyMods, bodyPriority));
+                    row.SubCategory, GearBodyFor(row, splitGear, splitGearBody, splitBodyMods, bodyPriority, opts));
                 return renameFolder is null ? gearFolder : renameFolder(gearFolder);
             }
             // The numbered Body layout owns Body rows while body mods are split. The template rename
@@ -68,6 +70,15 @@ public static class SortFolderSelectors
                     return null;
                 var tail = bodyLayout.Tail(row.BodyPart, ResolveBody(row, bodyPriority));
                 return tail is null ? root : $"{root}/{tail}";
+            }
+            // Hair split by race: the template rename applies to "Hair" only; the race tail is appended.
+            // The priority race only matters for the number, so it is ignored while splitHair is off.
+            if (opts.SplitHairByRace && row.Category == ModCategory.Hair)
+            {
+                var hairRoot = TypeFolder(row.Category, null, renameFolder);
+                return hairRoot is null
+                    ? null
+                    : $"{hairRoot}/{HairRaceFolders.Tail(row.HairFlat, row.HairByRaceCode, hairPriority, row.SubCategory, splitHair)}";
             }
             var sub = row.SubCategory;
             // A priority only changes a hair row's number, and only while hair is split. With no
@@ -90,7 +101,7 @@ public static class SortFolderSelectors
                 var bodyFolder = TypeFolder(row.Category, sub, renameFolder);
                 return bodyFolder is null ? null : $"{bodyFolder}/{BodyPartFolders.Folder(BodyPart.TailsEarsHorns)}";
             }
-            var body = BodyFor(row, splitGearBody, splitBodyMods, bodyPriority);
+            var body = IsSharedSlot(row, splitGear, opts) ? null : BodyFor(row, splitGearBody, splitBodyMods, bodyPriority);
             var folder = TypeFolder(row.Category, sub, renameFolder, body);
             // The part goes AFTER the template rename so a template's label for Body/<body> keeps matching.
             return folder is not null && body is not null && splitBodyMods && row.Category == ModCategory.Body
@@ -173,11 +184,27 @@ public static class SortFolderSelectors
     /// today's layout exactly).
     /// </summary>
     public static GearFolderLayout? BuildGearLayout(
-        IEnumerable<OrganizerModRow> rows, bool splitGear, bool splitGearBody, BodyPriority? priority) =>
-        splitGear && splitGearBody
+        IEnumerable<OrganizerModRow> rows, bool splitGear, bool splitGearBody, BodyPriority? priority,
+        LayoutOptions? options = null)
+    {
+        var opts = options ?? default;
+        return splitGear && splitGearBody
             ? GearFolderLayout.Build(
-                rows.Where(r => r.Category == ModCategory.Gear).Select(r => ResolveBody(r, priority)), priority)
+                rows.Where(r => r.Category == ModCategory.Gear && !IsSharedSlot(r, splitGear, opts))
+                    .Select(r => ResolveBody(r, priority)), priority)
             : null;
+    }
+
+    // The ONE answer to "does this gear row go under a body folder", used by the layout build and
+    // by the lookup so the two can never disagree (Folder throws when they do).
+    private static bool IsSharedSlot(OrganizerModRow row, bool splitGear, LayoutOptions options) =>
+        options.SharedHandsAndFeet && splitGear && row.Category == ModCategory.Gear
+        && row.SubCategory is "Hands" or "Feet";
+
+    private static string? GearBodyFor(
+        OrganizerModRow row, bool splitGear, bool splitGearBody, bool splitBodyMods,
+        BodyPriority? priority, LayoutOptions options) =>
+        IsSharedSlot(row, splitGear, options) ? null : BodyFor(row, splitGearBody, splitBodyMods, priority);
 
     /// <summary>
     /// The numbered Body layout for the rows about to be placed by the Body rule, or null unless body
