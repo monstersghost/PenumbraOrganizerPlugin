@@ -207,6 +207,15 @@ inside the Proteus folder.
 An explicit protection you set yourself (a ticked mod, or a protected folder) still beats a tool's
 mode.
 
+#### Sort inside folders
+
+A collapsible list near the bottom of the Protect tab. Pick a top-level folder, such as
+`.Character specific mods`, and press **Add**. Its mods are sorted again beneath it
+(`.Character specific mods/Gear/...`) using your Sort tab settings, with numbering kept per folder.
+Protected mods and protected sub-folders stay where they are. Folders that are the sorter's own
+(such as Gear) cannot be chosen. **Remove** returns the mods to the normal folders on the next sort.
+The list is empty by default. Templates and the workbook export do not follow it yet.
+
 #### Two things that catch people out
 
 **Protected mods at the top level.** If any protected mods sit at the very top level of your
@@ -310,6 +319,13 @@ only had hands or feet mods no longer gets a folder.
 `Hair/Viera`. Hair made for several races, or with no race found, goes under `Hair/Multi-race`. With
 Split hair by hair number also on, the number is added below, as in `Hair/Viera/115`. With it off you
 get just the race folder.
+
+**Split emotes by emote** (Animation section; off by default; greyed out under Creator grouping) breaks
+up `Animation and VFX/Emotes`. A mod with one emote goes to `Emotes/<emote name>`, a mod with several
+goes to `Emotes/Multiple`, a mod with only facial expressions (Endure, Ponder, Reflect, Big Grin) goes
+to `Emotes/Expressions`, and a mod with no emote name goes to `Emotes/Undetermined`. Expressions are
+ignored when the mod also has another emote. Templates and the workbook export do not follow this
+option yet.
 
 What moves and what stops matching after you update:
 

@@ -209,6 +209,40 @@ name, so male and female folders of one race count as that race):
   otherwise from the number stored at scan time (`Hair/Multi-race/115`).
 - With the number split off, you get just the race folder.
 
+## Split emotes by emote
+
+The **Split emotes by emote** checkbox (Sort tab, Animation section; off by default, greyed out under
+Creator grouping) breaks the flat `Animation and VFX/Emotes` folder up by the emote a mod replaces. It
+reads the `Emote: <name>` entries Penumbra reports for the mod and uses the names exactly as Penumbra
+gives them (only characters Penumbra cannot store in a folder name are changed). Facial expressions
+(Endure, Ponder, Reflect, Big Grin) are treated as secondary, since they usually ride along with a
+real emote. The outcomes:
+
+- One real emote: `Animation and VFX/Emotes/<emote name>`.
+- Two or more real emotes: `Animation and VFX/Emotes/Multiple`.
+- Only facial expressions: `Animation and VFX/Emotes/Expressions`.
+- No emote name found: `Animation and VFX/Emotes/Undetermined`.
+
+Expressions are ignored whenever the mod also replaces another emote. No mod stays flat in `Emotes`.
+Battle Animation, VFX and Other are not affected. A temporary `[emote-diag]` line in `dalamud.log` after
+each scan lists the counts per outcome and per emote name; it will be removed before release.
+
+## Sort inside folders
+
+On the Protect tab you can pick any top-level folder (for example `.Character specific mods`) and add it
+to **Sort inside folders**. It then behaves like a Heliosphere or Proteus folder in Sort inside their
+folder mode:
+
+- The folder stays where it is as the top level, and every mod beneath it is sorted again by the
+  current Sort tab settings, giving `.Character specific mods/Gear/...`. Your own sub-folders under it
+  are replaced.
+- Protection still applies: a protected mod, or a mod in a protected sub-folder, is not moved.
+- Numbering is kept per folder, so these folders never take numbers from your plain folders and do not
+  leave gaps in them.
+- The sorter's own folder names (`Gear`, `Hair` and so on) cannot be chosen.
+- Removing a folder from the list returns its mods to the normal folders on the next sort. Moves that
+  already happened stay until you undo them from History.
+
 ## Applying the plan: mods and folders share a namespace
 
 Penumbra gives mods and folders one name space. When a mod sits at a path the sort needs as a

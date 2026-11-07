@@ -16,6 +16,10 @@ below unless a phase explicitly says otherwise.
   Verified in game on one PC; the large library is not checked yet.
 - The `0.6.5.0` tag was moved once (to `834269a`) so the Help tab's guide and PDF links serve the
   rebuilt PDF and the new Sort screenshot. The release zip did not change.
+- **Built on a branch, awaiting in-game check:** Sort inside folders (Protect tab) and the emote split
+  (Sort tab, off by default). The temporary `[emote-diag]` log in `dalamud.log` is to be removed before
+  release. The Sort and Protect tab screenshots need retaking. Draft notes:
+  `docs/RELEASE_NOTES_0.6.6.0.md` (nothing published).
 - **Still to do:** the first-run tutorial rewrite with on-screen highlights; retake the remaining
   mock-up screenshots in game; decide whether the Search tab earns its place; test the Help PDF button
   on a release build.
