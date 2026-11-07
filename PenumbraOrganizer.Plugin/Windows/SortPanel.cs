@@ -87,7 +87,8 @@ public sealed class SortPanel
             && config.SortSplitGear == _splitGear && config.SortSplitNpc == _splitNpc
             && config.SortSplitHair == _splitHair && config.SortSplitGearBody == _splitGearBody
             && config.SortSplitBodyMods == _splitBodyMods
-            && config.SortSharedHandsFeet == _sharedHandsFeet && config.SortSplitHairByRace == _splitHairByRace)
+            && config.SortSharedHandsFeet == _sharedHandsFeet && config.SortSplitHairByRace == _splitHairByRace
+            && config.SortSplitEmotes == _splitEmotes)
             return;
 
         config.SortGrouping = name;
@@ -98,6 +99,7 @@ public sealed class SortPanel
         config.SortSplitBodyMods = _splitBodyMods;
         config.SortSharedHandsFeet = _sharedHandsFeet;
         config.SortSplitHairByRace = _splitHairByRace;
+        config.SortSplitEmotes = _splitEmotes;
         saveConfig();
     }
     private bool _splitGear;
@@ -109,6 +111,7 @@ public sealed class SortPanel
     private bool _splitBodyMods;
     private bool _sharedHandsFeet;           // off: hands and feet stay under their body
     private bool _splitHairByRace;           // off: hair keeps the 0.6.4.0 layout
+    private bool _splitEmotes;           // off: emotes stay in one Emotes folder
     private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;
@@ -219,6 +222,7 @@ public sealed class SortPanel
             _splitBodyMods = config.SortSplitBodyMods;
             _sharedHandsFeet = config.SortSharedHandsFeet;
             _splitHairByRace = config.SortSplitHairByRace;
+            _splitEmotes = config.SortSplitEmotes;
         }
 
         // Re-repaired only when a scan published a different body list (see RefreshBodyPriority), so
@@ -307,6 +311,10 @@ public sealed class SortPanel
             HelpTopics.SortSplitBodyMods, splitReason);
         DrawBodyModsHelpMarker();
 
+        GroupHeading("Animation");
+        DrawCheckbox("Split emotes by emote", ref _splitEmotes, states.SplitEmotes,
+            HelpTopics.SortSplitEmotes, splitReason);
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -318,7 +326,7 @@ public sealed class SortPanel
 
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
             HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            new LayoutOptions(_sharedHandsFeet, _splitHairByRace));
+            new LayoutOptions(_sharedHandsFeet, _splitHairByRace, _splitEmotes));
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan

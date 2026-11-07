@@ -123,6 +123,7 @@ public static class HelpTab
             HelpTopics.SortSplitNpc,
             HelpTopics.SortSplitHair,
             HelpTopics.SortSplitHairByRace,
+            HelpTopics.SortSplitEmotes,
             HelpTopics.SortSplitGearBody,
             HelpTopics.SortSplitBodyMods,
             HelpTopics.SortFirstChoiceBody,

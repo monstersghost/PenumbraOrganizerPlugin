@@ -196,6 +196,11 @@
       "short": "One-race hair files under its race: Hair/Viera/115. Hair for several races, or with no race found, goes under Hair/Multi-race. With the hair number split off you get just the race folder."
     },
     {
+      "id": "sort.split-emotes",
+      "title": "Split emotes by emote",
+      "short": "Emote mods go in Animation and VFX/Emotes/<emote name>. Mods with several emotes go in Multiple, face-only ones in Expressions, and ones with no emote name in Undetermined."
+    },
+    {
       "id": "sort.split-gear-body",
       "title": "Split gear by body type",
       "short": "Files gear under the body it was made for, as Gear/Bibo+/... With the slot split also on: 00. Sets, 01.-09. slots, then numbered bodies from 10, in Body priority order. No body found: no body folder."

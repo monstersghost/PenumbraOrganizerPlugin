@@ -106,6 +106,9 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Hair: split by race, with a Multi-race folder. Off keeps 0.6.4.0 behavior.</summary>
     public bool SortSplitHairByRace { get; set; }
 
+    /// <summary>Animation: split Emotes by the emote a mod replaces. Off keeps 0.6.5.0 behavior.</summary>
+    public bool SortSplitEmotes { get; set; }
+
     /// <summary>The template creator's fallback grouping (a <c>SortStrategy</c> name) and its two splits.</summary>
     public string? TemplateExportGrouping { get; set; }
     public bool TemplateExportSplitGear { get; set; }

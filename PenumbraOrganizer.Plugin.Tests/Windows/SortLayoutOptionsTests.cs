@@ -36,4 +36,14 @@ public class SortLayoutOptionsTests
         var b = a with { Layout = new LayoutOptions(SharedHandsAndFeet: true) };
         Assert.NotEqual(a, b);
     }
+
+    [Fact]
+    public void SplitEmotes_IsAlwaysVisible_AndGreyedUnderCreatorGrouping()
+    {
+        var typeStates = SortLayout.Compute(SortStrategy.TypeOnly, false, false, true);
+        Assert.Equal(new ControlState(true, true), typeStates.SplitEmotes);
+
+        var creatorStates = SortLayout.Compute(SortStrategy.CreatorOnly, false, false, true);
+        Assert.Equal(new ControlState(true, false), creatorStates.SplitEmotes);
+    }
 }
