@@ -40,19 +40,29 @@ shortening or clean-up.
 **Design.**
 - Scan: collect the names from `Emote: <name>` changed-item keys into a new `EmoteNames` set on the mod row
   (`ChangedItemKeyParser` already yields `ItemName` for the Emote shape). No new IPC calls.
+- Emote names fall into two kinds. **Facial expressions** (the game's Expressions emote category, for example
+  Endure, Ponder, Reflect, Big Grin) are *secondary*: they are usually bundled with a real emote, so they are
+  ignored whenever the mod also replaces any other emote. Everything else (dances, sit, groundsit, change
+  pose, and the rest) is *primary*.
 - Layout, when the option is on and the row is `Animation`/`Emotes`:
-  - exactly one distinct emote name -> `Animation and VFX/Emotes/<name>`;
-  - two or more -> `Animation and VFX/Emotes/Multiple`;
-  - none -> `Animation and VFX/Emotes` (unchanged).
+  - exactly one distinct primary emote -> `Animation and VFX/Emotes/<name>`;
+  - two or more primary emotes -> `Animation and VFX/Emotes/Multiple`;
+  - no primary emote, only expressions -> `Animation and VFX/Emotes/Expressions`;
+  - no emote name at all -> `Animation and VFX/Emotes` (unchanged).
+- The expression names live in one small list in code, checked against a real scan (see below). An emote not on
+  the list counts as primary, so an incomplete list only means an expression sometimes gets its own folder.
 - Names go through the same folder-name sanitising as other segments (`KnownSegment`/`FixName`), which can
   change characters Penumbra cannot store but never shortens a name.
 - Sort tab: one checkbox "Split emotes by emote" in a new small "Animation" section; saved with the other
   Sort settings; carried to Select through `LayoutOptions` as a third flag.
 - Not applied to Battle Animation, VFX or "Other".
 
-**Unknown to settle during implementation.** How many of the 191 emote mods in the author's library carry a
-single emote key; read it from a scan and report it before the release, because it decides whether
-`Multiple` is a small or a dominant folder.
+**Unknown to settle during implementation.** The author expects most emote mods to bundle several emotes, so
+`Multiple` may dominate. The first implementation task therefore logs each distinct emote name and how many
+mods use it (and how many mods land in each of the four outcomes above) to `dalamud.log` after a scan. The
+author sends that, and the plan is adjusted (for example pose or dance grouping) BEFORE the option ships.
+Reference only: https://ffxivcollect.com/emotes lists the game's emotes with a General/Special/Expressions
+category; the plugin does not depend on it (no API, and Penumbra already supplies the names).
 
 ## Testing
 - Unit tests: anchor generalisation (folder in set, folder protected, sorter-folder name refused, per-anchor
