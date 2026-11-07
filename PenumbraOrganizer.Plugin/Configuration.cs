@@ -129,11 +129,14 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool ProteusManagedAtRoot { get; set; }
 
+    /// <summary>Top-level folders kept as the top level while their mods are sorted beneath them.</summary>
+    public List<string> SortInsideFolders { get; set; } = [];
+
     /// <summary>The three settings above, with an unknown stored mode read as Protected.</summary>
     [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public Organizer.ToolPolicy ToolPolicy =>
-        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot);
+        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot, SortInsideFolders);
 
     /// <summary>
     /// 0.6.0 ships with the scraped list unavailable: the crash whose correlation motivated this

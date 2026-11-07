@@ -656,7 +656,15 @@ public sealed class OrganizerState
     private ToolMode ToolModeOf(OrganizerModRow row) =>
         row.ProteusRole == ProteusRole.Made ? _toolPolicy.Proteus
         : row.HeliosphereManaged ? _toolPolicy.Heliosphere
+        : InSortInsideFolder(row) ? ToolMode.SortInside
         : ToolMode.Normal;
+
+    // An ordinary mod whose top folder the user marked "sort inside": it is kept under that folder
+    // exactly like a Heliosphere or Proteus mod in SortInside mode.
+    private bool InSortInsideFolder(OrganizerModRow row) =>
+        _toolPolicy.SortInsideFolders is { Count: > 0 } folders
+        && ToolFolders.AnchorOf(row.CurrentPath) is { } anchor
+        && folders.Contains(anchor);
 
     /// <summary>
     /// Applies a plan the caller already built — and, in the UI, already showed the user. Goes
