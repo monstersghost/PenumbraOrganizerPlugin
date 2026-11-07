@@ -148,6 +148,11 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             BodyPart = bodyPart,
             HairFlat = hairEvidence?.Flat,
             HairByRaceCode = hairEvidence?.ByRaceCode,
+            EmoteNames = classification is { Category: ModCategory.Animation, SubCategory: "Emotes" }
+                ? item.ChangedItemKeys.Select(ChangedItemKeyParser.Parse)
+                    .Where(k => k.Shape == ChangedItemKeyShape.Emote && !string.IsNullOrWhiteSpace(k.ItemName))
+                    .Select(k => k.ItemName!).ToHashSet(StringComparer.Ordinal)
+                : null,
             GearSlotDiagnostic = gearSlotDiagnostic,
         };
     }

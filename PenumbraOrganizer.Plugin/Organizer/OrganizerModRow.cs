@@ -30,6 +30,9 @@ public sealed class OrganizerModRow
 
     /// <summary>Hair numbers keyed by four-digit race folder code, from file paths only. Null unless a readable hair mod.</summary>
     public IReadOnlyDictionary<string, IReadOnlySet<int>>? HairByRaceCode { get; init; }
+
+    /// <summary>The emote names ("Emote: Dance 74" keys) the mod replaces. Null unless an Animation/Emotes row.</summary>
+    public IReadOnlySet<string>? EmoteNames { get; init; }
     /// <summary>
     /// The body replacer this mod is for, as the body-type list spells it ("Bibo+"), or null when
     /// its name matched none.

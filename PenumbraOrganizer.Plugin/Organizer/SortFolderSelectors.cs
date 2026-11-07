@@ -71,6 +71,12 @@ public static class SortFolderSelectors
                 var tail = bodyLayout.Tail(row.BodyPart, ResolveBody(row, bodyPriority));
                 return tail is null ? root : $"{root}/{tail}";
             }
+            // Emotes split by the emote they replace; the template rename applies to the Emotes folder only.
+            if (opts.SplitEmotes && row.Category == ModCategory.Animation && row.SubCategory == "Emotes")
+            {
+                var emoteRoot = TypeFolder(row.Category, row.SubCategory, renameFolder);
+                return emoteRoot is null ? null : $"{emoteRoot}/{EmoteFolders.Tail(row.EmoteNames)}";
+            }
             // Hair split by race: the template rename applies to "Hair" only; the race tail is appended.
             // The priority race only matters for the number, so it is ignored while splitHair is off.
             if (opts.SplitHairByRace && row.Category == ModCategory.Hair)
