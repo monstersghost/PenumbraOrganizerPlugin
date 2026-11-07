@@ -48,7 +48,7 @@ shortening or clean-up.
   - exactly one distinct primary emote -> `Animation and VFX/Emotes/<name>`;
   - two or more primary emotes -> `Animation and VFX/Emotes/Multiple`;
   - no primary emote, only expressions -> `Animation and VFX/Emotes/Expressions`;
-  - no emote name at all -> `Animation and VFX/Emotes` (unchanged).
+  - no emote name at all -> `Animation and VFX/Emotes/Undetermined` (no mod stays flat in `Emotes`).
 - The expression names live in one small list in code, checked against a real scan (see below). An emote not on
   the list counts as primary, so an incomplete list only means an expression sometimes gets its own folder.
 - Names go through the same folder-name sanitising as other segments (`KnownSegment`/`FixName`), which can
