@@ -41,6 +41,7 @@ public static class HelpTopics
     public static readonly HelpTopic ProtectToggleAll = new("protect.toggle-all");
     public static readonly HelpTopic ProtectHeliosphereMode = new("protect.heliosphere-mode");
     public static readonly HelpTopic ProtectProteusMode = new("protect.proteus-mode");
+    public static readonly HelpTopic ProtectSortInsideFolders = new("protect.sort-inside-folders");
     public static readonly HelpTopic ProtectProteusManagedRoot = new("protect.proteus-managed-root");
     public static readonly HelpTopic ProtectProteusNote = new("protect.proteus-note");
     public static readonly HelpTopic ProtectFolders = new("protect.folders");

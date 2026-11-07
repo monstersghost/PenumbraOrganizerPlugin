@@ -21,6 +21,7 @@ public static class HelpTopicUsage
         HelpTopics.ProtectToggleAll,
         HelpTopics.ProtectHeliosphereMode,
         HelpTopics.ProtectProteusMode,
+        HelpTopics.ProtectSortInsideFolders,
         HelpTopics.ProtectProteusManagedRoot,
         HelpTopics.ProtectProteusNote,
         HelpTopics.ProtectFolders,

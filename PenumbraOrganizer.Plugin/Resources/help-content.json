@@ -116,6 +116,11 @@
       "short": "Protected: never moved. Sort inside their folder: moved only beneath the folder they sit in. Treat as normal: sorted like any other mod. Saved between sessions."
     },
     {
+      "id": "protect.sort-inside-folders",
+      "title": "Sort inside folders",
+      "short": "Keeps a folder as the top level and sorts its mods beneath it, so \"Characters\" becomes \"Characters/Gear/...\". Everything inside is re-sorted; protected mods stay put."
+    },
+    {
       "id": "protect.proteus-mode",
       "title": "Proteus mods",
       "short": "Mods Proteus made. Protected: never moved. Sort inside their folder: moved only beneath the folder they sit in. Treat as normal: sorted like any other mod. Saved between sessions."

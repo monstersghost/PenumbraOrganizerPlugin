@@ -33,6 +33,7 @@ public sealed partial class MainWindow
         Help.Tooltip(HelpTopics.ProtectToggleAll);
 
         DrawToolModes(allMods);
+        DrawSortInsideFolders(allMods);
 
         // A protected mod sitting at the library root is stuck there permanently: protection means
         // the plugin never proposes a path for it, so no amount of sorting will file it away. That is
@@ -198,6 +199,61 @@ public sealed partial class MainWindow
                 }
             }
         }
+    }
+
+    private string _sortInsidePick = "";
+
+    // One list of folders the user keeps as the top level: pick a folder, Add, and its mods are sorted
+    // beneath it. A saved setting pushed into the state through ApplyToolPolicy, like the tool modes.
+    private void DrawSortInsideFolders(IReadOnlyList<OrganizerModRow> mods)
+    {
+        var gateOpen = CurrentGates().CanStageProposals;
+        var config = _plugin.Config;
+        var candidates = SortInsideFolderChoices.Candidates(mods, config.SortInsideFolders);
+
+        if (!ImGui.CollapsingHeader("Sort inside folders##sort-inside"))
+            return;
+        Help.Tooltip(HelpTopics.ProtectSortInsideFolders, gateOpen ? null : ActivityGateReason);
+
+        ImGui.BeginDisabled(!gateOpen);
+        if (candidates.Count > 0)
+        {
+            if (!candidates.Contains(_sortInsidePick, StringComparer.OrdinalIgnoreCase))
+                _sortInsidePick = candidates[0];
+            ImGui.SetNextItemWidth(260);
+            if (ImGui.BeginCombo("##sort-inside-pick", _sortInsidePick))
+            {
+                foreach (var candidate in candidates)
+                    if (ImGui.Selectable(candidate, string.Equals(candidate, _sortInsidePick, StringComparison.OrdinalIgnoreCase)))
+                        _sortInsidePick = candidate;
+                ImGui.EndCombo();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Add##sort-inside-add"))
+            {
+                config.SortInsideFolders.Add(_sortInsidePick);
+                _plugin.ApplyToolPolicy();
+            }
+        }
+        else
+        {
+            ImGui.TextDisabled("No other top-level folders to add.");
+        }
+
+        string? remove = null;
+        foreach (var folder in config.SortInsideFolders)
+        {
+            ImGui.TextUnformatted(folder);
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"Remove##sort-inside-{folder}"))
+                remove = folder;
+        }
+        if (remove is not null)
+        {
+            config.SortInsideFolders.RemoveAll(f => string.Equals(f, remove, StringComparison.OrdinalIgnoreCase));
+            _plugin.ApplyToolPolicy();
+        }
+        ImGui.EndDisabled();
     }
 
     // One mode dropdown per tool, each shown only while the library has that tool's mods. The mode is
