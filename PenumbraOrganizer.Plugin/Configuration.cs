@@ -136,7 +136,7 @@ public sealed class Configuration : IPluginConfiguration
     [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public Organizer.ToolPolicy ToolPolicy =>
-        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot, SortInsideFolders);
+        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot, SortInsideFolders ?? []);
 
     /// <summary>
     /// 0.6.0 ships with the scraped list unavailable: the crash whose correlation motivated this

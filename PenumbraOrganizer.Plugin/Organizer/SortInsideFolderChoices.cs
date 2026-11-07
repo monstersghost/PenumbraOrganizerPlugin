@@ -5,7 +5,7 @@ public static class SortInsideFolderChoices
 {
     public static IReadOnlyList<string> Candidates(IEnumerable<OrganizerModRow> rows, IEnumerable<string> chosen)
     {
-        var taken = new HashSet<string>(chosen, StringComparer.OrdinalIgnoreCase);
+        var taken = new HashSet<string>(chosen.Select(c => c.Trim()),StringComparer.OrdinalIgnoreCase);
         return rows.Select(r => ToolFolders.AnchorOf(r.CurrentPath))
             .Where(a => a is not null && !taken.Contains(a))
             .Select(a => a!)

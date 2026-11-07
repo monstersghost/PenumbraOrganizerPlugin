@@ -630,7 +630,7 @@ public sealed class OrganizerState
         // One numbered layout per anchor root. A tool's mods kept under their own folder (Heliosphere,
         // sort-inside) are numbered among themselves, so they do not leave gaps in the plain folders.
         var layouts = _mods.Values.Where(m => !m.Protected)
-            .GroupBy(AnchorRootOf)
+            .GroupBy(AnchorRootOf, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
                 g => (Gear: SortFolderSelectors.BuildGearLayout(g, splitGear, splitGearBody, bodyPriority, options),

@@ -209,11 +209,13 @@ public sealed partial class MainWindow
     {
         var gateOpen = CurrentGates().CanStageProposals;
         var config = _plugin.Config;
-        var candidates = SortInsideFolderChoices.Candidates(mods, config.SortInsideFolders);
+        config.SortInsideFolders ??= [];
 
-        if (!ImGui.CollapsingHeader("Sort inside folders##sort-inside"))
-            return;
+        var expanded = ImGui.CollapsingHeader("Sort inside folders##sort-inside");
         Help.Tooltip(HelpTopics.ProtectSortInsideFolders, gateOpen ? null : ActivityGateReason);
+        if (!expanded)
+            return;
+        var candidates = SortInsideFolderChoices.Candidates(mods, config.SortInsideFolders);
 
         ImGui.BeginDisabled(!gateOpen);
         if (candidates.Count > 0)
@@ -231,7 +233,7 @@ public sealed partial class MainWindow
             ImGui.SameLine();
             if (ImGui.Button("Add##sort-inside-add"))
             {
-                config.SortInsideFolders.Add(_sortInsidePick);
+                config.SortInsideFolders.Add(_sortInsidePick.Trim());
                 _plugin.ApplyToolPolicy();
             }
         }

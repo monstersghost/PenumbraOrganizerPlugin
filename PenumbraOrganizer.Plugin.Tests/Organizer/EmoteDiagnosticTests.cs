@@ -19,6 +19,6 @@ public class EmoteDiagnosticTests
             Row("a", "Sit"), Row("b", "Sit", "Big Grin"), Row("c", "Sit", "Groundsit"), Row("d", "Big Grin"), Row("e")]);
 
         Assert.Contains(lines, l => l.Contains("Multiple=1") && l.Contains("Expressions=1") && l.Contains("Undetermined=1") && l.Contains("Single=2"));
-        Assert.Contains(lines, l => l.Contains("Sit") && l.Contains("3"));
+        Assert.Contains(lines, l => l == "[emote-diag] Sit x3");
     }
 }

@@ -24,7 +24,7 @@ are sorted beneath it by the current Sort tab settings (`.Character specific mod
   The anchor rule generalises: a row is anchored when its tool mode is SortInside **or** its top folder is in
   `SortInsideFolders`. `OrganizerState.AnchorRootOf` and `ToolModeOf` gain that second source; numbering
   stays per anchor root, so these folders never take numbers from plain ones.
-- Templates and the workbook export ignore this setting for now (same stance as the two 0.6.5.0 options).
+- Applying a template keeps mods in a chosen sort-inside folder under it (as for Heliosphere and Proteus in Sort inside mode); the template preview does not show that folder prefix yet, and the workbook export ignores the setting. Templates do not follow the emote split.
 
 **Edge cases.** A folder named like a sorter folder (`Gear`) is refused. A mod at the root has no anchor and
 is unaffected. Removing a folder from the set takes effect on the next sort; earlier moves stay (History

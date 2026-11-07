@@ -34,6 +34,7 @@ public enum ProteusRole
 /// Top-level folders the user keeps as the top level while their mods are sorted beneath them
 /// (case-insensitive). Never contains one of the sorter's own folders.
 /// </param>
+// SortInsideFolders is compared by reference (record equality); null means none.
 public readonly record struct ToolPolicy(
     ToolMode Heliosphere, ToolMode Proteus, bool ProteusManagedAtRoot,
     IReadOnlySet<string>? SortInsideFolders = null)

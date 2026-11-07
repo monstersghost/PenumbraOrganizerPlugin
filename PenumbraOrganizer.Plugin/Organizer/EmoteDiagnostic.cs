@@ -23,8 +23,9 @@ public static class EmoteDiagnostic
                 case EmoteFolders.Undetermined: undetermined++; break;
                 default: single++; break;
             }
-            foreach (var name in row.EmoteNames ?? (IReadOnlySet<string>)new HashSet<string>())
-                perName[name] = perName.GetValueOrDefault(name) + 1;
+            if (row.EmoteNames is { } names)
+                foreach (var name in names)
+                    perName[name] = perName.GetValueOrDefault(name) + 1;
         }
 
         var lines = new List<string>

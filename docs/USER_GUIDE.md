@@ -214,7 +214,9 @@ A collapsible list below the Heliosphere and Proteus mode dropdowns on the Prote
 (`.Character specific mods/Gear/...`) using your Sort tab settings, with numbering kept per folder.
 Protected mods and protected sub-folders stay where they are. Folders that are the sorter's own
 (such as Gear) cannot be chosen. **Remove** returns the mods to the normal folders on the next sort.
-The list is empty by default. Templates and the workbook export do not follow it yet.
+The list is empty by default. Applying a template keeps mods in a chosen folder under it (as for
+Heliosphere and Proteus in Sort inside mode); the template preview does not show that folder prefix
+yet, and the workbook export ignores this setting.
 
 #### Two things that catch people out
 

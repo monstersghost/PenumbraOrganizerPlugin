@@ -13,4 +13,4 @@ Both options are off by default, so nothing moves unless you use them.
 
 - Ticking the emote split moves the affected mods once on the next sort. Unticking and sorting again restores the previous layout.
 - Adding a folder to Sort inside folders re-sorts everything under it, replacing your own sub-folders there. History restores the old layout.
-- Templates and the workbook export do not follow either option yet.
+- Templates do not follow the emote split. Applying a template keeps mods in a chosen sort-inside folder under it (as for Heliosphere and Proteus in Sort inside mode); the template preview does not show that folder prefix yet, and the workbook export ignores both options.

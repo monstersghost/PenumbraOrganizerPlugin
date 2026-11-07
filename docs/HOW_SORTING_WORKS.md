@@ -240,6 +240,9 @@ folder mode:
 - Numbering is kept per folder, so these folders never take numbers from your plain folders and do not
   leave gaps in them.
 - The sorter's own folder names (`Gear`, `Hair` and so on) cannot be chosen.
+- Applying a template keeps mods in a chosen folder under it (as for Heliosphere and Proteus in Sort
+  inside mode); the template preview does not show that folder prefix yet, and the workbook export
+  ignores the setting.
 - Removing a folder from the list returns its mods to the normal folders on the next sort. Moves that
   already happened stay until you undo them from History.
 

@@ -111,7 +111,7 @@ public sealed class SortPanel
     private bool _splitBodyMods;
     private bool _sharedHandsFeet;           // off: hands and feet stay under their body
     private bool _splitHairByRace;           // off: hair keeps the 0.6.4.0 layout
-    private bool _splitEmotes;           // off: emotes stay in one Emotes folder
+    private bool _splitEmotes;       // off: emotes stay in one Emotes folder
     private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;
