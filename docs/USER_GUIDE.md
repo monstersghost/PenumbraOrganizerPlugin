@@ -209,7 +209,7 @@ mode.
 
 #### Sort inside folders
 
-A collapsible list near the bottom of the Protect tab. Pick a top-level folder, such as
+A collapsible list below the Heliosphere and Proteus mode dropdowns on the Protect tab. Pick a top-level folder, such as
 `.Character specific mods`, and press **Add**. Its mods are sorted again beneath it
 (`.Character specific mods/Gear/...`) using your Sort tab settings, with numbering kept per folder.
 Protected mods and protected sub-folders stay where they are. Folders that are the sorter's own
