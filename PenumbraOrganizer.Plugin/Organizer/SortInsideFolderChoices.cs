@@ -1,16 +1,34 @@
 namespace PenumbraOrganizer.Plugin.Organizer;
 
-/// <summary>The top-level folders the Protect tab offers for "sort inside".</summary>
+/// <summary>The folders (any depth) the Protect tab offers for "sort inside".</summary>
 public static class SortInsideFolderChoices
 {
     public static IReadOnlyList<string> Candidates(IEnumerable<OrganizerModRow> rows, IEnumerable<string> chosen)
     {
-        var taken = new HashSet<string>(chosen.Select(c => c.Trim()),StringComparer.OrdinalIgnoreCase);
-        return rows.Select(r => ToolFolders.AnchorOf(r.CurrentPath))
-            .Where(a => a is not null && !taken.Contains(a))
-            .Select(a => a!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(a => a, StringComparer.OrdinalIgnoreCase)
+        var taken = new HashSet<string>(
+            chosen.Select(ToolFolders.NormalizeChosenFolder).OfType<string>(), StringComparer.OrdinalIgnoreCase);
+
+        // folder path -> whether any row there is not tool-managed
+        var folders = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            var segments = row.CurrentPath.Split('/');
+            if (segments.Length < 2 || ToolFolders.IsSorterFolder(segments[0]))
+                continue;
+            for (var depth = 1; depth < segments.Length; depth++)
+            {
+                var path = string.Join('/', segments.Take(depth));
+                folders[path] = folders.GetValueOrDefault(path) || !row.IsToolManaged;
+            }
+        }
+
+        return folders.Where(f => f.Value && !taken.Contains(f.Key))
+            .Select(f => f.Key)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    /// <summary>Whether a chosen folder still resolves to Protected, so nothing inside it would move.</summary>
+    public static bool ResolvesToProtected(OrganizerState state, string folder) =>
+        state.ResolveFolderRule(folder).Rule == FolderProtectionRule.Protected;
 }

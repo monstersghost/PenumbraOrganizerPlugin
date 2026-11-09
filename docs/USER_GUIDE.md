@@ -209,10 +209,10 @@ mode.
 
 #### Sort inside folders
 
-A collapsible list below the Heliosphere and Proteus mode dropdowns on the Protect tab. Pick a top-level folder, such as
+A collapsible list below the Heliosphere and Proteus mode dropdowns on the Protect tab. Pick a folder, at any depth, such as
 `.Character specific mods`, and press **Add**. Its mods are sorted again beneath it
 (`.Character specific mods/Gear/...`) using your Sort tab settings, with numbering kept per folder.
-Protected mods and protected sub-folders stay where they are. Folders that are the sorter's own
+A sub-folder works too: write it as a path such as `.Character specific mods/Alice`. The deepest chosen folder that contains a mod wins, so choosing both `.Chars` and `.Chars/Alice` keeps Alice's mods under Alice and the rest under `.Chars`. Example: protect `.Character specific mods`, set one character's sub-folder to [-] (excluded) in the folder list, and add that sub-folder here; only that character's mods are re-sorted, the other characters stay untouched. A chosen folder that is still protected is marked, because nothing inside it will move. Protected mods and protected sub-folders stay where they are. Folders that are the sorter's own
 (such as Gear) cannot be chosen. **Remove** returns the mods to the normal folders on the next sort.
 The list is empty by default. Applying a template keeps mods in a chosen folder under it (as for
 Heliosphere and Proteus in Sort inside mode); the template preview does not show that folder prefix

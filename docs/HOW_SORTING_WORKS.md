@@ -229,13 +229,15 @@ each scan lists the counts per outcome and per emote name; it will be removed be
 
 ## Sort inside folders
 
-On the Protect tab you can pick any top-level folder (for example `.Character specific mods`) and add it
+On the Protect tab you can pick any folder, at any depth (for example `.Character specific mods` or `.Character specific mods/Alice`) and add it
 to **Sort inside folders**. It then behaves like a Heliosphere or Proteus folder in Sort inside their
 folder mode:
 
 - The folder stays where it is as the top level, and every mod beneath it is sorted again by the
   current Sort tab settings, giving `.Character specific mods/Gear/...`. Your own sub-folders under it
   are replaced.
+- A mod anchors at the deepest chosen folder that contains it, spelled as the mod spells it, so choosing both
+  `.Chars` and `.Chars/Alice` keeps Alice's mods under Alice. Mods under the sorter's own folders never anchor.
 - Protection still applies: a protected mod, or a mod in a protected sub-folder, is not moved.
 - Numbering is kept per folder, so these folders never take numbers from your plain folders and do not
   leave gaps in them.

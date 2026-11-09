@@ -7,7 +7,7 @@ Nothing in this file is released. It is a draft of the notes for the release aft
 Both options are off by default, so nothing moves unless you use them.
 
 - **Split emotes by emote** (Sort tab, Animation section): emote mods go to `Animation and VFX/Emotes/<emote name>`. Mods with several emotes go to `Emotes/Multiple`, mods with only facial expressions to `Emotes/Expressions`, and mods with no emote name to `Emotes/Undetermined`.
-- **Sort inside folders** (Protect tab): pick a top-level folder such as `.Character specific mods` and its mods are sorted beneath it (`.Character specific mods/Gear/...`) instead of being moved out. Protected mods stay put, and Remove returns the mods to the normal folders on the next sort.
+- **Sort inside folders** (Protect tab): pick a folder, or a sub-folder at any depth such as `.Character specific mods/Alice` (the deepest chosen folder wins), and its mods are sorted beneath it (`.Character specific mods/Gear/...`) instead of being moved out. Protected mods stay put, and Remove returns the mods to the normal folders on the next sort.
 
 ## What moves
 

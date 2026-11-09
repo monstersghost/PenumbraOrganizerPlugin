@@ -5,7 +5,7 @@ user turns them on.
 
 ## 1. Sort inside a folder the user picks
 
-**Goal.** Let any top-level folder (for example `.Character specific mods`, `halloween+`) behave like
+**Goal.** Let any folder, at any depth (for example `.Character specific mods`, `halloween+`) behave like
 Heliosphere and Proteus in "Sort inside their folder" mode: the folder stays as the top level and its mods
 are sorted beneath it by the current Sort tab settings (`.Character specific mods/Gear/...`).
 
@@ -20,6 +20,10 @@ are sorted beneath it by the current Sort tab settings (`.Character specific mod
 - Protect tab: a per-folder control on top-level folders only, next to the existing tool-mode dropdowns,
   labelled "Sort inside". A folder cannot be both fully protected and sort-inside: protection stays the
   stronger rule, and the control is shown disabled with a tooltip while the folder is protected.
+- **Any depth, deepest wins.** An entry is a slash path (`.Chars/Alice`), normalised per segment. A mod's user anchor
+  is the deepest chosen folder that is a segment-wise, case-insensitive prefix of its folder path, kept as the mod
+  spells it (`ToolFolders.DeepestAnchor`). Entries whose first segment is a sorter folder are dropped; tool mode still
+  wins for Heliosphere and Proteus mods. A chosen folder that still resolves to Protected is flagged in the list.
 - `ToolFolders.AnchorOf` already returns a mod's top folder when it is not one of the sorter's own folders.
   The anchor rule generalises: a row is anchored when its tool mode is SortInside **or** its top folder is in
   `SortInsideFolders`. `OrganizerState.AnchorRootOf` and `ToolModeOf` gain that second source; numbering

@@ -118,7 +118,7 @@
     {
       "id": "protect.sort-inside-folders",
       "title": "Sort inside folders",
-      "short": "Keeps a folder as the top level and sorts its mods beneath it, so \"Characters\" becomes \"Characters/Gear/...\". Everything inside is re-sorted; protected mods stay put."
+      "short": "Keeps a folder (or a sub-folder, like \"Characters/Alice\") as the top level and sorts its mods beneath it. Everything inside is re-sorted; protected mods stay put."
     },
     {
       "id": "protect.proteus-mode",

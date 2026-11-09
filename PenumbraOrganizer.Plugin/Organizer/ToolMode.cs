@@ -31,7 +31,7 @@ public enum ProteusRole
 
 /// <summary>The saved tool settings the protection rule and the sort consult.</summary>
 /// <param name="SortInsideFolders">
-/// Top-level folders the user keeps as the top level while their mods are sorted beneath them
+/// Folders (any depth, slash paths) the user keeps as the top level while their mods are sorted beneath them
 /// (case-insensitive). Never contains one of the sorter's own folders.
 /// </param>
 // SortInsideFolders is compared by reference (record equality); null means none.
@@ -51,8 +51,8 @@ public readonly record struct ToolPolicy(
         var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var folder in sortInsideFolders ?? [])
         {
-            if (!string.IsNullOrWhiteSpace(folder) && !ToolFolders.IsSorterFolder(folder))
-                folders.Add(folder.Trim());
+            if (ToolFolders.NormalizeChosenFolder(folder) is { } normalized)
+                folders.Add(normalized);
         }
         return new(Normalize((ToolMode)heliosphere), Normalize((ToolMode)proteus), managedAtRoot,
             folders.Count == 0 ? null : folders);
