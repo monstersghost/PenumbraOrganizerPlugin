@@ -1,8 +1,8 @@
-# 0.6.6.0 - DRAFT, not published
+# 0.6.5.1 - sort inside folders and an emote split
 
-Nothing in this file is released. It is a draft of the notes for the release after 0.6.5.0.
+A small follow-up to 0.6.5.0.
 
-## New in 0.6.6.0
+## New in 0.6.5.1
 
 Both options are off by default, so nothing moves unless you use them.
 

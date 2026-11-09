@@ -224,8 +224,7 @@ real emote. The outcomes:
 - No emote name found: `Animation and VFX/Emotes/Undetermined`.
 
 Expressions are ignored whenever the mod also replaces another emote. No mod stays flat in `Emotes`.
-Battle Animation, VFX and Other are not affected. A temporary `[emote-diag]` line in `dalamud.log` after
-each scan lists the counts per outcome and per emote name; it will be removed before release.
+Battle Animation, VFX and Other are not affected.
 
 ## Sort inside folders
 

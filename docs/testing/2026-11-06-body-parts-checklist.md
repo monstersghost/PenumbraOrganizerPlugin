@@ -16,7 +16,6 @@ Load the build, scan a real library, then check each item.
 - [ ] Untick both and sort: the old layout returns.
 - [ ] Tick Split emotes by emote and sort: emote mods land in `Animation and VFX/Emotes/<name>`, `Multiple`, `Expressions` or `Undetermined`, and nothing is left flat in `Emotes`.
 - [ ] Untick it and sort: today's layout returns.
-- [ ] After a scan, `[emote-diag]` lines appear in `dalamud.log` with counts per outcome and per emote name.
 - [ ] Add `.Character specific mods` (or any folder) under Sort inside folders and sort: the folder stays on top and its mods are sorted beneath it.
 - [ ] Add a sub-folder such as `.Character specific mods/<name>` (protect the parent, set the sub-folder to [-]): only that sub-folder's mods are sorted beneath it; siblings do not move.
 - [ ] A protected mod inside that folder stays where it is.

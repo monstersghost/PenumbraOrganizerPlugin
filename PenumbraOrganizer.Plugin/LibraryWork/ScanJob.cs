@@ -68,16 +68,6 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
             results, _plugin.Config.ProtectedModIdentifiers, _plugin.Config.FolderProtectionRules,
             _processor?.BodyLabels);
 
-        try
-        {
-            foreach (var line in EmoteDiagnostic.Summarize(results))
-                Plugin.Log.Information(line);
-        }
-        catch (Exception ex)
-        {
-            Plugin.Log.Warning(ex, "emote diagnostic failed");
-        }
-
         // POST-COMMIT. The new data is already live, so a failure here is a warning, never a failed
         // run - reporting Failed would tell the UI to say nothing was published when it was.
         _plugin.RunPostScanSideEffects();
