@@ -630,7 +630,7 @@ public sealed class OrganizerState
         // One numbered layout per anchor root. A tool's mods kept under their own folder (Heliosphere,
         // sort-inside) are numbered among themselves, so they do not leave gaps in the plain folders.
         var layouts = _mods.Values.Where(m => !m.Protected)
-            .GroupBy(AnchorRootOf)
+            .GroupBy(AnchorRootOf, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
                 g => (Gear: SortFolderSelectors.BuildGearLayout(g, splitGear, splitGearBody, bodyPriority, options),
@@ -648,14 +648,28 @@ public sealed class OrganizerState
         });
     }
 
-    // The folder a row's numbered layout belongs to: its anchor when the tool's mode keeps it under
-    // one, otherwise "" (the plain folders). Mirrors ToolAdjustedPath's decision.
-    private string AnchorRootOf(OrganizerModRow row) =>
-        ToolModeOf(row) == ToolMode.SortInside ? ToolFolders.AnchorOf(row.CurrentPath) ?? "" : "";
+    // The folder a row's numbered layout belongs to: its anchor when it is kept under one,
+    // otherwise "" (the plain folders). Mirrors ToolAdjustedPath's decision.
+    private string AnchorRootOf(OrganizerModRow row) => AnchorFor(row) ?? "";
+
+    // The folder this row is kept under: a tool row's first segment, or an ordinary row's deepest
+    // user-chosen folder. Null when the row is sorted into the plain folders.
+    private string? AnchorFor(OrganizerModRow row)
+    {
+        if (row.ProteusRole == ProteusRole.Made || row.HeliosphereManaged)
+            return ToolModeOf(row) == ToolMode.SortInside ? ToolFolders.AnchorOf(row.CurrentPath) : null;
+        return UserAnchorOf(row);
+    }
+
+    private string? UserAnchorOf(OrganizerModRow row) =>
+        _toolPolicy.SortInsideFolders is { Count: > 0 } folders
+            ? ToolFolders.DeepestAnchor(row.CurrentPath, folders)
+            : null;
 
     private ToolMode ToolModeOf(OrganizerModRow row) =>
         row.ProteusRole == ProteusRole.Made ? _toolPolicy.Proteus
         : row.HeliosphereManaged ? _toolPolicy.Heliosphere
+        : UserAnchorOf(row) is not null ? ToolMode.SortInside
         : ToolMode.Normal;
 
     /// <summary>
@@ -716,8 +730,8 @@ public sealed class OrganizerState
         if (row.ProteusRole == ProteusRole.Managed)
             return _toolPolicy.ProteusManagedAtRoot ? PenumbraPathSemantics.FixName(row.Name) : builtPath;
 
-        return ToolModeOf(row) == ToolMode.SortInside
-            ? ToolFolders.ApplyAnchor(row.CurrentPath, builtPath)
+        return AnchorFor(row) is { } anchor
+            ? ToolFolders.ApplyAnchorTo(anchor, builtPath)
             : builtPath;
     }
 

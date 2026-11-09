@@ -5,7 +5,7 @@ user turns them on.
 
 ## 1. Sort inside a folder the user picks
 
-**Goal.** Let any top-level folder (for example `.Character specific mods`, `halloween+`) behave like
+**Goal.** Let any folder, at any depth (for example `.Character specific mods`, `halloween+`) behave like
 Heliosphere and Proteus in "Sort inside their folder" mode: the folder stays as the top level and its mods
 are sorted beneath it by the current Sort tab settings (`.Character specific mods/Gear/...`).
 
@@ -20,11 +20,15 @@ are sorted beneath it by the current Sort tab settings (`.Character specific mod
 - Protect tab: a per-folder control on top-level folders only, next to the existing tool-mode dropdowns,
   labelled "Sort inside". A folder cannot be both fully protected and sort-inside: protection stays the
   stronger rule, and the control is shown disabled with a tooltip while the folder is protected.
+- **Any depth, deepest wins.** An entry is a slash path (`.Chars/Alice`), normalised per segment. A mod's user anchor
+  is the deepest chosen folder that is a segment-wise, case-insensitive prefix of its folder path, kept as the mod
+  spells it (`ToolFolders.DeepestAnchor`). Entries whose first segment is a sorter folder are dropped; tool mode still
+  wins for Heliosphere and Proteus mods. A chosen folder that still resolves to Protected is flagged in the list.
 - `ToolFolders.AnchorOf` already returns a mod's top folder when it is not one of the sorter's own folders.
   The anchor rule generalises: a row is anchored when its tool mode is SortInside **or** its top folder is in
   `SortInsideFolders`. `OrganizerState.AnchorRootOf` and `ToolModeOf` gain that second source; numbering
   stays per anchor root, so these folders never take numbers from plain ones.
-- Templates and the workbook export ignore this setting for now (same stance as the two 0.6.5.0 options).
+- Applying a template keeps mods in a chosen sort-inside folder under it (as for Heliosphere and Proteus in Sort inside mode); the template preview does not show that folder prefix yet, and the workbook export ignores the setting. Templates do not follow the emote split.
 
 **Edge cases.** A folder named like a sorter folder (`Gear`) is refused. A mod at the root has no anchor and
 is unaffected. Removing a folder from the set takes effect on the next sort; earlier moves stay (History

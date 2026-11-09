@@ -116,6 +116,11 @@
       "short": "Protected: never moved. Sort inside their folder: moved only beneath the folder they sit in. Treat as normal: sorted like any other mod. Saved between sessions."
     },
     {
+      "id": "protect.sort-inside-folders",
+      "title": "Sort inside folders",
+      "short": "Keeps a folder (or a sub-folder, like \"Characters/Alice\") as the top level and sorts its mods beneath it. Everything inside is re-sorted; protected mods stay put."
+    },
+    {
       "id": "protect.proteus-mode",
       "title": "Proteus mods",
       "short": "Mods Proteus made. Protected: never moved. Sort inside their folder: moved only beneath the folder they sit in. Treat as normal: sorted like any other mod. Saved between sessions."
@@ -194,6 +199,11 @@
       "id": "sort.split-hair-by-race",
       "title": "Split hair by race",
       "short": "One-race hair files under its race: Hair/Viera/115. Hair for several races, or with no race found, goes under Hair/Multi-race. With the hair number split off you get just the race folder."
+    },
+    {
+      "id": "sort.split-emotes",
+      "title": "Split emotes by emote",
+      "short": "Emote mods go in Animation and VFX/Emotes/<emote name>. Mods with several emotes go in Multiple, face-only ones in Expressions, and ones with no emote name in Undetermined."
     },
     {
       "id": "sort.split-gear-body",

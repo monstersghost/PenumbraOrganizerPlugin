@@ -106,6 +106,9 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Hair: split by race, with a Multi-race folder. Off keeps 0.6.4.0 behavior.</summary>
     public bool SortSplitHairByRace { get; set; }
 
+    /// <summary>Animation: split Emotes by the emote a mod replaces. Off keeps 0.6.5.0 behavior.</summary>
+    public bool SortSplitEmotes { get; set; }
+
     /// <summary>The template creator's fallback grouping (a <c>SortStrategy</c> name) and its two splits.</summary>
     public string? TemplateExportGrouping { get; set; }
     public bool TemplateExportSplitGear { get; set; }
@@ -126,11 +129,14 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool ProteusManagedAtRoot { get; set; }
 
+    /// <summary>Top-level folders kept as the top level while their mods are sorted beneath them.</summary>
+    public List<string> SortInsideFolders { get; set; } = [];
+
     /// <summary>The three settings above, with an unknown stored mode read as Protected.</summary>
     [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public Organizer.ToolPolicy ToolPolicy =>
-        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot);
+        Organizer.ToolPolicy.From((int)HeliosphereMode, (int)ProteusMode, ProteusManagedAtRoot, SortInsideFolders ?? []);
 
     /// <summary>
     /// 0.6.0 ships with the scraped list unavailable: the crash whose correlation motivated this

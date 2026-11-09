@@ -209,6 +209,44 @@ name, so male and female folders of one race count as that race):
   otherwise from the number stored at scan time (`Hair/Multi-race/115`).
 - With the number split off, you get just the race folder.
 
+## Split emotes by emote
+
+The **Split emotes by emote** checkbox (Sort tab, Animation section; off by default, greyed out under
+Creator grouping) breaks the flat `Animation and VFX/Emotes` folder up by the emote a mod replaces. It
+reads the `Emote: <name>` entries Penumbra reports for the mod and uses the names exactly as Penumbra
+gives them (only characters Penumbra cannot store in a folder name are changed). Facial expressions
+(Endure, Ponder, Reflect, Big Grin) are treated as secondary, since they usually ride along with a
+real emote. The outcomes:
+
+- One real emote: `Animation and VFX/Emotes/<emote name>`.
+- Two or more real emotes: `Animation and VFX/Emotes/Multiple`.
+- Only facial expressions: `Animation and VFX/Emotes/Expressions`.
+- No emote name found: `Animation and VFX/Emotes/Undetermined`.
+
+Expressions are ignored whenever the mod also replaces another emote. No mod stays flat in `Emotes`.
+Battle Animation, VFX and Other are not affected.
+
+## Sort inside folders
+
+On the Protect tab you can pick any folder, at any depth (for example `.Character specific mods` or `.Character specific mods/Alice`) and add it
+to **Sort inside folders**. It then behaves like a Heliosphere or Proteus folder in Sort inside their
+folder mode:
+
+- The folder stays where it is as the top level, and every mod beneath it is sorted again by the
+  current Sort tab settings, giving `.Character specific mods/Gear/...`. Your own sub-folders under it
+  are replaced.
+- A mod anchors at the deepest chosen folder that contains it, spelled as the mod spells it, so choosing both
+  `.Chars` and `.Chars/Alice` keeps Alice's mods under Alice. Mods under the sorter's own folders never anchor.
+- Protection still applies: a protected mod, or a mod in a protected sub-folder, is not moved.
+- Numbering is kept per folder, so these folders never take numbers from your plain folders and do not
+  leave gaps in them.
+- The sorter's own folder names (`Gear`, `Hair` and so on) cannot be chosen.
+- Applying a template keeps mods in a chosen folder under it (as for Heliosphere and Proteus in Sort
+  inside mode); the template preview does not show that folder prefix yet, and the workbook export
+  ignores the setting.
+- Removing a folder from the list returns its mods to the normal folders on the next sort. Moves that
+  already happened stay until you undo them from History.
+
 ## Applying the plan: mods and folders share a namespace
 
 Penumbra gives mods and folders one name space. When a mod sits at a path the sort needs as a

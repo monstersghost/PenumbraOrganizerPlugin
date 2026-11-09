@@ -41,6 +41,7 @@ public static class HelpTopics
     public static readonly HelpTopic ProtectToggleAll = new("protect.toggle-all");
     public static readonly HelpTopic ProtectHeliosphereMode = new("protect.heliosphere-mode");
     public static readonly HelpTopic ProtectProteusMode = new("protect.proteus-mode");
+    public static readonly HelpTopic ProtectSortInsideFolders = new("protect.sort-inside-folders");
     public static readonly HelpTopic ProtectProteusManagedRoot = new("protect.proteus-managed-root");
     public static readonly HelpTopic ProtectProteusNote = new("protect.proteus-note");
     public static readonly HelpTopic ProtectFolders = new("protect.folders");
@@ -57,6 +58,7 @@ public static class HelpTopics
     public static readonly HelpTopic SortSplitHair = new("sort.split-hair");
     public static readonly HelpTopic SortSharedHandsFeet = new("sort.shared-hands-feet");
     public static readonly HelpTopic SortSplitHairByRace = new("sort.split-hair-by-race");
+    public static readonly HelpTopic SortSplitEmotes = new("sort.split-emotes");
     public static readonly HelpTopic SortSplitGearBody = new("sort.split-gear-body");
     public static readonly HelpTopic SortSplitBodyMods = new("sort.split-body-mods");
     public static readonly HelpTopic SortFirstChoiceBody = new("sort.first-choice-body");

@@ -33,6 +33,7 @@ public sealed partial class MainWindow
         Help.Tooltip(HelpTopics.ProtectToggleAll);
 
         DrawToolModes(allMods);
+        DrawSortInsideFolders(allMods);
 
         // A protected mod sitting at the library root is stuck there permanently: protection means
         // the plugin never proposes a path for it, so no amount of sorting will file it away. That is
@@ -198,6 +199,80 @@ public sealed partial class MainWindow
                 }
             }
         }
+    }
+
+    private string _sortInsidePick = "";
+    private string _sortInsideFilter = "";
+
+    // One list of folders the user keeps as the top level: pick a folder, Add, and its mods are sorted
+    // beneath it. A saved setting pushed into the state through ApplyToolPolicy, like the tool modes.
+    private void DrawSortInsideFolders(IReadOnlyList<OrganizerModRow> mods)
+    {
+        var gateOpen = CurrentGates().CanStageProposals;
+        var config = _plugin.Config;
+        config.SortInsideFolders ??= [];
+
+        var expanded = ImGui.CollapsingHeader("Sort inside folders##sort-inside");
+        Help.Tooltip(HelpTopics.ProtectSortInsideFolders, gateOpen ? null : ActivityGateReason);
+        if (!expanded)
+            return;
+        var allCandidates = SortInsideFolderChoices.Candidates(mods, config.SortInsideFolders);
+
+        ImGui.BeginDisabled(!gateOpen);
+        ImGui.SetNextItemWidth(260);
+        ImGui.InputTextWithHint("##sort-inside-filter", "Filter folders", ref _sortInsideFilter, 256);
+        var needle = _sortInsideFilter.Trim();
+        var matches = needle.Length == 0
+            ? allCandidates
+            : allCandidates.Where(c => c.Contains(needle, StringComparison.OrdinalIgnoreCase)).ToList();
+        const int MaxShown = 200;
+        var candidates = matches.Count > MaxShown ? matches.Take(MaxShown).ToList() : matches;
+        if (candidates.Count > 0)
+        {
+            if (!candidates.Contains(_sortInsidePick, StringComparer.OrdinalIgnoreCase))
+                _sortInsidePick = candidates[0];
+            ImGui.SetNextItemWidth(260);
+            if (ImGui.BeginCombo("##sort-inside-pick", _sortInsidePick))
+            {
+                foreach (var candidate in candidates)
+                    if (ImGui.Selectable(candidate, string.Equals(candidate, _sortInsidePick, StringComparison.OrdinalIgnoreCase)))
+                        _sortInsidePick = candidate;
+                ImGui.EndCombo();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Add##sort-inside-add"))
+            {
+                if (ToolFolders.NormalizeChosenFolder(_sortInsidePick) is { } picked)
+                    config.SortInsideFolders.Add(picked);
+                _plugin.ApplyToolPolicy();
+            }
+            if (matches.Count > MaxShown)
+                ImGui.TextDisabled($"{matches.Count - MaxShown} more, narrow the filter");
+        }
+        else
+        {
+            ImGui.TextDisabled(allCandidates.Count > 0 ? "No folders match the filter." : "No other folders to add.");
+        }
+
+        string? remove = null;
+        foreach (var folder in config.SortInsideFolders)
+        {
+            ImGui.TextUnformatted(folder);
+            if (SortInsideFolderChoices.ResolvesToProtected(_plugin.OrganizerState, folder))
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled("(protected - nothing inside will move; set it to [-] in the folder list below)");
+            }
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"Remove##sort-inside-{folder}"))
+                remove = folder;
+        }
+        if (remove is not null)
+        {
+            config.SortInsideFolders.RemoveAll(f => string.Equals(f, remove, StringComparison.OrdinalIgnoreCase));
+            _plugin.ApplyToolPolicy();
+        }
+        ImGui.EndDisabled();
     }
 
     // One mode dropdown per tool, each shown only while the library has that tool's mods. The mode is

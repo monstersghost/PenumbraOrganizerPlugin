@@ -30,7 +30,14 @@ public enum ProteusRole
 }
 
 /// <summary>The saved tool settings the protection rule and the sort consult.</summary>
-public readonly record struct ToolPolicy(ToolMode Heliosphere, ToolMode Proteus, bool ProteusManagedAtRoot)
+/// <param name="SortInsideFolders">
+/// Folders (any depth, slash paths) the user keeps as the top level while their mods are sorted beneath them
+/// (case-insensitive). Never contains one of the sorter's own folders.
+/// </param>
+// SortInsideFolders is compared by reference (record equality); null means none.
+public readonly record struct ToolPolicy(
+    ToolMode Heliosphere, ToolMode Proteus, bool ProteusManagedAtRoot,
+    IReadOnlySet<string>? SortInsideFolders = null)
 {
     public static ToolPolicy Default => new(ToolMode.Protected, ToolMode.Protected, false);
 
@@ -38,6 +45,16 @@ public readonly record struct ToolPolicy(ToolMode Heliosphere, ToolMode Proteus,
     public static ToolMode Normalize(ToolMode mode) =>
         Enum.IsDefined(mode) ? mode : ToolMode.Protected;
 
-    public static ToolPolicy From(int heliosphere, int proteus, bool managedAtRoot) =>
-        new(Normalize((ToolMode)heliosphere), Normalize((ToolMode)proteus), managedAtRoot);
+    public static ToolPolicy From(
+        int heliosphere, int proteus, bool managedAtRoot, IEnumerable<string>? sortInsideFolders = null)
+    {
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in sortInsideFolders ?? [])
+        {
+            if (ToolFolders.NormalizeChosenFolder(folder) is { } normalized)
+                folders.Add(normalized);
+        }
+        return new(Normalize((ToolMode)heliosphere), Normalize((ToolMode)proteus), managedAtRoot,
+            folders.Count == 0 ? null : folders);
+    }
 }

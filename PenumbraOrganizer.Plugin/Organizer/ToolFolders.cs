@@ -40,13 +40,50 @@ public static class ToolFolders
     public static string ApplyAnchor(string currentPath, string normalPath)
     {
         var anchor = AnchorOf(currentPath);
-        if (anchor is null)
-            return normalPath;
+        return anchor is null ? normalPath : ApplyAnchorTo(anchor, normalPath);
+    }
 
-        var normalFirst = normalPath.Split('/')[0];
-        if (string.Equals(normalFirst, anchor, StringComparison.OrdinalIgnoreCase))
+    /// <summary>Prefixes a built path with the anchor unless it already starts with it (or equals it).</summary>
+    public static string ApplyAnchorTo(string anchor, string normalPath)
+    {
+        if (string.Equals(normalPath, anchor, StringComparison.OrdinalIgnoreCase)
+            || normalPath.StartsWith(anchor + "/", StringComparison.OrdinalIgnoreCase))
             return normalPath;
 
         return $"{anchor}/{normalPath}";
+    }
+
+    /// <summary>
+    /// Trims each segment, drops empty ones and rejoins with "/". Null when nothing is left or the
+    /// first segment is one of the sorter's own folders.
+    /// </summary>
+    public static string? NormalizeChosenFolder(string? folder)
+    {
+        if (folder is null)
+            return null;
+        var segments = folder.Split('/').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+        if (segments.Length == 0 || SorterFolders.Contains(segments[0]))
+            return null;
+        return string.Join('/', segments);
+    }
+
+    /// <summary>
+    /// The deepest chosen folder that is a path prefix of the mod's current folder (every segment but
+    /// the leaf), spelled as the mod spells it. Null when none matches or the mod is under a sorter folder.
+    /// </summary>
+    public static string? DeepestAnchor(string currentPath, IReadOnlySet<string> chosenFolders)
+    {
+        var segments = currentPath.Split('/');
+        var folderCount = segments.Length - 1;
+        if (folderCount < 1 || SorterFolders.Contains(segments[0]))
+            return null;
+
+        for (var depth = folderCount; depth >= 1; depth--)
+        {
+            var candidate = string.Join('/', segments.Take(depth));
+            if (chosenFolders.Contains(candidate))
+                return candidate;
+        }
+        return null;
     }
 }

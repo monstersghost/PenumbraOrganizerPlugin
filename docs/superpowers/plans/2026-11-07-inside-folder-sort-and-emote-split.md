@@ -19,7 +19,7 @@ Follow how the 0.6.5.0 options were added: `git show ab3ff66 --stat` and `git sh
 - With the emote split on, no emote mod stays flat in `Emotes`: no names at all goes to `Emotes/Undetermined`.
 - Sort inside re-sorts everything under the folder; protection rules still apply (protected rows are never moved, as today).
 - A sorter folder name (`Gear`, `Hair`, `Animation and VFX`, `Review`, ...) can never be a sort-inside folder (`ToolFolders.IsSorterFolder`).
-- Templates and the workbook export do not follow either option in this release. `WorkbookWorkflowService` must not be edited.
+- Templates do not follow the emote split. Applying a template keeps mods in a chosen sort-inside folder under it (as for Heliosphere and Proteus in Sort inside mode); the template preview does not show that folder prefix yet, and the workbook export ignores both options. `WorkbookWorkflowService` must not be edited.
 - `TemplateFallbackConversionTests` counts `SortSelection` constructor parameters (10); do not add a parameter to `SortSelection` (the emote flag rides in `LayoutOptions`).
 - Help `short` text must stay under 200 characters (`HelpContentTests`).
 - Commit messages end with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -634,7 +634,7 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the docs**
 
 - `HOW_SORTING_WORKS.md`: a section for the emote split (the four outcomes and the expression rule) and one for sort-inside folders (anchor kept, re-sorts everything, protection still applies, numbering per folder).
-- `USER_GUIDE.md`: in the Sort tab section describe "Split emotes by emote" next to the other split options, and in the Protect tab section describe "Sort inside folders". Note both are off by default and that templates and the workbook do not follow them yet. Mark the screenshots for the Sort and Protect tabs as needing a retake (do not edit images).
+- `USER_GUIDE.md`: in the Sort tab section describe "Split emotes by emote" next to the other split options, and in the Protect tab section describe "Sort inside folders". Note both are off by default; templates do not follow the emote split, applying a template keeps mods inside a chosen sort-inside folder (its preview does not show the prefix yet), and the workbook ignores both. Mark the screenshots for the Sort and Protect tabs as needing a retake (do not edit images).
 - Checklist rows: emote split on shows `Emotes/<name>`, `Multiple`, `Expressions`, `Undetermined` and nothing flat; unticked returns today's layout; adding `.Character specific mods` (or any folder) under Sort inside keeps it on top and sorts beneath it; a protected mod inside stays; Remove returns mods to the normal folders on the next sort; the `[emote-diag]` lines appear in `dalamud.log` after a scan.
 - `ROADMAP.md`: under "Where we are", add "Built on a branch, awaiting in-game check: Sort inside folders and the emote split", and note the `[emote-diag]` log is temporary and to be removed before release.
 - `RELEASE_NOTES_0.6.6.0.md`: short user-facing draft of both options.

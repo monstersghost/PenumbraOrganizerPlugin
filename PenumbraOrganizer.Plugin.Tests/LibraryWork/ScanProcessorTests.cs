@@ -240,6 +240,19 @@ public class ScanProcessorTests
         Assert.Equal(new HashSet<int> { 3, 108 }, row.HairFlat!.ToHashSet());
     }
 
+    [Fact]
+    public void EmoteRow_CarriesItsEmoteNames_AndOtherRowsDoNot()
+    {
+        var emote = NewProcessor().Process(
+            Seed(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()), "Dance Pack",
+                "Emote: Dance 74", "Emote: Big Grin"), CancellationToken.None)!;
+        Assert.Equal("Emotes", emote.SubCategory);
+        Assert.Equal(new HashSet<string> { "Dance 74", "Big Grin" }, emote.EmoteNames!.ToHashSet());
+
+        var gear = ScanWithFiles("Some Mod", "Ala Mhigan Gown", "chara/equipment/e0001/model/c0201e0001_top.mdl");
+        Assert.Null(gear.EmoteNames);
+    }
+
     private static OrganizerModRow ProcessGearWithConfig(string name, string configJson)
     {
         var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
