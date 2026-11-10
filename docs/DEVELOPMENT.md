@@ -49,8 +49,7 @@ misbehaves.
 ```
 pwsh scripts/prerelease-dalamud.ps1 -Action Install       # latest CI build of master (needs `gh auth login`)
 pwsh scripts/prerelease-dalamud.ps1 -Action BuildPlugin   # runs the tests and builds the plugin against it
-# start the game through XIVLauncher (Dalamud stays off) and log in, then:
-pwsh scripts/prerelease-dalamud.ps1 -Action Inject
+pwsh scripts/prerelease-dalamud.ps1 -Action Inject -WaitForGame   # then press Play in XIVLauncher
 ```
 
 - `-Branch <name>` picks another goatcorp/Dalamud branch. The default is `master`, the current
@@ -58,6 +57,9 @@ pwsh scripts/prerelease-dalamud.ps1 -Action Inject
   when preparing for the expansion that ships it.
 - `-ArtifactZip <path>` installs a `dalamud-artifact` zip you downloaded by hand from the
   goatcorp/Dalamud Actions page.
+- `-WaitForGame` (Inject) waits for the game to start and injects as soon as its window appears,
+  before the title screen, the way XIVLauncher does. Without it, Inject attaches to a game that's
+  already running. Penumbra then won't apply mods to anything already loaded until it's redrawn.
 - `-UseRealProfile` (Inject) loads your real Dalamud config and installed plugins, including
   Penumbra, instead of the empty test profile. Use it when the pre-release build is on the same
   API level as your installed plugins (the usual mid-expansion patch). The script refuses it

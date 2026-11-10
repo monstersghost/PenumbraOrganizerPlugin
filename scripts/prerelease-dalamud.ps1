@@ -11,7 +11,7 @@
 #   pwsh scripts/prerelease-dalamud.ps1 -Action Install -ArtifactZip C:\path\dalamud-artifact.zip
 #   pwsh scripts/prerelease-dalamud.ps1 -Action Install -BuildFromSource # needs VS 2026 C++ + CMake
 #   pwsh scripts/prerelease-dalamud.ps1 -Action BuildPlugin              # build + test against it
-#   pwsh scripts/prerelease-dalamud.ps1 -Action Inject                   # game must be running
+#   pwsh scripts/prerelease-dalamud.ps1 -Action Inject -WaitForGame -UseRealProfile  # then press Play
 #   pwsh scripts/prerelease-dalamud.ps1 -Action Status
 #
 # Layout (under %APPDATA%\XIVLauncher\prerelease-test):
@@ -42,7 +42,14 @@ param(
 
     # Inject: use your real dalamudConfig.json and installedPlugins (Penumbra etc.) instead of the
     # isolated test profile. Only valid when the pre-release build is the same API level.
-    [switch]$UseRealProfile
+    [switch]$UseRealProfile,
+
+    # Inject: wait for the game to start and inject as soon as its window appears (before the
+    # title screen), like XIVLauncher does. Run this first, then press Play in XIVLauncher.
+    [switch]$WaitForGame,
+
+    # How long -WaitForGame waits for the game to start.
+    [int]$WaitTimeoutMinutes = 10
 )
 
 $ErrorActionPreference = 'Stop'
@@ -217,9 +224,30 @@ function Invoke-Inject {
         throw "Dalamud assets not found at $assetDir. Launch the game once with a working Dalamud so XIVLauncher downloads them."
     }
 
+    if ($WaitForGame) {
+        if (@(Get-Process -Name 'ffxiv_dx11' -ErrorAction SilentlyContinue).Count -gt 0) {
+            throw 'The game is already running. Close it first, or run Inject without -WaitForGame.'
+        }
+        Write-Host "Waiting for the game to start - press Play in XIVLauncher now (timeout: $WaitTimeoutMinutes min)..."
+        $deadline = (Get-Date).AddMinutes($WaitTimeoutMinutes)
+        $game = $null
+        while (-not $game) {
+            if ((Get-Date) -gt $deadline) { throw 'Timed out waiting for the game to start.' }
+            Start-Sleep -Milliseconds 250
+            $game = Get-Process -Name 'ffxiv_dx11' -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+        Write-Host "Game started (PID $($game.Id)), waiting for its window..."
+        while ($game.MainWindowHandle -eq [IntPtr]::Zero) {
+            if ($game.HasExited) { throw 'The game exited before its window appeared.' }
+            if ((Get-Date) -gt $deadline) { throw 'Timed out waiting for the game window.' }
+            Start-Sleep -Milliseconds 250
+            $game.Refresh()
+        }
+    }
+
     $games = @(Get-Process -Name 'ffxiv_dx11' -ErrorAction SilentlyContinue)
     if ($games.Count -eq 0) {
-        throw 'The game is not running. Start it through XIVLauncher (Dalamud will stay off), log in, then run this again.'
+        throw 'The game is not running. Start it through XIVLauncher (Dalamud will stay off), or use -WaitForGame.'
     }
 
     foreach ($game in $games) {
