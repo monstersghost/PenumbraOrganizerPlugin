@@ -58,6 +58,10 @@ pwsh scripts/prerelease-dalamud.ps1 -Action Inject
   when preparing for the expansion that ships it.
 - `-ArtifactZip <path>` installs a `dalamud-artifact` zip you downloaded by hand from the
   goatcorp/Dalamud Actions page.
+- `-UseRealProfile` (Inject) loads your real Dalamud config and installed plugins, including
+  Penumbra, instead of the empty test profile. Use it when the pre-release build is on the same
+  API level as your installed plugins (the usual mid-expansion patch). The script refuses it
+  across API levels.
 - `-BuildFromSource` builds Dalamud locally instead. This needs Visual Studio 2026 with the C++
   workload, CMake 4.2+ and the .NET 10 SDK.
 

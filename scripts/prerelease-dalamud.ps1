@@ -38,7 +38,11 @@ param(
 
     # Game client language passed to Dalamud on inject.
     [ValidateSet('english', 'japanese', 'german', 'french')]
-    [string]$Language = 'english'
+    [string]$Language = 'english',
+
+    # Inject: use your real dalamudConfig.json and installedPlugins (Penumbra etc.) instead of the
+    # isolated test profile. Only valid when the pre-release build is the same API level.
+    [switch]$UseRealProfile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -231,12 +235,31 @@ function Invoke-Inject {
         }
     }
 
-    New-Item -ItemType Directory -Path $testPlugins -Force | Out-Null
-    $realConfig = Join-Path $xlDir 'dalamudConfig.json'
-    if (-not (Test-Path $testConfig) -and (Test-Path $realConfig)) {
-        # Copy once so settings and dev plugin locations carry over; Dalamud may migrate the copy.
-        Copy-Item $realConfig $testConfig
-        Write-Host "Copied your Dalamud config to $testConfig (the original is not modified)."
+    if ($UseRealProfile) {
+        # Same API level as the installed plugins, so load them (Penumbra included) from the real
+        # profile - the closest match to what XIVLauncher will run once it re-enables Dalamud.
+        $configPath = Join-Path $xlDir 'dalamudConfig.json'
+        $pluginPath = Join-Path $xlDir 'installedPlugins'
+        # Newest XIVLauncher-installed Dalamud (Hooks\<version>) = the API level the plugins were installed for.
+        $installed = Get-ChildItem (Join-Path $xlDir 'addon\Hooks') -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+(\.\d+){1,3}$' } |
+            ForEach-Object { [version]$_.Name } |
+            Sort-Object -Descending | Select-Object -First 1
+        if ($installed -and $installed.Major -ne $version.Major) {
+            throw "Your installed plugins are for API $($installed.Major) but this Dalamud is API $($version.Major). Don't use -UseRealProfile across API levels."
+        }
+        Write-Host 'Using your real Dalamud profile (config + installed plugins).'
+    }
+    else {
+        $configPath = $testConfig
+        $pluginPath = $testPlugins
+        New-Item -ItemType Directory -Path $testPlugins -Force | Out-Null
+        $realConfig = Join-Path $xlDir 'dalamudConfig.json'
+        if (-not (Test-Path $testConfig) -and (Test-Path $realConfig)) {
+            # Copy once so settings and dev plugin locations carry over; Dalamud may migrate the copy.
+            Copy-Item $realConfig $testConfig
+            Write-Host "Copied your Dalamud config to $testConfig (the original is not modified)."
+        }
     }
 
     Write-Host "Injecting Dalamud $version into process(es): $($games.Id -join ', ')"
@@ -244,8 +267,8 @@ function Invoke-Inject {
     try {
         $injectArgs = @('inject') + ($games | ForEach-Object { "$($_.Id)" }) + @(
             "--dalamud-working-directory=$dalamudDir",
-            "--dalamud-configuration-path=$testConfig",
-            "--dalamud-plugin-directory=$testPlugins",
+            "--dalamud-configuration-path=$configPath",
+            "--dalamud-plugin-directory=$pluginPath",
             "--dalamud-asset-directory=$assetDir",
             "--dalamud-client-language=$Language"
         )
@@ -262,7 +285,12 @@ function Invoke-Inject {
     Write-Host 'Injected. In game:'
     Write-Host "  1. /xlsettings > Experimental > Dev Plugin Locations: add $(Join-Path $pluginOutDir 'PenumbraOrganizer.Plugin.dll')"
     Write-Host '  2. /xlplugins > Dev Tools: enable Penumbra Organizer, then /porganizer'
-    Write-Host 'Penumbra must also have a build for this Dalamud, or the IPC calls will show a connection error.'
+    if ($UseRealProfile) {
+        Write-Host '  If the released Penumbra Organizer is also installed, disable it first - two copies under one name conflict.'
+    }
+    else {
+        Write-Host 'Penumbra is not in the test profile, so IPC calls will show a connection error. Use -UseRealProfile on the same API level.'
+    }
 }
 
 function Invoke-Status {
