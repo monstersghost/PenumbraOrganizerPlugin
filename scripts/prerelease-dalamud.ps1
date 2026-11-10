@@ -180,7 +180,7 @@ function Invoke-BuildPlugin {
         Write-Host 'Building solution...'
         dotnet build $solution --no-incremental
         if ($LASTEXITCODE -ne 0) {
-            throw "Build failed against Dalamud $version - these are the API breaks to fix."
+            throw "Build failed against Dalamud $version - see the errors above (missing files, API breaks, etc.)."
         }
 
         Write-Host 'Running tests...'
