@@ -26,8 +26,9 @@ param(
     [ValidateSet('Install', 'BuildPlugin', 'Inject', 'Status')]
     [string]$Action,
 
-    # goatcorp/Dalamud branch. api16-rollup = API 16 merged with the latest master (ClientStructs).
-    [string]$Branch = 'api16-rollup',
+    # goatcorp/Dalamud branch. master = the current API level with the latest ClientStructs update,
+    # which is what patch-day fixes land on. API-bump branches (e.g. api16-rollup) are for expansions.
+    [string]$Branch = 'master',
 
     # A dalamud-artifact.zip downloaded by hand from the goatcorp/Dalamud Actions page.
     [string]$ArtifactZip,

@@ -47,13 +47,15 @@ ClientStructs update in the branch's commits. An outdated Dalamud in a patched g
 misbehaves.
 
 ```
-pwsh scripts/prerelease-dalamud.ps1 -Action Install       # latest CI build of api16-rollup (needs `gh auth login`)
+pwsh scripts/prerelease-dalamud.ps1 -Action Install       # latest CI build of master (needs `gh auth login`)
 pwsh scripts/prerelease-dalamud.ps1 -Action BuildPlugin   # runs the tests and builds the plugin against it
 # start the game through XIVLauncher (Dalamud stays off) and log in, then:
 pwsh scripts/prerelease-dalamud.ps1 -Action Inject
 ```
 
-- `-Branch <name>` picks another goatcorp/Dalamud branch. The default is `api16-rollup`.
+- `-Branch <name>` picks another goatcorp/Dalamud branch. The default is `master`, the current
+  API level, where patch-day updates land. Use an API-bump branch such as `api16-rollup` only
+  when preparing for the expansion that ships it.
 - `-ArtifactZip <path>` installs a `dalamud-artifact` zip you downloaded by hand from the
   goatcorp/Dalamud Actions page.
 - `-BuildFromSource` builds Dalamud locally instead. This needs Visual Studio 2026 with the C++
