@@ -34,6 +34,38 @@ DLL.
 Penumbra has to be installed and running for the IPC calls to resolve. If it isn't, "Refresh mod
 list" shows a connection error instead of a mod list.
 
+## Testing against a pre-release Dalamud after a game patch
+
+After a game patch, XIVLauncher keeps Dalamud turned off until goatcorp ships an updated build.
+`scripts/prerelease-dalamud.ps1` lets you test the plugin before then. It uses a Dalamud branch
+that has already been updated for the new game version, and runs everything from a separate test
+profile under `%APPDATA%\XIVLauncher\prerelease-test`. Your real Dalamud config and installed
+plugins are left alone.
+
+Don't point it at a branch that hasn't been updated for the patch. Look for a recent
+ClientStructs update in the branch's commits. An outdated Dalamud in a patched game crashes or
+misbehaves.
+
+```
+pwsh scripts/prerelease-dalamud.ps1 -Action Install       # latest CI build of api16-rollup (needs `gh auth login`)
+pwsh scripts/prerelease-dalamud.ps1 -Action BuildPlugin   # runs the tests and builds the plugin against it
+# start the game through XIVLauncher (Dalamud stays off) and log in, then:
+pwsh scripts/prerelease-dalamud.ps1 -Action Inject
+```
+
+- `-Branch <name>` picks another goatcorp/Dalamud branch. The default is `api16-rollup`.
+- `-ArtifactZip <path>` installs a `dalamud-artifact` zip you downloaded by hand from the
+  goatcorp/Dalamud Actions page.
+- `-BuildFromSource` builds Dalamud locally instead. This needs Visual Studio 2026 with the C++
+  workload, CMake 4.2+ and the .NET 10 SDK.
+
+`BuildPlugin` sets `DALAMUD_HOME` so the SDK and the test project compile against the pre-release
+`Dalamud.dll`. It also passes `-p:DalamudApiLevel=<major version>`, so the manifest matches the
+build even before a matching `Dalamud.NET.Sdk` is on NuGet. Compile errors at this step are the API
+breaks to fix. After injecting, load the build from `artifacts/prerelease/PenumbraOrganizer.Plugin/`
+as a dev plugin, as described in the previous section. Penumbra also needs a build for the new
+Dalamud, or the IPC calls show a connection error.
+
 ## Relationship to the standalone app
 
 This plugin shares part of its classification and workbook logic with the standalone

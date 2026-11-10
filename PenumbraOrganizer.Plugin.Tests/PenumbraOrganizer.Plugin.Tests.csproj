@@ -22,9 +22,16 @@
     <ProjectReference Include="..\PenumbraOrganizer.Plugin\PenumbraOrganizer.Plugin.csproj" />
   </ItemGroup>
 
+  <!-- Same lookup as Dalamud.NET.Sdk: DALAMUD_HOME wins (used by scripts/prerelease-dalamud.ps1),
+       otherwise XIVLauncher's Hooks\dev. -->
+  <PropertyGroup>
+    <TestDalamudLibPath Condition="'$(DALAMUD_HOME)' != ''">$(DALAMUD_HOME)\</TestDalamudLibPath>
+    <TestDalamudLibPath Condition="'$(DALAMUD_HOME)' == ''">$(APPDATA)\XIVLauncher\addon\Hooks\dev\</TestDalamudLibPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <Reference Include="Dalamud">
-      <HintPath>$(APPDATA)\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
+      <HintPath>$(TestDalamudLibPath)Dalamud.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>
