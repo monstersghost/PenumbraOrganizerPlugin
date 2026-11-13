@@ -132,6 +132,26 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Top-level folders kept as the top level while their mods are sorted beneath them.</summary>
     public List<string> SortInsideFolders { get; set; } = [];
 
+    /// <summary>What happens when mods are installed. Ask until the user opts into automatic.</summary>
+    public Organizer.Collections.NewModAction NewModAction { get; set; } = Organizer.Collections.NewModAction.Ask;
+
+    /// <summary>The folder unused mods are moved under.</summary>
+    public string UnusedFolderName { get; set; } = "Unused";
+
+    /// <summary>Sort into one root folder per Penumbra collection first.</summary>
+    public bool SortByCollection { get; set; }
+
+    public Organizer.Collections.CollectionSharedRule CollectionSharedRule { get; set; } =
+        Organizer.Collections.CollectionSharedRule.SharedFolder;
+
+    public string CollectionSharedFolderName { get; set; } = "Shared";
+
+    public Organizer.Collections.CollectionUnusedRule CollectionUnusedRule { get; set; } =
+        Organizer.Collections.CollectionUnusedRule.UnusedFolder;
+
+    /// <summary>Collection folder names the last collection sort used, so a later sort can still strip them.</summary>
+    public List<string> CollectionFolderNamesInUse { get; set; } = [];
+
     /// <summary>The three settings above, with an unknown stored mode read as Protected.</summary>
     [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]

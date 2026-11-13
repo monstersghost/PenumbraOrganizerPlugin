@@ -305,4 +305,28 @@ public class ConfigurationTests
         var back = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(json)!;
         Assert.Equal(ToolMode.SortInside, back.ProteusMode);
     }
+
+    [Fact]
+    public void NewModAndCollectionFields_HaveTheirDefaults()
+    {
+        var config = new Configuration();
+
+        Assert.Equal(PenumbraOrganizer.Plugin.Organizer.Collections.NewModAction.Ask, config.NewModAction);
+        Assert.Equal("Unused", config.UnusedFolderName);
+        Assert.False(config.SortByCollection);
+        Assert.Equal(PenumbraOrganizer.Plugin.Organizer.Collections.CollectionSharedRule.SharedFolder, config.CollectionSharedRule);
+        Assert.Equal("Shared", config.CollectionSharedFolderName);
+        Assert.Equal(PenumbraOrganizer.Plugin.Organizer.Collections.CollectionUnusedRule.UnusedFolder, config.CollectionUnusedRule);
+        Assert.Empty(config.CollectionFolderNamesInUse);
+    }
+
+    [Fact]
+    public void OldConfigWithoutTheNewFields_ReadsTheDefaults()
+    {
+        var back = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>("{\"Version\":2}")!;
+
+        Assert.Equal(PenumbraOrganizer.Plugin.Organizer.Collections.NewModAction.Ask, back.NewModAction);
+        Assert.Equal("Shared", back.CollectionSharedFolderName);
+        Assert.Empty(back.CollectionFolderNamesInUse);
+    }
 }
