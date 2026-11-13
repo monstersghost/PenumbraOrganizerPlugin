@@ -135,6 +135,12 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>What happens when mods are installed. Ask until the user opts into automatic.</summary>
     public Organizer.Collections.NewModAction NewModAction { get; set; } = Organizer.Collections.NewModAction.Ask;
 
+    /// <summary>
+    /// Show the floating new-mod popup. Off keeps new mods pending for /porganizer sortnew without a
+    /// popup. Additive: a config written before this existed reads true.
+    /// </summary>
+    public bool ShowNewModPopup { get; set; } = true;
+
     /// <summary>The folder unused mods are moved under.</summary>
     public string UnusedFolderName { get; set; } = "Unused";
 

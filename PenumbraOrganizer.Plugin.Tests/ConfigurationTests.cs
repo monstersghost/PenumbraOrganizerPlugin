@@ -329,4 +329,17 @@ public class ConfigurationTests
         Assert.Equal("Shared", back.CollectionSharedFolderName);
         Assert.Empty(back.CollectionFolderNamesInUse);
     }
+
+    [Fact]
+    public void ShowNewModPopup_DefaultsOn_OldConfigReadsOn_AndRoundTripsOff()
+    {
+        Assert.True(new Configuration().ShowNewModPopup);
+
+        var old = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>("{\"Version\":2}")!;
+        Assert.True(old.ShowNewModPopup);
+
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(new Configuration { ShowNewModPopup = false });
+        Assert.Contains("\"ShowNewModPopup\":false", json);
+        Assert.False(Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(json)!.ShowNewModPopup);
+    }
 }
