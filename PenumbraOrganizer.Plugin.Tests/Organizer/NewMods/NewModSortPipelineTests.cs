@@ -15,7 +15,7 @@ public class NewModSortPipelineTests
     private sealed class FakeHost : INewModSortHost
     {
         public NewModAction Setting { get; set; } = NewModAction.Ask;
-        public bool IsWindowOpen { get; set; } = true;
+        public bool ShowPopup { get; set; } = true;
         public bool HasStagedProposals { get; set; }
         public bool HasSessionOverrides { get; set; }
         public string? ExternalRejection { get; set; }
@@ -26,6 +26,7 @@ public class NewModSortPipelineTests
         public int ScanStarts { get; private set; }
         public int ApplyStarts { get; private set; }
         public int ReviewOpens { get; private set; }
+        public int Discards { get; private set; }
         public List<SortScope> Sorts { get; } = [];
         public List<string> Chats { get; } = [];
         public bool ScanRunning => ScanState.IsRunning;
@@ -69,8 +70,43 @@ public class NewModSortPipelineTests
             Sorts.Add(scope);
             var result = SortResult?.Invoke(scope)
                 ?? new ScopedSortResult(scope.Identifiers?.Count ?? 7, scope.Identifiers?.Count ?? 7);
+            result = result with { ScopeText = $"Will sort {result.InScope} of 50 mods: loose in root." };
             HasStagedProposals = result.Changed > 0;
+            var ids = scope.Identifiers?.OrderBy(i => i, StringComparer.Ordinal).ToArray()
+                ?? Enumerable.Range(1, 7).Select(i => $"loose{i}").ToArray();
+            Staged = ids.Take(result.Changed).Select(i => new StagedMove(i, i, "Sorted/" + i)).ToList();
             return result;
+        }
+
+        public List<StagedMove> Staged { get; private set; } = [];
+
+        public IReadOnlyList<StagedMove> StagedMoves() => Staged;
+
+        public void DiscardStaged()
+        {
+            Discards++;
+            Staged = [];
+            HasStagedProposals = false;
+        }
+
+        /// <summary>A rescan published from elsewhere (the Scan tab, or the post-Apply watcher).</summary>
+        public void ExternalScanPublished()
+        {
+            ScanGeneration++;
+            HasStagedProposals = false;
+            Staged = [];
+        }
+
+        /// <summary>An Apply started and finished from the Review tab, outside the pipeline.</summary>
+        public void ExternalApplyCompleted()
+        {
+            OperationState = OperationStateSnapshot.Idle with
+            {
+                Stage = OperationStage.Completed,
+                Kind = OperationType.Apply,
+                CompletionGeneration = OperationState.CompletionGeneration + 1,
+            };
+            HasStagedProposals = false;
         }
 
         public string? StartApply()
@@ -119,12 +155,37 @@ public class NewModSortPipelineTests
     private static string[] Ids(int count, string prefix = "mod") =>
         Enumerable.Range(1, count).Select(i => $"{prefix}{i}").ToArray();
 
-    /// <summary>Drives one already-admitted run through scan, sort and Apply to Done.</summary>
+    /// <summary>Drives one already-admitted automatic run through scan, sort and Apply to Done.</summary>
     private static void RunToApplied(NewModSortPipeline pipeline, FakeHost host, ref DateTimeOffset now)
     {
         pipeline.Update(now = now.AddSeconds(1));
         Assert.Equal(NewModPipelineStage.Scanning, pipeline.Stage);
         host.FinishScan();
+        pipeline.Update(now = now.AddSeconds(1));
+        Assert.Equal(NewModPipelineStage.Applying, pipeline.Stage);
+        host.FinishApply();
+        pipeline.Update(now = now.AddSeconds(1));
+        Assert.Equal(NewModPipelineStage.Idle, pipeline.Stage);
+        Assert.Equal(NewModRunOutcome.Done, pipeline.LastResult!.Outcome);
+    }
+
+    /// <summary>Drives one already-admitted interactive run through scan and sort to the confirm window.</summary>
+    private static void RunToConfirming(NewModSortPipeline pipeline, FakeHost host, ref DateTimeOffset now)
+    {
+        pipeline.Update(now = now.AddSeconds(1));
+        Assert.Equal(NewModPipelineStage.Scanning, pipeline.Stage);
+        host.FinishScan();
+        pipeline.Update(now = now.AddSeconds(1));
+        Assert.Equal(NewModPipelineStage.Confirming, pipeline.Stage);
+        Assert.NotNull(pipeline.Preview);
+        Assert.Equal(0, host.ApplyStarts);
+    }
+
+    /// <summary>Drives one already-admitted interactive run through the confirm window's Apply to Done.</summary>
+    private static void RunToConfirmedApplied(NewModSortPipeline pipeline, FakeHost host, ref DateTimeOffset now)
+    {
+        RunToConfirming(pipeline, host, ref now);
+        pipeline.Confirm(NewModConfirmChoice.Apply);
         pipeline.Update(now = now.AddSeconds(1));
         Assert.Equal(NewModPipelineStage.Applying, pipeline.Stage);
         host.FinishApply();
@@ -152,19 +213,44 @@ public class NewModSortPipelineTests
     }
 
     [Fact]
-    public void Ask_WindowClosed_ChatsOnce_AndBannerStaysForWhenTheWindowOpens()
+    public void PopupOff_NoBanner_ChatsOnce_AndKeepsThemPending()
     {
         var (pipeline, host) = Make(NewModAction.Ask);
-        host.IsWindowOpen = false;
+        host.ShowPopup = false;
         pipeline.Offer(Ids(3), 3);
         pipeline.Update(T0);
         pipeline.Update(T0.AddSeconds(1));
 
+        Assert.Null(pipeline.Banner);
+        Assert.Equal(3, pipeline.PendingCount);
+        Assert.Equal(0, host.ScanStarts);
         Assert.Equal(
-            ["Penumbra Organizer: 3 new mods. /porganizer sortnew sorts them, or open /porganizer."],
+            ["Penumbra Organizer: 3 new mods are loose in the root. /porganizer sortnew sorts them."],
             host.Chats);
-        host.IsWindowOpen = true;
+    }
+
+    [Fact]
+    public void PopupTurnedOffWhileShowing_HidesIt_AndTurnedBackOn_ShowsItAgain()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
         Assert.NotNull(pipeline.Banner);
+
+        host.ShowPopup = false;
+        Assert.Null(pipeline.Banner);
+        host.ShowPopup = true;
+        Assert.Equal(2, pipeline.Banner!.Count);
+    }
+
+    [Fact]
+    public void DoNothingChosenWhileShowing_HidesIt()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        host.Setting = NewModAction.DoNothing;
+
+        Assert.Null(pipeline.Banner);
+        Assert.Equal(2, pipeline.PendingCount);
     }
 
     [Fact]
@@ -200,6 +286,7 @@ public class NewModSortPipelineTests
         Assert.Null(pipeline.Banner);
         Assert.Equal(0, host.ScanStarts);
         Assert.Equal(2, pipeline.PendingCount);
+        Assert.Empty(host.Chats);
     }
 
     [Fact]
@@ -411,7 +498,183 @@ public class NewModSortPipelineTests
     // ---- Banner choices ----
 
     [Fact]
-    public void SortNow_StartsApplyOnce_ThenDoneOnTheNextCompletion()
+    public void SortNow_StagesThenWaitsForConfirmation_WithThePreview()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+
+        pipeline.Update(T0);
+        host.FinishScan();
+        pipeline.Update(T0.AddSeconds(1));
+        pipeline.Update(T0.AddSeconds(2));
+        pipeline.Update(T0.AddMinutes(10)); // no timeout while the user decides
+
+        Assert.Equal(NewModPipelineStage.Confirming, pipeline.Stage);
+        Assert.Equal(0, host.ApplyStarts);
+        Assert.Null(pipeline.Banner);
+        var preview = pipeline.Preview!;
+        Assert.Equal("Move 2 new mods?", preview.Title);
+        Assert.Equal("Will sort 2 of 50 mods: loose in root.", preview.ScopeText);
+        Assert.Equal(
+            [new NewModPreviewRow("mod1", "(root)", "Sorted"), new NewModPreviewRow("mod2", "(root)", "Sorted")],
+            preview.Rows);
+        Assert.Empty(host.Chats);
+    }
+
+    [Fact]
+    public void Confirm_Apply_StartsTheApplyOnTheNextUpdate_NotInTheCall()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+
+        pipeline.Confirm(NewModConfirmChoice.Apply);
+        Assert.Equal(0, host.ApplyStarts);
+        Assert.Null(pipeline.Preview);
+
+        pipeline.Update(now.AddSeconds(1));
+        Assert.Equal(1, host.ApplyStarts);
+        Assert.Equal(NewModPipelineStage.Applying, pipeline.Stage);
+    }
+
+    [Fact]
+    public void Confirm_Cancel_DiscardsTheStagedSort_AndReturnsThemToPending()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+
+        pipeline.Confirm(NewModConfirmChoice.Cancel);
+        pipeline.Update(now.AddSeconds(1));
+
+        Assert.Equal(NewModPipelineStage.Idle, pipeline.Stage);
+        Assert.Equal(NewModRunOutcome.Cancelled, pipeline.LastResult!.Outcome);
+        Assert.Equal(1, host.Discards);
+        Assert.False(host.HasStagedProposals);
+        Assert.Equal(0, host.ApplyStarts);
+        Assert.Equal(2, pipeline.PendingCount);
+        Assert.Null(pipeline.Banner); // answered: no popup until the next batch
+        Assert.Empty(host.Chats);
+    }
+
+    [Fact]
+    public void Confirm_ReviewFirst_OpensReview_KeepsTheStagedSort()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+
+        pipeline.Confirm(NewModConfirmChoice.ReviewFirst);
+        pipeline.Update(now.AddSeconds(1));
+
+        Assert.Equal(1, host.ReviewOpens);
+        Assert.Equal(0, host.Discards);
+        Assert.True(host.HasStagedProposals);
+        Assert.Equal(0, host.ApplyStarts);
+        Assert.Equal(NewModRunOutcome.Done, pipeline.LastResult!.Outcome);
+        Assert.Equal(NewModPipelineStage.Idle, pipeline.Stage);
+    }
+
+    [Fact]
+    public void Confirm_OutsideConfirming_IsIgnored()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Confirm(NewModConfirmChoice.Apply);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        pipeline.Confirm(NewModConfirmChoice.Cancel); // still admitting
+        pipeline.Update(T0);
+        host.FinishScan();
+        pipeline.Update(T0.AddSeconds(1));
+
+        Assert.Equal(NewModPipelineStage.Confirming, pipeline.Stage);
+        Assert.Equal(0, host.Discards);
+    }
+
+    [Fact]
+    public void Confirming_RescanFromElsewhere_EndsTheRun_AndKeepsThemPending()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+
+        host.ExternalScanPublished();
+        pipeline.Update(now.AddSeconds(1));
+
+        Assert.Equal(NewModPipelineStage.Idle, pipeline.Stage);
+        Assert.Null(pipeline.Preview);
+        Assert.Equal(NewModRunOutcome.Failed, pipeline.LastResult!.Outcome);
+        Assert.Equal(
+            ["Penumbra Organizer: could not sort the new mods. The library changed before the sort was confirmed, " +
+             "so nothing was applied. They stay pending for /porganizer sortnew."],
+            host.Chats);
+        Assert.Equal(2, pipeline.PendingCount);
+        Assert.Equal(0, host.ApplyStarts);
+    }
+
+    [Fact]
+    public void Confirming_ApplyFromTheReviewTab_EndsTheRun()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+
+        host.ExternalApplyCompleted();
+        pipeline.Update(now.AddSeconds(1));
+
+        Assert.Equal(NewModPipelineStage.Idle, pipeline.Stage);
+        Assert.Equal(0, host.ApplyStarts);
+        Assert.Contains("nothing was applied", Assert.Single(host.Chats));
+    }
+
+    [Fact]
+    public void Confirming_BatchArriving_IsQueued_NotMerged()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        pipeline.Offer(["a1"], 1);
+        pipeline.UserChose(NewModChoice.SortNow);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+
+        pipeline.Offer(["b1"], 1);
+        Assert.Equal(1, pipeline.QueuedBatches);
+        Assert.Equal(["a1"], pipeline.Preview!.Rows.Select(r => r.Name));
+        Assert.Null(pipeline.Banner);
+    }
+
+    [Fact]
+    public void ProgressText_ShownWhileAnInteractiveRunPrepares_NotForAutomatic()
+    {
+        var (pipeline, host) = Make(NewModAction.Ask);
+        Assert.Null(pipeline.ProgressText);
+        pipeline.Offer(Ids(2), 2);
+        pipeline.UserChose(NewModChoice.SortNow);
+        Assert.Equal("Scanning your library before sorting...", pipeline.ProgressText);
+        pipeline.Update(T0);
+        Assert.Equal("Scanning your library before sorting...", pipeline.ProgressText);
+        host.FinishScan();
+        pipeline.Update(T0.AddSeconds(1));
+        Assert.Null(pipeline.ProgressText); // the confirm window takes over
+
+        var (auto, _) = Make(NewModAction.SortAutomatically);
+        auto.Offer(Ids(2), 2);
+        auto.Update(T0);
+        Assert.Null(auto.ProgressText);
+    }
+
+    [Fact]
+    public void SortNow_ConfirmedApply_StartsApplyOnce_ThenDoneOnTheNextCompletion()
     {
         var (pipeline, host) = Make(NewModAction.Ask);
         pipeline.Offer(Ids(3), 3);
@@ -420,6 +683,9 @@ public class NewModSortPipelineTests
 
         pipeline.Update(T0);
         host.FinishScan();
+        pipeline.Update(T0.AddSeconds(1));
+        Assert.Equal(0, host.ApplyStarts);
+        pipeline.Confirm(NewModConfirmChoice.Apply);
         pipeline.Update(T0.AddSeconds(1));
         Assert.Equal(1, host.ApplyStarts);
 
@@ -463,6 +729,8 @@ public class NewModSortPipelineTests
         pipeline.Update(T0);
         host.FinishScan();
         pipeline.Update(T0.AddSeconds(1));
+        pipeline.Confirm(NewModConfirmChoice.Apply);
+        pipeline.Update(T0.AddSeconds(2));
 
         Assert.Equal(NewModPipelineStage.Idle, pipeline.Stage);
         Assert.Equal(NewModRunOutcome.Failed, pipeline.LastResult!.Outcome);
@@ -575,6 +843,8 @@ public class NewModSortPipelineTests
         host.FinishScan();
         pipeline.Update(T0.AddSeconds(1));
         Assert.Equal(new HashSet<string> { "a1" }, host.Sorts.Single().Identifiers!.ToHashSet());
+        pipeline.Confirm(NewModConfirmChoice.Apply);
+        pipeline.Update(T0.AddSeconds(1));
         host.FinishApply();
         pipeline.Update(T0.AddSeconds(2));
         pipeline.Update(T0.AddSeconds(3));
@@ -583,10 +853,10 @@ public class NewModSortPipelineTests
     }
 
     [Fact]
-    public void TwoAutomaticBatchesInARow_WithTheWindowClosed_BothApply()
+    public void TwoAutomaticBatchesInARow_WithThePopupOff_BothApply()
     {
         var (pipeline, host) = Make(NewModAction.SortAutomatically);
-        host.IsWindowOpen = false;
+        host.ShowPopup = false;
         host.PostApplyRescan = true;
         var now = T0;
 
@@ -663,7 +933,7 @@ public class NewModSortPipelineTests
     }
 
     [Fact]
-    public void SortNew_StagedWithForce_Runs_AndApplies()
+    public void SortNew_StagedWithForce_Stages_Confirms_AndApplies()
     {
         var (pipeline, host) = Make();
         pipeline.Offer(Ids(2), 2);
@@ -672,9 +942,45 @@ public class NewModSortPipelineTests
         Assert.Null(pipeline.Banner);
 
         var now = T0;
-        RunToApplied(pipeline, host, ref now);
+        RunToConfirmedApplied(pipeline, host, ref now);
         Assert.Equal(1, host.ApplyStarts);
-        Assert.StartsWith("Penumbra Organizer: moved 2 new mods.", Assert.Single(host.Chats));
+        Assert.Equal(2, host.Chats.Count);
+        Assert.Equal(
+            "Penumbra Organizer: 2 new mods are ready to move. Check the list in the window that opened, then Apply.",
+            host.Chats[0]);
+        Assert.StartsWith("Penumbra Organizer: moved 2 new mods.", host.Chats[1]);
+    }
+
+    [Fact]
+    public void SortNew_DoesNotApplyWithoutConfirmation()
+    {
+        var (pipeline, host) = Make();
+        pipeline.Offer(Ids(2), 2);
+        pipeline.RunCommand(CommandKind.SortNew, force: false);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+        pipeline.Update(now.AddMinutes(5));
+
+        Assert.Equal(0, host.ApplyStarts);
+        Assert.Equal("Move 2 new mods?", pipeline.Preview!.Title);
+    }
+
+    [Fact]
+    public void SortNew_Cancel_ReturnsThemToPending_SoSortNewCanRunAgain()
+    {
+        var (pipeline, host) = Make();
+        pipeline.Offer(Ids(2), 2);
+        pipeline.RunCommand(CommandKind.SortNew, force: false);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+        pipeline.Confirm(NewModConfirmChoice.Cancel);
+        pipeline.Update(now = now.AddSeconds(1));
+        Assert.Equal(2, pipeline.PendingCount);
+        Assert.Equal(1, host.Discards);
+
+        pipeline.RunCommand(CommandKind.SortNew, force: false);
+        RunToConfirming(pipeline, host, ref now);
+        Assert.Equal(2, pipeline.Preview!.Count);
     }
 
     [Fact]
@@ -745,9 +1051,32 @@ public class NewModSortPipelineTests
         var scope = host.Sorts.Single();
         Assert.True(scope.RootOnly);
         Assert.Null(scope.Identifiers);
-        host.FinishApply(moved: 7);
+        Assert.Equal(NewModPipelineStage.Confirming, pipeline.Stage);
+        Assert.Equal("Move 7 loose mods?", pipeline.Preview!.Title);
+        pipeline.Confirm(NewModConfirmChoice.Apply);
         pipeline.Update(T0.AddSeconds(2));
-        Assert.StartsWith("Penumbra Organizer: moved 7 loose mods.", Assert.Single(host.Chats));
+        host.FinishApply(moved: 7);
+        pipeline.Update(T0.AddSeconds(3));
+        Assert.Equal(
+            "Penumbra Organizer: 7 loose mods are ready to move. Check the list in the window that opened, then Apply.",
+            host.Chats[0]);
+        Assert.StartsWith("Penumbra Organizer: moved 7 loose mods.", host.Chats[1]);
+        Assert.Equal(2, host.Chats.Count);
+    }
+
+    [Fact]
+    public void SortRoot_Cancel_DiscardsTheStagedSort_AndLeavesPendingAlone()
+    {
+        var (pipeline, host) = Make();
+        pipeline.RunCommand(CommandKind.SortRoot, force: false);
+        var now = T0;
+        RunToConfirming(pipeline, host, ref now);
+        pipeline.Confirm(NewModConfirmChoice.Cancel);
+        pipeline.Update(now.AddSeconds(1));
+
+        Assert.Equal(NewModRunOutcome.Cancelled, pipeline.LastResult!.Outcome);
+        Assert.Equal(1, host.Discards);
+        Assert.Equal(0, pipeline.PendingCount);
     }
 
     [Fact]
@@ -768,7 +1097,7 @@ public class NewModSortPipelineTests
         pipeline.Offer(Ids(2), 2);
         pipeline.RunCommand(CommandKind.SortRoot, force: false);
         var now = T0;
-        RunToApplied(pipeline, host, ref now);
+        RunToConfirmedApplied(pipeline, host, ref now);
 
         Assert.Equal(2, pipeline.PendingCount);
     }

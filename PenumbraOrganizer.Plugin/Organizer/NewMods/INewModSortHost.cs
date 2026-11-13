@@ -4,8 +4,11 @@ using PenumbraOrganizer.Plugin.Organizer.Operations;
 
 namespace PenumbraOrganizer.Plugin.Organizer.NewMods;
 
-/// <summary>What a scoped sort did: rows it covered and rows whose proposal now differs from where they are.</summary>
-public readonly record struct ScopedSortResult(int InScope, int Changed);
+/// <summary>
+/// What a scoped sort did: rows it covered, rows whose proposal now differs from where they are, and the
+/// Sort tab's scope line for it (SortSummaryText), if any.
+/// </summary>
+public readonly record struct ScopedSortResult(int InScope, int Changed, string? ScopeText = null);
 
 /// <summary>
 /// Everything NewModSortPipeline needs from the plugin, so the pipeline stays a pure state machine.
@@ -17,7 +20,8 @@ public interface INewModSortHost
     /// <summary>The user's choice for new mods (Configuration.NewModAction).</summary>
     NewModAction Setting { get; }
 
-    bool IsWindowOpen { get; }
+    /// <summary>Configuration.ShowNewModPopup: whether the floating new-mod popup may show.</summary>
+    bool ShowPopup { get; }
 
     /// <summary>True when the current scan has unapplied proposals that a rescan would discard.</summary>
     bool HasStagedProposals { get; }
@@ -38,6 +42,12 @@ public interface INewModSortHost
 
     /// <summary>Runs the Sort tab's saved settings over the given scope and stages the proposals.</summary>
     ScopedSortResult SortScoped(SortScope scope);
+
+    /// <summary>Every staged move right now: unprotected rows whose proposal differs from where they are.</summary>
+    IReadOnlyList<StagedMove> StagedMoves();
+
+    /// <summary>Resets every staged proposal to the mod's current path (the confirm window's Cancel).</summary>
+    void DiscardStaged();
 
     /// <summary>Starts an Apply of the staged proposals (Plugin.StartApplyOperation). Null when it started, else the reason.</summary>
     string? StartApply();

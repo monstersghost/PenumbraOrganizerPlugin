@@ -1,9 +1,9 @@
 namespace PenumbraOrganizer.Plugin.Organizer.NewMods;
 
-/// <summary>The new-mod banner as data: the question, the warnings that apply right now, the buttons.</summary>
+/// <summary>The new-mod popup as data: the question, the warnings that apply right now, the buttons.</summary>
 public sealed record NewModBanner(int Count, string Message, IReadOnlyList<string> Warnings);
 
-/// <summary>Every line the new-mod banner and chat use. Plain ASCII.</summary>
+/// <summary>Every line the new-mod popup, the confirm window and chat use. Plain ASCII.</summary>
 public static class NewModPromptText
 {
     public const string SortNowLabel = "Sort now";
@@ -30,10 +30,33 @@ public static class NewModPromptText
         return new NewModBanner(count, message, warnings);
     }
 
-    /// <summary>The one chat line sent instead of the banner when the window is closed.</summary>
-    public static string WindowClosed(int count) => count == 1
-        ? Prefix + "1 new mod. /porganizer sortnew sorts it, or open /porganizer."
-        : Prefix + $"{count} new mods. /porganizer sortnew sorts them, or open /porganizer.";
+    public const string PopupTitle = "New mods";
+    public const string DontShowPopupLabel = "Don't show this popup";
+    public const string ShowPopupSettingLabel = "Show a popup when new mods are found";
+    public const string ConfirmTitle = "Confirm sort";
+    public const string ApplyLabel = "Apply";
+    public const string CancelLabel = "Cancel";
+    public const string Preparing = "Scanning your library before sorting...";
+
+    /// <summary>Why a confirm window was closed without applying: its staged sort no longer matches the library.</summary>
+    public const string ConfirmStale = "The library changed before the sort was confirmed, so nothing was applied.";
+
+    /// <summary>The one chat line sent instead of the popup when the user has turned the popup off.</summary>
+    public static string PopupOff(int count) => count == 1
+        ? Prefix + "1 new mod is loose in the root. /porganizer sortnew sorts it."
+        : Prefix + $"{count} new mods are loose in the root. /porganizer sortnew sorts them.";
+
+    /// <summary>After /porganizer sortnew or sortroot staged its sort: the confirm window is open in game.</summary>
+    public static string ConfirmOpened(int count, bool newMods)
+    {
+        var kind = newMods ? "new" : "loose";
+        var subject = count == 1 ? $"1 {kind} mod is" : $"{count} {kind} mods are";
+        return Prefix + subject + " ready to move. Check the list in the window that opened, then Apply.";
+    }
+
+    /// <summary>The confirm window's Cancel: the staged sort was discarded.</summary>
+    public static string Cancelled(bool newMods) =>
+        Prefix + "sort cancelled. Nothing was moved." + (newMods ? StillPending : string.Empty);
 
     /// <summary>After a headless Apply: the Review modal's Rediscover reminder, which is never shown here.</summary>
     public static string Moved(int count, bool newMods, int missing)

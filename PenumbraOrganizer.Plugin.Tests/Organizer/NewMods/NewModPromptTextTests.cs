@@ -53,14 +53,49 @@ public class NewModPromptTextTests
     }
 
     [Fact]
-    public void WindowClosed_ChatLine()
+    public void PopupOff_ChatLine()
     {
         Assert.Equal(
-            "Penumbra Organizer: 3 new mods. /porganizer sortnew sorts them, or open /porganizer.",
-            NewModPromptText.WindowClosed(3));
+            "Penumbra Organizer: 3 new mods are loose in the root. /porganizer sortnew sorts them.",
+            NewModPromptText.PopupOff(3));
         Assert.Equal(
-            "Penumbra Organizer: 1 new mod. /porganizer sortnew sorts it, or open /porganizer.",
-            NewModPromptText.WindowClosed(1));
+            "Penumbra Organizer: 1 new mod is loose in the root. /porganizer sortnew sorts it.",
+            NewModPromptText.PopupOff(1));
+    }
+
+    [Fact]
+    public void PopupAndConfirmLabels()
+    {
+        Assert.Equal("New mods", NewModPromptText.PopupTitle);
+        Assert.Equal("Don't show this popup", NewModPromptText.DontShowPopupLabel);
+        Assert.Equal("Show a popup when new mods are found", NewModPromptText.ShowPopupSettingLabel);
+        Assert.Equal("Confirm sort", NewModPromptText.ConfirmTitle);
+        Assert.Equal("Apply", NewModPromptText.ApplyLabel);
+        Assert.Equal("Cancel", NewModPromptText.CancelLabel);
+        Assert.Equal("Scanning your library before sorting...", NewModPromptText.Preparing);
+    }
+
+    [Fact]
+    public void ConfirmOpened_ChatLine()
+    {
+        Assert.Equal(
+            "Penumbra Organizer: 2 new mods are ready to move. Check the list in the window that opened, then Apply.",
+            NewModPromptText.ConfirmOpened(2, newMods: true));
+        Assert.Equal(
+            "Penumbra Organizer: 1 loose mod is ready to move. Check the list in the window that opened, then Apply.",
+            NewModPromptText.ConfirmOpened(1, newMods: false));
+    }
+
+    [Fact]
+    public void Cancelled_AndStale()
+    {
+        Assert.Equal(
+            "Penumbra Organizer: sort cancelled. Nothing was moved. They stay pending for /porganizer sortnew.",
+            NewModPromptText.Cancelled(newMods: true));
+        Assert.Equal("Penumbra Organizer: sort cancelled. Nothing was moved.", NewModPromptText.Cancelled(newMods: false));
+        Assert.Equal(
+            "The library changed before the sort was confirmed, so nothing was applied.",
+            NewModPromptText.ConfirmStale);
     }
 
     [Fact]
@@ -149,11 +184,15 @@ public class NewModPromptTextTests
         [
             banner.Message, .. banner.Warnings,
             NewModPromptText.SortNowLabel, NewModPromptText.ReviewFirstLabel, NewModPromptText.NotNowLabel,
-            NewModPromptText.WindowClosed(3), NewModPromptText.Moved(3, true, 2), NewModPromptText.Moved(1, false, 1),
+            NewModPromptText.PopupOff(3), NewModPromptText.Moved(3, true, 2), NewModPromptText.Moved(1, false, 1),
             NewModPromptText.NothingToMove(true, 1), NewModPromptText.Failed("x", true),
             NewModPromptText.GaveUpWaiting("x", true), NewModPromptText.ReviewOpened(3),
             NewModPromptText.NothingPending, NewModPromptText.StagedWithoutForce(CommandKind.SortNew),
             NewModPromptText.Busy("x"),
+            NewModPromptText.PopupTitle, NewModPromptText.DontShowPopupLabel, NewModPromptText.ShowPopupSettingLabel,
+            NewModPromptText.ConfirmTitle, NewModPromptText.ApplyLabel, NewModPromptText.CancelLabel,
+            NewModPromptText.Preparing, NewModPromptText.ConfirmOpened(2, true), NewModPromptText.Cancelled(true),
+            NewModPromptText.ConfirmStale,
         ];
         foreach (var line in lines)
             Assert.All(line, c => Assert.True(c < 128, $"non-ASCII code point {(int)c} in: {line}"));

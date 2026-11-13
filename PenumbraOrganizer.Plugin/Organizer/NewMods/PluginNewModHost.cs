@@ -26,9 +26,20 @@ internal sealed class PluginNewModHost : INewModSortHost
 
     public NewModAction Setting => _plugin.Config.NewModAction;
 
-    public bool IsWindowOpen => _window.IsOpen;
+    public bool ShowPopup => _plugin.Config.ShowNewModPopup;
 
-    public bool HasStagedProposals => _plugin.OrganizerState.Mods.Any(m =>
+    public bool HasStagedProposals => StagedRows().Any();
+
+    public IReadOnlyList<StagedMove> StagedMoves() =>
+        StagedRows().Select(m => new StagedMove(m.Name, m.CurrentPath, m.ProposedPath)).ToList();
+
+    public void DiscardStaged()
+    {
+        foreach (var row in StagedRows().ToList())
+            _plugin.OrganizerState.AssignManual(row.Identifier, row.CurrentPath);
+    }
+
+    private IEnumerable<Organizer.OrganizerModRow> StagedRows() => _plugin.OrganizerState.Mods.Where(m =>
         !m.Protected && !PenumbraPathSemantics.AreEquivalent(m.CurrentPath, m.ProposedPath, m.Name));
 
     public bool HasSessionOverrides => _plugin.OrganizerState.HasSessionOverrides;
@@ -57,9 +68,11 @@ internal sealed class PluginNewModHost : INewModSortHost
         var labels = _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels;
         var selection = SortSelectionFactory.FromConfig(_plugin.Config, labels);
         var inScope = SortRunner.Run(_plugin.OrganizerState, selection, _canonicalizer.Canonicalize, scope);
-        var changed = _plugin.OrganizerState.Mods.Count(m =>
-            !m.Protected && !PenumbraPathSemantics.AreEquivalent(m.CurrentPath, m.ProposedPath, m.Name));
-        return new ScopedSortResult(inScope, changed);
+        var changed = StagedRows().Count();
+        var scopeText = _plugin.OrganizerState.LastSortSummary is { } summary
+            ? Organizer.SortSummaryText.Describe(summary)
+            : null;
+        return new ScopedSortResult(inScope, changed, scopeText);
     }
 
     public string? StartApply()
