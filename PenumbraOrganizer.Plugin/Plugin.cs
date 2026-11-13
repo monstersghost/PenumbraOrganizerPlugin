@@ -163,6 +163,10 @@ public sealed class Plugin : IDalamudPlugin
 
         NewModPipeline = new Organizer.NewMods.NewModSortPipeline(
             new Organizer.NewMods.PluginNewModHost(this, _mainWindow, SendChat));
+        // Their own windows, so they show with the main window closed. Each opens and closes itself
+        // from the pipeline's state; their buttons only record answers for OnFrameworkUpdate.
+        WindowSystem.AddWindow(new Windows.NewModPopup(NewModPipeline, Config, SaveConfig));
+        WindowSystem.AddWindow(new Windows.SortConfirmWindow(NewModPipeline));
 
         // Observe live changes. SetModPath is now reached only through the operation engine
         // (StartApplyOperation/StartRestoreOperation -> OperationController -> PathMutationOperation),

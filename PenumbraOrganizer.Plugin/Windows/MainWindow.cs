@@ -197,7 +197,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
         DrawRecoveryPanelIfNeeded();
 
-        DrawNewModBanner();
+        DrawNewModStatus();
 
         if (_lastError != null)
             ImGui.TextColored(PluginTheme.CollisionBad, _lastError);
@@ -233,32 +233,15 @@ public sealed partial class MainWindow : Window, IDisposable
         _fileDialogManager.Draw();
     }
 
-    // The new-mod prompt: an in-window banner in the error slot, never a popup. Buttons answer the
-    // pipeline, which does the work on later framework updates.
-    private void DrawNewModBanner()
+    // The new-mod question itself is the floating NewModPopup and the SortConfirmWindow, so it is
+    // never asked twice; the main window only says a run is in progress.
+    private void DrawNewModStatus()
     {
-        var pipeline = _plugin.NewModPipeline;
-        if (pipeline.Banner is { } banner)
-        {
-            ImGui.TextColored(PluginTheme.ChangedGood, banner.Message);
-            foreach (var warning in banner.Warnings)
-                TextDisabledWrapped(warning);
-
-            if (ImGui.Button(Organizer.NewMods.NewModPromptText.SortNowLabel + "##newmods-sort"))
-                pipeline.UserChose(Organizer.NewMods.NewModChoice.SortNow);
-            Help.Tooltip(HelpTopics.NewModsBanner);
-            ImGui.SameLine();
-            if (ImGui.Button(Organizer.NewMods.NewModPromptText.ReviewFirstLabel + "##newmods-review"))
-                pipeline.UserChose(Organizer.NewMods.NewModChoice.ReviewFirst);
-            ImGui.SameLine();
-            if (ImGui.Button(Organizer.NewMods.NewModPromptText.NotNowLabel + "##newmods-later"))
-                pipeline.UserChose(Organizer.NewMods.NewModChoice.NotNow);
-            ImGui.Separator();
-        }
-        else if (pipeline.Stage != Organizer.NewMods.NewModPipelineStage.Idle)
-        {
+        var stage = _plugin.NewModPipeline.Stage;
+        if (stage == Organizer.NewMods.NewModPipelineStage.Confirming)
+            ImGui.TextDisabled("New mods are waiting for you to confirm the sort.");
+        else if (stage != Organizer.NewMods.NewModPipelineStage.Idle)
             ImGui.TextDisabled("Sorting new mods...");
-        }
     }
 
     // The single place an operation completion turns into UI consequences. Guarded by a generation
