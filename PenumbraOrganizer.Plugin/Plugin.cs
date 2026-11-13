@@ -567,10 +567,32 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.SavePluginConfig(Config);
     }
 
+    /// <summary>Penumbra's mod root, or null when Penumbra does not answer.</summary>
+    internal string? ModDirectory
+    {
+        get
+        {
+            try
+            {
+                return new Penumbra.Api.IpcSubscribers.GetModDirectory(PluginInterface).Invoke();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Could not read Penumbra's mod directory.");
+                return null;
+            }
+        }
+    }
+
+    private Organizer.Collections.CollectionSettingsReader? _collectionSettingsReader;
+
+    public Organizer.Collections.CollectionSettingsReader CollectionSettingsReader =>
+        _collectionSettingsReader ??= new Organizer.Collections.CollectionSettingsReader(PluginInterface);
+
     private PenumbraInstallation BuildInstallation() => new(
         ConfigurationPath: string.Empty,
         ConfigDirectory: PenumbraConfigDirectory,
-        ModRoot: new Penumbra.Api.IpcSubscribers.GetModDirectory(PluginInterface).Invoke(),
+        ModRoot: ModDirectory ?? string.Empty,
         PluginAssemblyPath: null,
         PluginManifestPath: null,
         InstalledVersion: null,
