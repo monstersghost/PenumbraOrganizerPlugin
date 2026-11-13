@@ -208,7 +208,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Toggle the Penumbra Organizer window. Subcommands: sortnew [force], sortroot [force], help.",
+            HelpMessage = "Toggle the Penumbra Organizer window. Chat subcommands are switched off for now.",
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
@@ -243,8 +243,11 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private const string CommandHelpLine =
-        "Penumbra Organizer: /porganizer toggles the window. /porganizer sortnew sorts newly installed mods, " +
-        "/porganizer sortroot sorts every loose mod in the root. Add force to discard an unapplied sort.";
+        "Penumbra Organizer: /porganizer toggles the window. The sortnew and sortroot subcommands are switched off for now.";
+
+    private const string CommandsDisabledLine =
+        "Penumbra Organizer: /porganizer sortnew and sortroot are switched off for now. " +
+        "Use the new-mods popup or the Sort tab instead.";
 
     private void OnCommand(string command, string args)
     {
@@ -257,19 +260,10 @@ public sealed class Plugin : IDalamudPlugin
                     ToggleMainUi();
                     break;
                 case Organizer.CommandKind.SortNew:
-                    // Skips the debounce: whatever has been noticed so far counts now.
-                    if (NewModTracker.HasPending)
-                    {
-                        var batch = NewModTracker.TakeAll();
-                        var eligible = EligibleNewMods(batch);
-                        if (eligible.Count > 0)
-                            NewModPipeline.AddPending(batch, eligible.Count);
-                    }
-
-                    NewModPipeline.RunCommand(parsed.Kind, parsed.Force);
-                    break;
                 case Organizer.CommandKind.SortRoot:
-                    NewModPipeline.RunCommand(parsed.Kind, parsed.Force);
+                    // Switched off for now: the chat commands did not behave in the first in-game
+                    // test. The pipeline behind them stays; the popup's Sort now button still uses it.
+                    SendChat(CommandsDisabledLine);
                     break;
                 default:
                     SendChat(CommandHelpLine);

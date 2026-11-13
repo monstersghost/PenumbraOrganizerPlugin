@@ -225,7 +225,7 @@ public class NewModSortPipelineTests
         Assert.Equal(3, pipeline.PendingCount);
         Assert.Equal(0, host.ScanStarts);
         Assert.Equal(
-            ["Penumbra Organizer: 3 new mods are loose in the root. /porganizer sortnew sorts them."],
+            ["Penumbra Organizer: 3 new mods are loose in the root. Turn the popup back on in Sort > Advanced to sort them."],
             host.Chats);
     }
 
@@ -398,7 +398,7 @@ public class NewModSortPipelineTests
         Assert.Equal(NewModRunOutcome.Failed, pipeline.LastResult!.Outcome);
         Assert.Equal(
             ["Penumbra Organizer: gave up waiting to sort the new mods after 2 minutes: Folder Cleanup is running. " +
-             "They stay pending for /porganizer sortnew."],
+             "They stay pending."],
             host.Chats);
         Assert.Equal(0, host.ScanStarts);
         Assert.Equal(2, pipeline.PendingCount);
@@ -441,7 +441,7 @@ public class NewModSortPipelineTests
         Assert.Equal(0, host.ApplyStarts);
         Assert.Equal(
             ["Penumbra Organizer: could not sort the new mods. Penumbra is not available. " +
-             "They stay pending for /porganizer sortnew."],
+             "They stay pending."],
             host.Chats);
         Assert.Equal(2, pipeline.PendingCount);
     }
@@ -615,7 +615,7 @@ public class NewModSortPipelineTests
         Assert.Equal(NewModRunOutcome.Failed, pipeline.LastResult!.Outcome);
         Assert.Equal(
             ["Penumbra Organizer: could not sort the new mods. The library changed before the sort was confirmed, " +
-             "so nothing was applied. They stay pending for /porganizer sortnew."],
+             "so nothing was applied. They stay pending."],
             host.Chats);
         Assert.Equal(2, pipeline.PendingCount);
         Assert.Equal(0, host.ApplyStarts);
@@ -737,7 +737,7 @@ public class NewModSortPipelineTests
         Assert.Contains("Cannot Apply while Validate() reports issues.", pipeline.LastResult.Message);
         Assert.Equal(
             ["Penumbra Organizer: could not sort the new mods. Cannot Apply while Validate() reports issues. " +
-             "They stay pending for /porganizer sortnew."],
+             "They stay pending."],
             host.Chats);
         Assert.Equal(0, host.ApplyStarts);
     }

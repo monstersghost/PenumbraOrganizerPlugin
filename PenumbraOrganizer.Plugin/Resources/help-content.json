@@ -260,12 +260,12 @@
     {
       "id": "newmods.banner",
       "title": "New mods popup",
-      "short": "Shown when mods are installed. Sort now rescans and lists where each new root mod would go, for you to Apply. Review first opens the Review tab. Not now keeps them for /porganizer sortnew."
+      "short": "Shown when mods are installed. Sort now rescans and lists where each new root mod would go, for you to Apply. Review first opens the Review tab. Not now keeps them pending."
     },
     {
       "id": "newmods.popup-dont-show",
       "title": "Don't show this popup",
-      "short": "Stops this popup. New mods still wait for /porganizer sortnew, with one chat line. Turn it back on in Sort > Advanced."
+      "short": "Stops this popup. New mods still wait, with one chat line. Turn it back on in Sort > Advanced."
     },
     {
       "id": "newmods.confirm",
@@ -280,7 +280,7 @@
     {
       "id": "sort.show-new-mod-popup",
       "title": "Show a popup when new mods are found",
-      "short": "Off: no popup when mods are installed. They wait for /porganizer sortnew, with one chat line instead. Has no effect under Do nothing."
+      "short": "Off: no popup when mods are installed. One chat line replaces it. Has no effect under Do nothing."
     },
     {
       "id": "unused.check",

@@ -56,10 +56,10 @@ public class NewModPromptTextTests
     public void PopupOff_ChatLine()
     {
         Assert.Equal(
-            "Penumbra Organizer: 3 new mods are loose in the root. /porganizer sortnew sorts them.",
+            "Penumbra Organizer: 3 new mods are loose in the root. Turn the popup back on in Sort > Advanced to sort them.",
             NewModPromptText.PopupOff(3));
         Assert.Equal(
-            "Penumbra Organizer: 1 new mod is loose in the root. /porganizer sortnew sorts it.",
+            "Penumbra Organizer: 1 new mod is loose in the root. Turn the popup back on in Sort > Advanced to sort it.",
             NewModPromptText.PopupOff(1));
     }
 
@@ -90,7 +90,7 @@ public class NewModPromptTextTests
     public void Cancelled_AndStale()
     {
         Assert.Equal(
-            "Penumbra Organizer: sort cancelled. Nothing was moved. They stay pending for /porganizer sortnew.",
+            "Penumbra Organizer: sort cancelled. Nothing was moved. They stay pending.",
             NewModPromptText.Cancelled(newMods: true));
         Assert.Equal("Penumbra Organizer: sort cancelled. Nothing was moved.", NewModPromptText.Cancelled(newMods: false));
         Assert.Equal(
@@ -141,7 +141,7 @@ public class NewModPromptTextTests
     public void Failed_KeepsPendingHint()
     {
         Assert.Equal(
-            "Penumbra Organizer: could not sort the new mods. Boom. They stay pending for /porganizer sortnew.",
+            "Penumbra Organizer: could not sort the new mods. Boom. They stay pending.",
             NewModPromptText.Failed("Boom.", stillPending: true));
         Assert.Equal(
             "Penumbra Organizer: could not sort the mods. Boom.",
@@ -153,7 +153,7 @@ public class NewModPromptTextTests
     {
         Assert.Equal(
             "Penumbra Organizer: gave up waiting to sort the new mods after 2 minutes: Busy. " +
-            "They stay pending for /porganizer sortnew.",
+            "They stay pending.",
             NewModPromptText.GaveUpWaiting("Busy.", stillPending: true));
     }
 

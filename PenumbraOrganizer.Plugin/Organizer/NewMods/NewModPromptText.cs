@@ -13,7 +13,7 @@ public static class NewModPromptText
     private const string Prefix = "Penumbra Organizer: ";
     private const string StagedWarning = "Sorting rescans your library first: your unapplied sort will be discarded.";
     private const string OverrideWarning = "This session's unprotect choices for Heliosphere/Proteus mods will be reset.";
-    private const string StillPending = " They stay pending for /porganizer sortnew.";
+    private const string StillPending = " They stay pending.";
 
     public static NewModBanner Banner(int count, bool hasStagedProposals, bool hasSessionOverrides)
     {
@@ -43,8 +43,8 @@ public static class NewModPromptText
 
     /// <summary>The one chat line sent instead of the popup when the user has turned the popup off.</summary>
     public static string PopupOff(int count) => count == 1
-        ? Prefix + "1 new mod is loose in the root. /porganizer sortnew sorts it."
-        : Prefix + $"{count} new mods are loose in the root. /porganizer sortnew sorts them.";
+        ? Prefix + "1 new mod is loose in the root. Turn the popup back on in Sort > Advanced to sort it."
+        : Prefix + $"{count} new mods are loose in the root. Turn the popup back on in Sort > Advanced to sort them.";
 
     /// <summary>After /porganizer sortnew or sortroot staged its sort: the confirm window is open in game.</summary>
     public static string ConfirmOpened(int count, bool newMods)
