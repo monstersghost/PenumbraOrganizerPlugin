@@ -136,6 +136,8 @@ public static class HelpTab
             HelpTopics.SortButton,
             HelpTopics.SortWhatToSort,
             HelpTopics.SortScopeLine,
+            HelpTopics.NewModsBanner,
+            HelpTopics.SortNewModAction,
             HelpTopics.SortHelpButton,
             HelpTopics.SortScrapedNpcList,
             HelpTopics.SortRefreshNpcList,

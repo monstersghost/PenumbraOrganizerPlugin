@@ -382,6 +382,26 @@ public sealed class SortPanel
         ImGui.Spacing();
         DrawBodyPriority(config, saveConfig, bodyLabels, states, anyBodySplit: _splitGearBody || _splitBodyMods,
             state, readEnabledMods);
+        DrawAdvanced(config, saveConfig);
+    }
+
+    private static readonly string[] NewModActionLabels = ["Ask", "Sort automatically", "Do nothing"];
+
+    // Collapsed by default. Saved the moment it changes, like the other Sort tab choices.
+    private static void DrawAdvanced(Configuration config, Action saveConfig)
+    {
+        if (!ImGui.CollapsingHeader("Advanced##sort-advanced"))
+            return;
+
+        var index = (int)config.NewModAction;
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.Combo("When new mods are installed##new-mod-action", ref index,
+                NewModActionLabels, NewModActionLabels.Length))
+        {
+            config.NewModAction = (Organizer.Collections.NewModAction)index;
+            saveConfig();
+        }
+        Help.Tooltip(HelpTopics.SortNewModAction);
     }
 
     // One checkbox: not drawn when hidden, greyed when disabled, and its tooltip always carries the

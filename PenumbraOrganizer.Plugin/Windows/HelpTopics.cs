@@ -70,6 +70,8 @@ public static class HelpTopics
     public static readonly HelpTopic SortButton = new("sort.button");
     public static readonly HelpTopic SortWhatToSort = new("sort.what-to-sort");
     public static readonly HelpTopic SortScopeLine = new("sort.scope-line");
+    public static readonly HelpTopic NewModsBanner = new("newmods.banner");
+    public static readonly HelpTopic SortNewModAction = new("sort.new-mod-action");
     public static readonly HelpTopic SortHelpButton = new("sort.help-button");
     public static readonly HelpTopic SortScrapedNpcList = new("sort.scraped-npc-list");
     public static readonly HelpTopic SortImportWorkbook = new("sort.import-workbook");

@@ -258,6 +258,16 @@
       "short": "How many mods the last sort covers, out of the whole library, and how many protected root mods were left where they are."
     },
     {
+      "id": "newmods.banner",
+      "title": "New mods banner",
+      "short": "Shown when mods are installed. Sort now rescans, sorts just those loose root mods and applies. Review first stages the sort for you to check. Not now keeps them for /porganizer sortnew."
+    },
+    {
+      "id": "sort.new-mod-action",
+      "title": "When new mods are installed",
+      "short": "Ask shows a banner. Sort automatically sorts and applies new root mods by itself (more than 20 at once falls back to the banner). Do nothing ignores them."
+    },
+    {
       "id": "sort.scraped-npc-list",
       "title": "Also use the NPC list scraped from the wiki",
       "short": "Recognises far more character names, at the cost of matching some very common words. Turned off in this version while we confirm it is safe."
