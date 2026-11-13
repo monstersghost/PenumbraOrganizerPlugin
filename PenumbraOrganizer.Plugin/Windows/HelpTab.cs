@@ -44,7 +44,7 @@ public static class HelpTab
     /// exist yet - so "push the tag before announcing" is on the release checklist instead.
     /// </remarks>
     public const string GuideUrl =
-        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.5.1/docs/USER_GUIDE.md";
+        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.6.0/docs/USER_GUIDE.md";
 
     /// <summary>
     /// The same guide as a PDF, for reading away from the game or printing.
@@ -56,7 +56,7 @@ public static class HelpTab
     /// Markdown by <c>docs/build-pdf.py</c>, so it cannot describe a different UI than the guide.
     /// </remarks>
     public const string PdfGuideUrl =
-        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.5.1/docs/USER_GUIDE.pdf";
+        "https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.6.6.0/docs/USER_GUIDE.pdf";
 
     /// <summary>
     /// The support Discord. A permanent invite, deliberately - a `discord.gg` code that can expire
