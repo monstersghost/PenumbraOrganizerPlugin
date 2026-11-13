@@ -682,6 +682,46 @@ public sealed class OrganizerState
         return plan.Report;
     }
 
+    /// <summary>
+    /// Stages the given mods under a folder, keeping their structure (<c>Unused/Gear/Top/X</c>).
+    /// Additive: every other row's proposal is kept. Protected rows and rows already under the
+    /// folder are skipped. Returns how many rows were staged.
+    /// </summary>
+    public int StageMoveUnder(IEnumerable<string> identifiers, string folder)
+    {
+        var target = folder.Trim().Trim('/');
+        if (target.Length == 0)
+            return 0;
+
+        var touched = new List<OrganizerModRow>();
+        foreach (var identifier in identifiers.Distinct())
+        {
+            if (!_mods.TryGetValue(identifier, out var row) || row.Protected)
+                continue;
+            if (row.CurrentPath.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            row.ProposedPath = $"{target}/{row.CurrentPath}";
+            row.StagedBodyResolution = null;
+            touched.Add(row);
+        }
+
+        if (touched.Count == 0)
+            return 0;
+
+        // Paths other rows hold, now or by proposal, are reserved so no staged row lands on one.
+        var touchedSet = new HashSet<OrganizerModRow>(touched);
+        var reserved = new List<string>();
+        foreach (var other in _mods.Values.Where(m => !touchedSet.Contains(m)))
+        {
+            reserved.Add(other.CurrentPath);
+            reserved.Add(other.ProposedPath);
+        }
+
+        FinishProposals(touched, reserved);
+        return touched.Count;
+    }
+
     // Shared shape of every sort strategy: compute this row's (primary, secondary) folder
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
     // over every touched row. Each arm of the public Sort overload above supplies only what
