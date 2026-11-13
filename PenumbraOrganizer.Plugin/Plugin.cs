@@ -204,7 +204,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Toggle the Penumbra Organizer (MVP) window.",
+            HelpMessage = "Toggle the Penumbra Organizer window. Subcommands: sortnew [force], sortroot [force], help.",
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
@@ -238,7 +238,46 @@ public sealed class Plugin : IDalamudPlugin
         _npcHttpClient.Dispose();
     }
 
-    private void OnCommand(string command, string args) => ToggleMainUi();
+    private const string CommandHelpLine =
+        "Penumbra Organizer: /porganizer toggles the window. /porganizer sortnew sorts newly installed mods, " +
+        "/porganizer sortroot sorts every loose mod in the root. Add force to discard an unapplied sort.";
+
+    private void OnCommand(string command, string args)
+    {
+        try
+        {
+            var parsed = Organizer.CommandParser.Parse(args);
+            switch (parsed.Kind)
+            {
+                case Organizer.CommandKind.Toggle:
+                    ToggleMainUi();
+                    break;
+                case Organizer.CommandKind.SortNew:
+                    // Skips the debounce: whatever has been noticed so far counts now.
+                    if (NewModTracker.HasPending)
+                    {
+                        var batch = NewModTracker.TakeAll();
+                        var eligible = EligibleNewMods(batch);
+                        if (eligible.Count > 0)
+                            NewModPipeline.AddPending(batch, eligible.Count);
+                    }
+
+                    NewModPipeline.RunCommand(parsed.Kind, parsed.Force);
+                    break;
+                case Organizer.CommandKind.SortRoot:
+                    NewModPipeline.RunCommand(parsed.Kind, parsed.Force);
+                    break;
+                default:
+                    SendChat(CommandHelpLine);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Handling a chat command failed.");
+            SendChat("Penumbra Organizer: that command failed. " + ex.Message);
+        }
+    }
 
     private void ToggleMainUi() => _mainWindow.Toggle();
 
@@ -337,22 +376,7 @@ public sealed class Plugin : IDalamudPlugin
 
         if (NewModTracker.TakeReady() is { Count: > 0 } batch)
         {
-            var wanted = batch.ToHashSet(StringComparer.Ordinal);
-            var candidates = new List<Organizer.NewMods.NewModCandidate>();
-            using (var modList = GetModListAdapterIpc.Invoke())
-            {
-                foreach (var mod in modList.Where(m => wanted.Contains(m.Identifier)))
-                {
-                    candidates.Add(new Organizer.NewMods.NewModCandidate(
-                        mod.Identifier, mod.Name, mod.Author, mod.FullPath,
-                        Organizer.NewMods.NewModEligibility.IsHeliosphere(
-                            mod.Identifier, mod.ModPath, mod.Name, Config.KnownHeliosphereIdentifiers)));
-                }
-            }
-
-            var eligible = Organizer.NewMods.NewModEligibility.Filter(
-                candidates, OrganizerState.ProtectedModIdentifiers.ToHashSet(StringComparer.Ordinal),
-                OrganizerState.FolderProtectionRules, Config.ToolPolicy);
+            var eligible = EligibleNewMods(batch);
             if (eligible.Count == 0)
                 Log.Information($"{batch.Count} new mods noticed; none would be moved by a root-only sort.");
             else
@@ -360,6 +384,27 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         NewModPipeline.Update(now);
+    }
+
+    // One mod-list read, no scan: which of these mods a root-only sort would actually move.
+    private IReadOnlyList<Organizer.OrganizerModRow> EligibleNewMods(IReadOnlyCollection<string> batch)
+    {
+        var wanted = batch.ToHashSet(StringComparer.Ordinal);
+        var candidates = new List<Organizer.NewMods.NewModCandidate>();
+        using (var modList = GetModListAdapterIpc.Invoke())
+        {
+            foreach (var mod in modList.Where(m => wanted.Contains(m.Identifier)))
+            {
+                candidates.Add(new Organizer.NewMods.NewModCandidate(
+                    mod.Identifier, mod.Name, mod.Author, mod.FullPath,
+                    Organizer.NewMods.NewModEligibility.IsHeliosphere(
+                        mod.Identifier, mod.ModPath, mod.Name, Config.KnownHeliosphereIdentifiers)));
+            }
+        }
+
+        return Organizer.NewMods.NewModEligibility.Filter(
+            candidates, OrganizerState.ProtectedModIdentifiers.ToHashSet(StringComparer.Ordinal),
+            OrganizerState.FolderProtectionRules, Config.ToolPolicy);
     }
 
     private bool _eventLogDrainFaulted;
