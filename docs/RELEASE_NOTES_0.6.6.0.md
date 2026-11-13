@@ -8,10 +8,6 @@
 - **Unused mods** (Scan tab, collapsed section): lists mods that are not enabled in any of your collections, with their size on disk, and can stage a move into an `Unused` folder. The move goes through Review and Apply like any other. "Protect the Unused folder" is ticked by default so a later full sort does not pull them back out.
 - A rescan after Apply or Restore now also happens when the window is closed.
 
-## Switched off for now
-
-The `/porganizer sortnew` and `/porganizer sortroot` chat commands did not behave in the first in-game test, so they currently answer with a one-line notice. Use the popup or the Sort tab instead. They will come back once they have been checked in game.
-
 ## What moves
 
 - Nothing moves unless you sort. Root-only sorting only proposes moves for mods that are loose in the root and not protected. Heliosphere and Proteus mods are protected by default, so they are not counted as new mods to sort.
