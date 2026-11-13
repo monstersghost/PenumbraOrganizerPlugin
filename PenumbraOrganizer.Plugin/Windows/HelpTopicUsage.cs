@@ -47,6 +47,8 @@ public static class HelpTopicUsage
         HelpTopics.SortPriorityRace,
         HelpTopics.SortMidlanderFallback,
         HelpTopics.SortButton,
+        HelpTopics.SortWhatToSort,
+        HelpTopics.SortScopeLine,
         HelpTopics.SortHelpButton,
         HelpTopics.SortScrapedNpcList,
         HelpTopics.SortImportWorkbook,

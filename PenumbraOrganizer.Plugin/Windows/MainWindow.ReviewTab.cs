@@ -7,6 +7,7 @@ using Dalamud.Interface.Windowing;
 using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.LibrarySearch;
+using PenumbraOrganizer.Plugin.Organizer;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -91,6 +92,8 @@ public sealed partial class MainWindow
         if (ImGui.BeginPopupModal("Apply changes?"))
         {
             ImGui.TextUnformatted($"Apply changes to {touchedCount} mods?");
+            if (_plugin.OrganizerState.LastSortSummary is { } sortSummary)
+                ImGui.TextDisabled(SortSummaryText.Describe(sortSummary));
             if (ImGui.Button("Yes, Apply"))
             {
                 ApplyChanges();

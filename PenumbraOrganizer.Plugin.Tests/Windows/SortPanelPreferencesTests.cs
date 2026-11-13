@@ -209,4 +209,11 @@ public class SortPanelPreferencesTests
         Assert.Equal("TBSE", SortPanel.FirstChoice(loaded.BodyPriority!));
         Assert.False(loaded.RootOnly);
     }
+
+    [Fact]
+    public void ScopeFor_WholeLibraryIsNull_RootOnlyIsRootScope()
+    {
+        Assert.Null(SortPanel.ScopeFor(false));
+        Assert.True(SortPanel.ScopeFor(true)!.RootOnly);
+    }
 }

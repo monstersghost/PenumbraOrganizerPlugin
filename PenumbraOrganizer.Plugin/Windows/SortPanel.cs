@@ -115,6 +115,12 @@ public sealed class SortPanel
     private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;
+    private int _whatToSortIndex;        // 0 whole library, 1 loose in root; session-only, never saved
+
+    private static readonly string[] WhatToSortLabels = ["Whole library", "Only loose mods in the root"];
+
+    /// <summary>The scope for the "What to sort" choice; null means the whole library, as before.</summary>
+    public static SortScope? ScopeFor(bool rootOnly) => rootOnly ? new SortScope(true) : null;
     private BodyPriority _bodyPriority = BodyPriority.Default([]);
     private IReadOnlyList<string>? _bodyLabelsSeen;
 
@@ -251,6 +257,14 @@ public sealed class SortPanel
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortGrouping, gates.CanStageProposals ? null : ActivityGateReason);
 
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!gates.CanStageProposals);
+        ImGui.SetNextItemWidth(220);
+        ImGui.Combo("What to sort##what-to-sort", ref _whatToSortIndex, WhatToSortLabels, WhatToSortLabels.Length);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortWhatToSort, gates.CanStageProposals ? null : ActivityGateReason);
+        var rootOnly = _whatToSortIndex == 1;
+
         // The strategy is settled the moment the combo has been submitted. Every control below takes
         // its visible and enabled state from SortLayout, which is what the tests pin.
         var strategy = Groupings[_groupingIndex].Strategy;
@@ -329,7 +343,7 @@ public sealed class SortPanel
 
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
             HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            new LayoutOptions(_sharedHandsFeet, _splitHairByRace, _splitEmotes));
+            new LayoutOptions(_sharedHandsFeet, _splitHairByRace, _splitEmotes), rootOnly);
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan
@@ -345,8 +359,15 @@ public sealed class SortPanel
         Help.Tooltip(HelpTopics.SortButton, gates.CanStageProposals ? null : ActivityGateReason);
         if (sortClicked)
         {
-            SortRunner.Run(state, selection, canonicalizeCreator, scope: null);
+            SortRunner.Run(state, selection, canonicalizeCreator, ScopeFor(rootOnly));
             _lastSorted = selection;
+        }
+
+        if (state.LastSortSummary is { } summary)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled(SortSummaryText.Describe(summary));
+            Help.Tooltip(HelpTopics.SortScopeLine);
         }
 
         // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.

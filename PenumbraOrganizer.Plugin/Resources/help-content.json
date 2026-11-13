@@ -68,7 +68,7 @@
     {
       "id": "help.tab-sort",
       "title": "Sort",
-      "body": "Proposes a folder layout for your mods. Pick a grouping, choose which of the Gear, NPC and Hair groups get subfolders, and press Sort.\n\nThe groups are separated by rules on the tab. Each one has its own split option: a split puts that kind of mod into subfolders, and turning it off keeps those mods in one folder.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand instead of by rule. The ? beside the Sort button brings you back here."
+      "body": "Proposes a folder layout for your mods. Pick a grouping and what to sort (the whole library, or only the loose mods in the root), choose which of the Gear, NPC and Hair groups get subfolders, and press Sort.\n\nThe groups are separated by rules on the tab. Each one has its own split option: a split puts that kind of mod into subfolders, and turning it off keeps those mods in one folder.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand instead of by rule. The ? beside the Sort button brings you back here."
     },
     {
       "id": "help.tab-review",
@@ -246,6 +246,16 @@
       "id": "sort.button",
       "title": "Sort",
       "short": "Works out a new folder for every unprotected mod and shows it on the Review Changes tab. Your library is not touched until you apply it."
+    },
+    {
+      "id": "sort.what-to-sort",
+      "title": "What to sort",
+      "short": "Whole library sorts every unprotected mod. Only loose mods in the root leaves anything already in a folder alone. This choice is not saved."
+    },
+    {
+      "id": "sort.scope-line",
+      "title": "Sort scope",
+      "short": "How many mods the last sort covers, out of the whole library, and how many protected root mods were left where they are."
     },
     {
       "id": "sort.scraped-npc-list",

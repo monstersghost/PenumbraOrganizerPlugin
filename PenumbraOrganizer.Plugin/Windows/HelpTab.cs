@@ -134,6 +134,8 @@ public static class HelpTab
             HelpTopics.SortMidlanderFallback,
             HelpTopics.SortHairResolution,
             HelpTopics.SortButton,
+            HelpTopics.SortWhatToSort,
+            HelpTopics.SortScopeLine,
             HelpTopics.SortHelpButton,
             HelpTopics.SortScrapedNpcList,
             HelpTopics.SortRefreshNpcList,
