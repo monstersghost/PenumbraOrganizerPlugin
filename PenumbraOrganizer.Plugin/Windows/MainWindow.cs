@@ -257,14 +257,14 @@ public sealed partial class MainWindow : Window, IDisposable
         {
             case Organizer.Operations.OperationType.Apply:
                 // Penumbra's own tree is now stale relative to what was just written, and
-                // OrganizerState's cached CurrentPath values are stale too - RunScan re-reads both.
-                RunScan();
+                // OrganizerState's cached CurrentPath values are stale too; the rescan itself is
+                // requested by Plugin.OnFrameworkUpdate (CompletionWatcher), not here.
                 if (state.SuccessfulTargets > 0)
                     _pendingApplyReminder = true;
                 break;
 
             case Organizer.Operations.OperationType.Restore:
-                RunScan(); // matches today's Restore completion block: cache null + RunScan, no popup
+                // Rescan is requested by Plugin.OnFrameworkUpdate; nothing UI-only to do here.
                 break;
         }
     }

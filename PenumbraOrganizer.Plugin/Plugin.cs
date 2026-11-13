@@ -261,6 +261,22 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    private bool _completionWatcherFaulted;
+    private Organizer.Operations.CompletionWatcher? _completionWatcherField;
+
+    private Organizer.Operations.CompletionWatcher _completionWatcher =>
+        _completionWatcherField ??= new Organizer.Operations.CompletionWatcher(TryStartPostOperationScan);
+
+    // Quiet retry: a refusal here is normal (engine still busy) and is retried every frame, so it
+    // must not log each time. An exception is logged once by the caller's latch and not retried.
+    private bool TryStartPostOperationScan()
+    {
+        if (OperationController.AdmissionRejectionReason() is not null)
+            return false;
+        RunScan();
+        return true;
+    }
+
     private bool _eventLogDrainFaulted;
     private bool _scanWorkFaulted;
     private bool _indexWorkFaulted;
@@ -281,6 +297,22 @@ public sealed class Plugin : IDalamudPlugin
             {
                 _operationRecordFaulted = true;
                 Log.Error(ex, "Recording an operation's outcome failed; the operation itself is unaffected.");
+            }
+        }
+
+        try
+        {
+            // Post-Apply/Restore rescan lives here, not in the window, so it also runs with the
+            // window closed (automatic new-mod sorting depends on that).
+            var opState = OperationController.State;
+            _completionWatcher.Update(opState.CompletionGeneration, opState.Kind);
+        }
+        catch (Exception ex)
+        {
+            if (!_completionWatcherFaulted)
+            {
+                _completionWatcherFaulted = true;
+                Log.Error(ex, "The post-operation rescan watcher failed.");
             }
         }
 
