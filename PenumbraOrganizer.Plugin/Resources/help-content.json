@@ -58,7 +58,7 @@
     {
       "id": "help.tab-scan",
       "title": "Scan",
-      "body": "Reads every mod from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so run this first, and again whenever you install, remove or move mods outside the plugin.\n\nThe scan runs in the background and the game stays responsive. If your mod list changes while it is running, the results are discarded rather than shown, because they no longer describe your library."
+      "body": "Unused mods, a collapsed section at the bottom, lists mods that no collection enables, with their size on disk, and can stage them for a move to an Unused folder.\n\nReads every mod from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so run this first, and again whenever you install, remove or move mods outside the plugin.\n\nThe scan runs in the background and the game stays responsive. If your mod list changes while it is running, the results are discarded rather than shown, because they no longer describe your library."
     },
     {
       "id": "help.tab-protect",
@@ -266,6 +266,21 @@
       "id": "sort.new-mod-action",
       "title": "When new mods are installed",
       "short": "Ask shows a banner. Sort automatically sorts and applies new root mods by itself (more than 20 at once falls back to the banner). Do nothing ignores them."
+    },
+    {
+      "id": "unused.check",
+      "title": "Unused mods",
+      "short": "Lists mods that no collection enables, using each collection's own settings, with their size on disk. Reads only; nothing changes."
+    },
+    {
+      "id": "unused.move",
+      "title": "Move selected to Unused",
+      "short": "Stages the ticked mods under the Unused folder, keeping their folder structure. Nothing moves until you apply on Review Changes."
+    },
+    {
+      "id": "unused.protect-folder",
+      "title": "Protect the Unused folder",
+      "short": "Adds a saved protect rule for the Unused folder so a later whole-library sort does not pull those mods back out. Visible on the Protect tab."
     },
     {
       "id": "sort.scraped-npc-list",

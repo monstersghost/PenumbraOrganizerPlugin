@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window, IDisposable
     // An instance, not a static call: the Group by dropdown and the two split checkboxes are
     // ImGui ref-widgets and need backing storage that survives between frames.
     private readonly SortPanel _sortPanel = new();
+    private readonly UnusedModsSection _unusedMods = new();
 
     // Set by the Sort tab's ? button, read once by the Help tab on the frame it is drawn, then cleared.
     private bool _sortHelpRequested;
@@ -161,6 +162,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
     public void Dispose()
     {
+        _unusedMods.Dispose();
     }
 
     /// <summary>

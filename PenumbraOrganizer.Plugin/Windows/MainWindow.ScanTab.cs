@@ -58,5 +58,12 @@ public sealed partial class MainWindow
                 foreach (var line in _eventLog.Lines)
                     ImGui.TextUnformatted(line);
         }
+
+        ImGui.Spacing();
+        _unusedMods.Draw(
+            _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveProtectionState,
+            () => _plugin.CollectionSettingsReader.Read(),
+            () => _plugin.ActiveCollectionReader.ReadEnabledModDirectories(),
+            () => _plugin.ModDirectory);
     }
 }
