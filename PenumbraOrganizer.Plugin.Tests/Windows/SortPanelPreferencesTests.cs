@@ -170,4 +170,43 @@ public class SortPanelPreferencesTests
         Assert.False(config.SortSplitGearBody);
         Assert.False(config.SortSplitBodyMods);
     }
+
+    // ---- first-frame load through the factory ----
+
+    [Fact]
+    public void FirstFrameLoad_DefaultConfig_MatchesTheOldInlineLoad()
+    {
+        var config = new Configuration();
+        var loaded = SortSelectionFactory.FromConfig(config, Labels);
+
+        Assert.Equal(SortPanel.GroupingIndexFor(config.SortGrouping),
+            Array.FindIndex(SortPanel.Groupings, g => g.Strategy == loaded.Strategy));
+        Assert.Equal(config.SortSplitGear, loaded.SplitGear);
+        Assert.Equal(config.SortSplitNpc, loaded.SplitNpc);
+        Assert.Equal(config.SortSplitHair, loaded.SplitHair);
+        Assert.Equal(SortPanel.HairRaceIndexFor(config.HairRaceCode), SortPanel.HairRaceIndexFor(loaded.HairRaceCode));
+        Assert.False(loaded.RootOnly);
+    }
+
+    [Fact]
+    public void FirstFrameLoad_CustomisedConfig_MatchesTheOldInlineLoad()
+    {
+        var race = HairRaceCodes.All.Last().Code;
+        var config = new Configuration
+        {
+            SortGrouping = "CreatorOnly", SortSplitGear = true, SortSplitNpc = false, SortSplitHair = true,
+            HairRaceCode = race, MidlanderFallback = true, BodyPriority = ["TBSE"],
+        };
+        var loaded = SortSelectionFactory.FromConfig(config, Labels);
+
+        Assert.Equal(SortPanel.GroupingIndexFor("CreatorOnly"),
+            Array.FindIndex(SortPanel.Groupings, g => g.Strategy == loaded.Strategy));
+        Assert.True(loaded.SplitGear);
+        Assert.False(loaded.SplitNpc);
+        Assert.True(loaded.SplitHair);
+        Assert.Equal(SortPanel.HairRaceIndexFor(race), SortPanel.HairRaceIndexFor(loaded.HairRaceCode));
+        Assert.True(loaded.MidlanderFallback);
+        Assert.Equal("TBSE", SortPanel.FirstChoice(loaded.BodyPriority!));
+        Assert.False(loaded.RootOnly);
+    }
 }

@@ -21,7 +21,7 @@ public readonly record struct SortSelection(
     SortStrategy Strategy, bool SplitGear, bool SplitNpc, bool SplitHair,
     string? HairRaceCode = null, bool MidlanderFallback = false,
     bool SplitGearBody = false, bool SplitBodyMods = false,
-    BodyPriority? BodyPriority = null, LayoutOptions Layout = default)
+    BodyPriority? BodyPriority = null, LayoutOptions Layout = default, bool RootOnly = false)
 {
     // By Creator never consults category, so no split can change its output. All split checkboxes
     // are disabled when this is false.
@@ -212,17 +212,20 @@ public sealed class SortPanel
         if (!_prefsLoaded)
         {
             _prefsLoaded = true;
-            _hairRaceIndex = HairRaceIndexFor(config.HairRaceCode);
-            _midlanderFallback = config.MidlanderFallback;
-            _groupingIndex = GroupingIndexFor(config.SortGrouping);
-            _splitGear = config.SortSplitGear;
-            _splitNpc = config.SortSplitNpc;
-            _splitHair = config.SortSplitHair;
-            _splitGearBody = config.SortSplitGearBody;
-            _splitBodyMods = config.SortSplitBodyMods;
-            _sharedHandsFeet = config.SortSharedHandsFeet;
-            _splitHairByRace = config.SortSplitHairByRace;
-            _splitEmotes = config.SortSplitEmotes;
+            var loaded = SortSelectionFactory.FromConfig(config, bodyLabels);
+            _hairRaceIndex = HairRaceIndexFor(loaded.HairRaceCode);
+            _midlanderFallback = loaded.MidlanderFallback;
+            _groupingIndex = Array.FindIndex(Groupings, g => g.Strategy == loaded.Strategy);
+            _splitGear = loaded.SplitGear;
+            _splitNpc = loaded.SplitNpc;
+            _splitHair = loaded.SplitHair;
+            _splitGearBody = loaded.SplitGearBody;
+            _splitBodyMods = loaded.SplitBodyMods;
+            _sharedHandsFeet = loaded.Layout.SharedHandsAndFeet;
+            _splitHairByRace = loaded.Layout.SplitHairByRace;
+            _splitEmotes = loaded.Layout.SplitEmotes;
+            if (loaded.BodyPriority is { } loadedPriority)
+                _bodyPriority = loadedPriority;
         }
 
         // Re-repaired only when a scan published a different body list (see RefreshBodyPriority), so
@@ -342,9 +345,7 @@ public sealed class SortPanel
         Help.Tooltip(HelpTopics.SortButton, gates.CanStageProposals ? null : ActivityGateReason);
         if (sortClicked)
         {
-            state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
-                canonicalizeCreator, selection.HairPriority, selection.SplitGearBody, selection.SplitBodyMods,
-                selection.BodyPriority, selection.Layout);
+            SortRunner.Run(state, selection, canonicalizeCreator, scope: null);
             _lastSorted = selection;
         }
 
