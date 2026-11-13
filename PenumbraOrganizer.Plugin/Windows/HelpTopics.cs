@@ -71,7 +71,10 @@ public static class HelpTopics
     public static readonly HelpTopic SortWhatToSort = new("sort.what-to-sort");
     public static readonly HelpTopic SortScopeLine = new("sort.scope-line");
     public static readonly HelpTopic NewModsBanner = new("newmods.banner");
+    public static readonly HelpTopic NewModsPopupDontShow = new("newmods.popup-dont-show");
+    public static readonly HelpTopic NewModsConfirm = new("newmods.confirm");
     public static readonly HelpTopic SortNewModAction = new("sort.new-mod-action");
+    public static readonly HelpTopic SortShowNewModPopup = new("sort.show-new-mod-popup");
     public static readonly HelpTopic UnusedCheck = new("unused.check");
     public static readonly HelpTopic UnusedMove = new("unused.move");
     public static readonly HelpTopic UnusedProtectFolder = new("unused.protect-folder");

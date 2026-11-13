@@ -402,6 +402,15 @@ public sealed class SortPanel
             saveConfig();
         }
         Help.Tooltip(HelpTopics.SortNewModAction);
+
+        // The same flag as the popup's own "Don't show this popup", inverted there.
+        var showPopup = config.ShowNewModPopup;
+        if (ImGui.Checkbox(Organizer.NewMods.NewModPromptText.ShowPopupSettingLabel + "##new-mod-popup", ref showPopup))
+        {
+            config.ShowNewModPopup = showPopup;
+            saveConfig();
+        }
+        Help.Tooltip(HelpTopics.SortShowNewModPopup);
     }
 
     // One checkbox: not drawn when hidden, greyed when disabled, and its tooltip always carries the

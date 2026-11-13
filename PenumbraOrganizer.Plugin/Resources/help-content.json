@@ -259,13 +259,28 @@
     },
     {
       "id": "newmods.banner",
-      "title": "New mods banner",
-      "short": "Shown when mods are installed. Sort now rescans, sorts just those loose root mods and applies. Review first stages the sort for you to check. Not now keeps them for /porganizer sortnew."
+      "title": "New mods popup",
+      "short": "Shown when mods are installed. Sort now rescans and lists where each new root mod would go, for you to Apply. Review first opens the Review tab. Not now keeps them for /porganizer sortnew."
+    },
+    {
+      "id": "newmods.popup-dont-show",
+      "title": "Don't show this popup",
+      "short": "Stops this popup. New mods still wait for /porganizer sortnew, with one chat line. Turn it back on in Sort > Advanced."
+    },
+    {
+      "id": "newmods.confirm",
+      "title": "Confirm sort",
+      "short": "Lists each mod and the folder it would move to. Apply moves them (undo from History). Review first opens the Review tab. Cancel discards this sort and moves nothing."
     },
     {
       "id": "sort.new-mod-action",
       "title": "When new mods are installed",
-      "short": "Ask shows a banner. Sort automatically sorts and applies new root mods by itself (more than 20 at once falls back to the banner). Do nothing ignores them."
+      "short": "Ask shows a popup. Sort automatically sorts and applies new root mods without asking (more than 20 at once falls back to the popup). Do nothing ignores them."
+    },
+    {
+      "id": "sort.show-new-mod-popup",
+      "title": "Show a popup when new mods are found",
+      "short": "Off: no popup when mods are installed. They wait for /porganizer sortnew, with one chat line instead. Has no effect under Do nothing."
     },
     {
       "id": "unused.check",
