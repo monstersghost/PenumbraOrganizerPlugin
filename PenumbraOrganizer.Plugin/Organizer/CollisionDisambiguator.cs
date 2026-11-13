@@ -8,17 +8,26 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 /// </summary>
 public static class CollisionDisambiguator
 {
-    public static void Disambiguate(IEnumerable<OrganizerModRow> rows)
+    /// <param name="rows">The rows whose proposals may be renumbered.</param>
+    /// <param name="reservedPaths">
+    /// Paths already occupied by rows NOT passed in (a scoped sort's untouched rows). They are
+    /// never renamed: any passed row proposed onto one is suffixed, and no suffix lands on one.
+    /// Compared exactly (OrdinalIgnoreCase), the same comparison <c>OrganizerState.Validate</c>
+    /// uses for collisions. Null means none, which is the behaviour before scoped sorts.
+    /// </param>
+    public static void Disambiguate(IEnumerable<OrganizerModRow> rows, IEnumerable<string>? reservedPaths = null)
     {
         var materialized = rows.ToList();
 
+        var occupied = new HashSet<string>(reservedPaths ?? [], StringComparer.OrdinalIgnoreCase);
+
         var reserved = new HashSet<string>(
-            materialized.Select(r => r.ProposedPath),
+            materialized.Select(r => r.ProposedPath).Concat(occupied),
             StringComparer.OrdinalIgnoreCase);
 
         var groups = materialized
             .GroupBy(r => r.ProposedPath, StringComparer.OrdinalIgnoreCase)
-            .Where(g => g.Count() > 1);
+            .Where(g => g.Count() > 1 || occupied.Contains(g.Key));
 
         foreach (var group in groups)
         {
@@ -33,10 +42,12 @@ public static class CollisionDisambiguator
             var exactMatches = ordered
                 .Where(r => string.Equals(r.Identifier, r.Name, StringComparison.Ordinal))
                 .ToList();
-            var canonical = inPlace.Count == 1 ? inPlace[0]
+            // A path held by an untouched row keeps its occupant, so no passed row is canonical.
+            var canonical = occupied.Contains(group.Key) ? null
+                : inPlace.Count == 1 ? inPlace[0]
                 : exactMatches.Count == 1 ? exactMatches[0]
                 : ordered[0];
-            var basePath = canonical.ProposedPath;
+            var basePath = (canonical ?? ordered[0]).ProposedPath;
             var suffix = 2;
 
             foreach (var row in ordered.Where(r => !ReferenceEquals(r, canonical)))

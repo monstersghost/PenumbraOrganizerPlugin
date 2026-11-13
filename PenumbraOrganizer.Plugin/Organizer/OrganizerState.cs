@@ -86,6 +86,12 @@ public sealed class OrganizerState
     /// <summary>The body priority the last sort used, or null when it had the body split off.</summary>
     public BodyPriority? StagedBodyPriority { get; private set; }
 
+    /// <summary>
+    /// What the last sort covered, or null when no sort has run since the last scan. A sort with no
+    /// scope records <see cref="SortScope.WholeLibrary"/>.
+    /// </summary>
+    public SortSummary? LastSortSummary { get; private set; }
+
     public bool HasScanned { get; private set; }
 
     /// <summary>
@@ -195,6 +201,7 @@ public sealed class OrganizerState
         _knownFolders = replacementKnownFolders;
         BodyLabels = bodyLabels;
         StagedBodyPriority = null;
+        LastSortSummary = null;
         HasScanned = true;
         ScanGeneration++;
     }
@@ -562,10 +569,18 @@ public sealed class OrganizerState
     /// The sort with the hair and two body splits and the optional race priority. With no priority and
     /// both splits off, this is the same folder selection as the four-argument overload.
     /// </summary>
+    /// <param name="scope">
+    /// Which rows may get a new proposal. Null is the whole library exactly as before scopes existed.
+    /// With a scope, every unprotected row outside it is reset to its current path (Apply moves every
+    /// changed unprotected row, so a stale proposal would otherwise ride along), the numbered layouts
+    /// are still built from every unprotected row (so a scoped sort never invents a number the next
+    /// full sort would change), and every untouched row's current path is reserved in disambiguation.
+    /// </param>
+    /// <returns>The number of rows the sort proposed paths for.</returns>
     public int Sort(SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
                     Func<string, string> canonicalizeCreator, HairPriority? hairPriority = null,
                     bool splitGearBody = false, bool splitBodyMods = false, BodyPriority? bodyPriority = null,
-                    LayoutOptions? options = null)
+                    LayoutOptions? options = null, SortScope? scope = null)
     {
         // Recorded BEFORE the paths are computed, from the same inputs, so the explanation and the
         // proposal cannot disagree. A resolution is kept only for rows whose own category's flag is
@@ -573,6 +588,12 @@ public sealed class OrganizerState
         StagedBodyPriority = splitGearBody || splitBodyMods ? bodyPriority : null;
         foreach (var row in Mods)
         {
+            if (IsResetByScope(row, scope))
+            {
+                row.StagedBodyResolution = null;
+                continue;
+            }
+
             var applies = row.Category == ModCategory.Gear ? splitGearBody
                 : row.Category == ModCategory.Body && splitBodyMods;
             row.StagedBodyResolution = applies && bodyPriority is not null
@@ -598,8 +619,13 @@ public sealed class OrganizerState
                                               splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
                                               bodyPriority: bodyPriority, gearLayout: layout.Gear,
                                               bodyLayout: layout.Body, options: options);
-        });
+        }, scope);
     }
+
+    // An unprotected row a scoped sort leaves alone: its proposal goes back to its current path.
+    // Protected rows are never touched by any sort, scoped or not.
+    private static bool IsResetByScope(OrganizerModRow row, SortScope? scope) =>
+        scope is not null && !row.Protected && !scope.Includes(row);
 
     // The folder a row's numbered layout belongs to: its anchor when it is kept under one,
     // otherwise "" (the plain folders). Mirrors ToolAdjustedPath's decision.
@@ -660,20 +686,43 @@ public sealed class OrganizerState
     // segments, build its proposed path, then run the shared pin-and-disambiguate tail once
     // over every touched row. Each arm of the public Sort overload above supplies only what
     // varies: which folder segments go where.
-    private int Sort(Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector)
+    //
+    // With a scope, rows outside it are reset (unprotected) or left alone (protected), and every
+    // such untouched row's current path is reserved, so no touched row is proposed onto a path a
+    // mod still occupies (Validate would block Apply). Without a scope nothing is reserved, which
+    // is the whole-library behaviour from before scopes.
+    private int Sort(Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector, SortScope? scope)
     {
-        var count = 0;
         var touched = new List<OrganizerModRow>();
-        foreach (var row in _mods.Values.Where(m => !m.Protected))
+        var untouchedPaths = new List<string>();
+        foreach (var row in _mods.Values)
         {
+            if (row.Protected)
+            {
+                untouchedPaths.Add(row.CurrentPath);
+                continue;
+            }
+
+            if (IsResetByScope(row, scope))
+            {
+                row.ProposedPath = row.CurrentPath;
+                untouchedPaths.Add(row.CurrentPath);
+                continue;
+            }
+
             var (primary, secondary) = folderSelector(row);
             row.ProposedPath = ToolAdjustedPath(row, BuildPath(primary, secondary, row.Name));
             touched.Add(row);
-            count++;
         }
 
-        FinishProposals(touched);
-        return count;
+        FinishProposals(touched, scope is null ? null : untouchedPaths);
+
+        LastSortSummary = new SortSummary(
+            scope ?? SortScope.WholeLibrary,
+            InScope: touched.Count,
+            Total: _mods.Count,
+            ProtectedAtRoot: _mods.Values.Count(m => m.Protected && SortScope.IsAtRoot(m.CurrentPath)));
+        return touched.Count;
     }
 
     // The two tool-specific placements, applied AFTER the normal path is built and BEFORE collision
@@ -705,7 +754,7 @@ public sealed class OrganizerState
     // suffix Penumbra dealt it (Penumbra discards those suffixes on save and re-deals them on
     // every reload — they are not identity, so "same folder, same base leaf" is already in
     // place), and its retained path is then reserved against the remaining collisions.
-    private static void FinishProposals(List<OrganizerModRow> touched)
+    private static void FinishProposals(List<OrganizerModRow> touched, IEnumerable<string>? reservedPaths = null)
     {
         foreach (var row in touched)
         {
@@ -713,7 +762,7 @@ public sealed class OrganizerState
                 row.ProposedPath = row.CurrentPath;
         }
 
-        CollisionDisambiguator.Disambiguate(touched);
+        CollisionDisambiguator.Disambiguate(touched, reservedPaths);
     }
 
     public ReviewResult Validate()

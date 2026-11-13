@@ -223,4 +223,48 @@ public class CollisionDisambiguatorTests
         Assert.Equal($"{basePath} (2)", dupA.ProposedPath);
         Assert.Equal($"{basePath} (3)", dupB.ProposedPath);
     }
+
+    [Fact]
+    public void Disambiguate_ReservedPath_ForcesASuffixOnALoneRow()
+    {
+        var arriving = MakeMovedRow("Foo", "Foo", "Foo", "Gear/Foo");
+
+        CollisionDisambiguator.Disambiguate([arriving], ["gear/foo"]);
+
+        Assert.Equal("Gear/Foo (2)", arriving.ProposedPath);
+    }
+
+    [Fact]
+    public void Disambiguate_ReservedPaths_AreSkippedAsSuffixCandidates()
+    {
+        var arriving = MakeMovedRow("Foo", "Foo", "Foo", "Gear/Foo");
+
+        CollisionDisambiguator.Disambiguate([arriving], ["Gear/Foo", "Gear/Foo (2)"]);
+
+        Assert.Equal("Gear/Foo (3)", arriving.ProposedPath);
+    }
+
+    [Fact]
+    public void Disambiguate_ReservedPath_EveryCollidingRowIsSuffixed_AndTheOccupantIsNeverRenamed()
+    {
+        var occupant = MakeRow("Occupant", "Foo", "Gear/Foo");
+        var first = MakeMovedRow("Foo", "Foo", "Foo", "Gear/Foo");
+        var second = MakeMovedRow("Foo_2", "Foo", "Foo 2", "Gear/Foo");
+
+        CollisionDisambiguator.Disambiguate([first, second], [occupant.CurrentPath]);
+
+        Assert.Equal("Gear/Foo", occupant.ProposedPath);
+        Assert.Equal("Gear/Foo (2)", first.ProposedPath);
+        Assert.Equal("Gear/Foo (3)", second.ProposedPath);
+    }
+
+    [Fact]
+    public void Disambiguate_NoReservedPaths_IsTheExistingBehavior()
+    {
+        var lone = MakeMovedRow("Foo", "Foo", "Foo", "Gear/Foo");
+
+        CollisionDisambiguator.Disambiguate([lone], null);
+
+        Assert.Equal("Gear/Foo", lone.ProposedPath);
+    }
 }
