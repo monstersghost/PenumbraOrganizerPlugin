@@ -27,6 +27,16 @@ public sealed partial class MainWindow
         }
     }
 
+    /// <summary>Selects a tab for one frame (the same mechanism the walkthrough uses).</summary>
+    internal void RequestTab(HighlightTarget tab) => _tabToSelect = tab;
+
+    /// <summary>Opens the window on the Review tab (new-mod "Review first" and the chat command).</summary>
+    internal void OpenOnReview()
+    {
+        IsOpen = true;
+        RequestTab(HighlightTarget.ReviewTab);
+    }
+
     // The flags for a tab: selects it for one frame when the walkthrough has just moved to it. The
     // caller opens the tab with these, then calls OutlineLastItem for the same target.
     private ImGuiTabItemFlags TutorialTabFlags(HighlightTarget me, ImGuiTabItemFlags extra = ImGuiTabItemFlags.None)

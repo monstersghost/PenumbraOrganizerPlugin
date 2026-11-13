@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
 
     private const string CommandName = "/porganizer";
 
@@ -61,6 +62,11 @@ public sealed class Plugin : IDalamudPlugin
     internal ModEventEpoch ModEvents { get; } = new();
     internal LibraryWorkCoordinator<LibraryWork.Pure.ScanSeed, Organizer.OrganizerModRow> ScanWork { get; }
     internal LibraryWorkCoordinator<LibraryWork.Pure.IndexSeed, LibrarySearch.IndexedMod> IndexWork { get; }
+
+    internal Organizer.NewMods.NewModTracker NewModTracker { get; } = new();
+    internal Organizer.NewMods.NewModSortPipeline NewModPipeline { get; }
+    private bool _newModFaulted;
+    private DateTimeOffset _nextSeedAttempt = DateTimeOffset.MinValue;
 
     private readonly EventSubscriber<string> _modAdded;
     private readonly EventSubscriber<string> _modDeleted;
@@ -155,27 +161,34 @@ public sealed class Plugin : IDalamudPlugin
         _npcNameRefreshService = new Organizer.NpcNames.NpcNameRefreshService(
             new Organizer.NpcNames.NpcWikiScraper(_npcHttpClient));
 
+        NewModPipeline = new Organizer.NewMods.NewModSortPipeline(
+            new Organizer.NewMods.PluginNewModHost(this, _mainWindow, SendChat));
+
         // Observe live changes. SetModPath is now reached only through the operation engine
         // (StartApplyOperation/StartRestoreOperation -> OperationController -> PathMutationOperation),
         // gated on OrganizerState.Validate() showing no issues.
         _modAdded = ModAdded.Subscriber(PluginInterface, dir =>
         {
             ModEvents.Increment();
+            NewModTracker.EnqueueAdded(dir); // enqueue only: this callback is on an unknown thread
             _mainWindow.LogEvent($"Mod added: {dir}");
         });
         _modDeleted = ModDeleted.Subscriber(PluginInterface, dir =>
         {
             ModEvents.Increment();
+            NewModTracker.EnqueueDeleted(dir);
             _mainWindow.LogEvent($"Mod deleted: {dir}");
         });
         _modMoved = ModMoved.Subscriber(PluginInterface, (oldDir, newDir) =>
         {
             ModEvents.Increment();
+            NewModTracker.EnqueueMoved(oldDir, newDir);
             _mainWindow.LogEvent($"Mod moved: {oldDir} -> {newDir}");
         });
         _modDirectoryChanged = ModDirectoryChanged.Subscriber(PluginInterface, (dir, locked) =>
         {
             ModEvents.Increment();
+            NewModTracker.EnqueueDirectoryChanged();
             _mainWindow.LogEvent($"Mod directory changed: {dir}");
         });
         // Penumbra's own docs for GetChangedItemAdapterDictionary say to clear it on Disposed, so a
@@ -183,6 +196,7 @@ public sealed class Plugin : IDalamudPlugin
         _penumbraDisposed = Disposed.Subscriber(PluginInterface, () =>
         {
             ModEvents.Increment();
+            NewModTracker.EnqueueDisposed();
             _mainWindow.LogEvent("Penumbra unloaded.");
         });
 
@@ -253,6 +267,15 @@ public sealed class Plugin : IDalamudPlugin
 
         try
         {
+            NewModTracker.PublishScan(OrganizerState.Mods.Select(m => m.Identifier));
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Recording scanned mods as known failed; the scan itself succeeded.");
+        }
+
+        try
+        {
             _mainWindow.OnScanPublished();
         }
         catch (Exception ex)
@@ -277,6 +300,68 @@ public sealed class Plugin : IDalamudPlugin
         return true;
     }
 
+    private void SendChat(string message)
+    {
+        try
+        {
+            ChatGui.Print(message);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not print to chat.");
+        }
+    }
+
+    // Framework thread only. Seeds the known set once Penumbra answers, turns a ready batch into an
+    // eligibility-filtered offer, and advances the pipeline.
+    private void UpdateNewModPipeline()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (NewModTracker.NeedsSeed)
+        {
+            if (now < _nextSeedAttempt)
+                return;
+
+            _nextSeedAttempt = now.AddSeconds(5);
+            try
+            {
+                using var seedList = GetModListAdapterIpc.Invoke();
+                NewModTracker.Seed(seedList.Select(m => m.Identifier).ToList());
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Seeding known mods failed; will retry.");
+                return;
+            }
+        }
+
+        if (NewModTracker.TakeReady() is { Count: > 0 } batch)
+        {
+            var wanted = batch.ToHashSet(StringComparer.Ordinal);
+            var candidates = new List<Organizer.NewMods.NewModCandidate>();
+            using (var modList = GetModListAdapterIpc.Invoke())
+            {
+                foreach (var mod in modList.Where(m => wanted.Contains(m.Identifier)))
+                {
+                    candidates.Add(new Organizer.NewMods.NewModCandidate(
+                        mod.Identifier, mod.Name, mod.Author, mod.FullPath,
+                        Organizer.NewMods.NewModEligibility.IsHeliosphere(
+                            mod.Identifier, mod.ModPath, mod.Name, Config.KnownHeliosphereIdentifiers)));
+                }
+            }
+
+            var eligible = Organizer.NewMods.NewModEligibility.Filter(
+                candidates, OrganizerState.ProtectedModIdentifiers.ToHashSet(StringComparer.Ordinal),
+                OrganizerState.FolderProtectionRules, Config.ToolPolicy);
+            if (eligible.Count == 0)
+                Log.Information($"{batch.Count} new mods noticed; none would be moved by a root-only sort.");
+            else
+                NewModPipeline.Offer(batch, eligible.Count);
+        }
+
+        NewModPipeline.Update(now);
+    }
+
     private bool _eventLogDrainFaulted;
     private bool _scanWorkFaulted;
     private bool _indexWorkFaulted;
@@ -297,6 +382,21 @@ public sealed class Plugin : IDalamudPlugin
             {
                 _operationRecordFaulted = true;
                 Log.Error(ex, "Recording an operation's outcome failed; the operation itself is unaffected.");
+            }
+        }
+
+        // Before the CompletionWatcher: a completion seen this frame is handled by the pipeline
+        // first, and the watcher's rescan follows in the same frame.
+        try
+        {
+            UpdateNewModPipeline();
+        }
+        catch (Exception ex)
+        {
+            if (!_newModFaulted)
+            {
+                _newModFaulted = true;
+                Log.Error(ex, "The new-mod pipeline failed; later frames will keep trying.");
             }
         }
 
