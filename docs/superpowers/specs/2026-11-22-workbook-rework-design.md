@@ -109,8 +109,8 @@ Regenerated on every export; columns code, name, description, folder, example.
   under, read from the same table the sorter uses (one source, no second catalog). The two differ today: the
   workbook calls codes 13, 15 and 16 `VFX`, `Animation` and `Others`, while Sort files them under
   `Animation and VFX/...` and `Review`. Version 3 follows Sort, so a sheet that mixes codes and `{type}` builds
-  one tree and not two; version 2 files keep the version 2 meaning of their codes. Before building, the
-  author confirms this change to codes 13, 15 and 16 (open question 2).
+  one tree and not two; version 2 files keep the version 2 meaning of their codes. The author approved
+  this change to codes 13, 15 and 16 (see "Resolved by the author").
 - **Rows 17 and up:** the user's own. Only **code** and **folder** route anything; name, description and
   example are free text for the user's own notes and are not saved. A row is a whole-number code (17 to 9999)
   and a folder path, e.g. `17 | Face/Sculpts`. Blank rows are ignored. At most 200 custom rows, and a folder
@@ -272,7 +272,12 @@ tied to the mod's applicability; the docs that now say the wrong thing.
 
 ## Open questions
 
-1. **Own the code or wrap it.** The spec takes the plugin-owned copy (the review agreed, conditional on one
-   catalog and v2 tests); the wrapper is the fallback if the author wants to keep the link.
-2. **Codes 13, 15 and 16.** Version 3 makes the built-in folders follow the Sort tab (`Animation and VFX/...`,
-   `Review`), where the old sheet said `VFX`, `Animation` and `Others`. Confirm before building.
+None open.
+
+## Resolved by the author (2026-11-22)
+
+1. **Own the code.** The plugin-owned copy (section 1), on the conditions the review set: one catalog and the
+   version 2 tests moved across first. The wrapper stays only as a fallback if that proves wrong.
+2. **Codes 13, 15 and 16 follow the Sort tab.** Version 3 files built-in codes under `Animation and VFX/...`
+   and `Review`, where the old sheet said `VFX`, `Animation` and `Others`. Version 2 files keep their old
+   meaning.

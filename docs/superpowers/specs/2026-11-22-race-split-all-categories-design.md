@@ -265,7 +265,26 @@ evidence needs new scan data and a re-scan; the real key names (`Skin Textures`,
 fold keyed on enum names; the new body part in the un-numbered path and layout code; EST gives no race;
 applicability defined independently of the switches.
 
-## Open questions
+## Resolved by the author (2026-11-22)
 
-1. **Hyur.** Keep the nine names (this spec) or merge to eight with a visible hair-folder change later. The
-   first review agreed with keeping nine.
+**Hyur stays two folders.** Midlander and Highlander stay separate, as hair does today. No open questions
+remain in this spec.
+
+The nine names, listed so they can be checked. Folder codes come from `HairRaceCodes` (male code, female
+code). "Real key" means the name appears in a real Penumbra changed-item key in the repo's test fixtures; the
+others rest on `HairRaceCodes`, whose comment says every code was confirmed by at least one mod, and need a
+real key per row in step 0.
+
+| Folder name | Hair codes | Real key seen |
+|---|---|---|
+| Midlander | 0101, 0201 | yes (`Midlander Female Hair (Accessory) 147`) |
+| Highlander | 0301, 0401 | no |
+| Elezen | 0501, 0601 | yes (`Elezen Female (Child) Face 201`) |
+| Miqo'te | 0701, 0801 | yes (`Miqo'te Female Face (Iris) 101`) |
+| Roegadyn | 0901, 1001 | no |
+| Lalafell | 1101, 1201 | no |
+| Au Ra | 1301, 1401 | yes (`Au Ra Female Body (Skeleton) 1`) |
+| Hrothgar | 1501, 1601 | no |
+| Viera | 1701, 1801 | no |
+
+Step 0 confirms the five unseen names against real keys before any non-hair row relies on them.
