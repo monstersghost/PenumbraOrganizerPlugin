@@ -73,16 +73,4 @@ public class WorkbookAdapterInventoryTests
         Assert.Equal("Foo", proposal.StableScanId);
         Assert.True(proposal.Protected);
     }
-
-    [Theory]
-    [InlineData(OrganizationStrategy.TypeOnly)]
-    [InlineData(OrganizationStrategy.CreatorOnly)]
-    [InlineData(OrganizationStrategy.TypeThenCreator)]
-    [InlineData(OrganizationStrategy.CreatorThenType)]
-    public void ToOrganizationPreferences_CarriesRequestedStrategy(OrganizationStrategy strategy)
-    {
-        var preferences = WorkbookAdapter.ToOrganizationPreferences(strategy);
-
-        Assert.Equal(strategy, preferences.Strategy);
-    }
 }

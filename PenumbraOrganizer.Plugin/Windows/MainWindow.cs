@@ -719,7 +719,7 @@ public sealed partial class MainWindow : Window, IDisposable
                     return;
                 try
                 {
-                    _lastWorkbookExportPath = _plugin.ExportWorkbook(strategy, path);
+                    _lastWorkbookExportPath = _plugin.ExportWorkbook(Organizer.Workbook.WorkbookExportMode.AsIs, path);
                     _lastError = null;
                 }
                 catch (Exception ex)
@@ -747,7 +747,11 @@ public sealed partial class MainWindow : Window, IDisposable
         try
         {
             var result = _plugin.ImportWorkbook(workbookPath);
-            _lastWorkbookImportResult = new Organizer.WorkbookImportResultView(result.Summary, result.Errors, result.Warnings);
+            var lines = (result.CodeUsage ?? [])
+                .Select(u => $"Code {u.Code} -> {u.Folder}: {u.ModCount} mod(s)")
+                .ToList();
+            _lastWorkbookImportResult = new Organizer.WorkbookImportResultView(
+                result.Summary, result.Errors, result.Warnings, lines);
             _lastError = null;
         }
         catch (Exception ex)

@@ -29,7 +29,24 @@ public sealed record WorkbookImportRow(
     bool Protected,
     string Destination,
     string ResolvedModType,
-    string? ResolvedDestination);
+    string? ResolvedDestination,
+    string? Leaf = null);
+
+/// <summary>What one custom code expands to and how many mods in the file use it.</summary>
+public sealed record WorkbookCodeUsage(int Code, string Folder, int ModCount);
+
+/// <summary>The import report's separate counts (workbook spec, section 5).</summary>
+public sealed record WorkbookImportCounts(int Ready, int Unchanged, int Stale, int Blocked, int Warnings);
+
+/// <summary>
+/// Supplies what import needs to know about the plugin's own state, by stable id: the token values for a mod
+/// and its current leaf (so a leaf-only change counts as a move). Import never reads the plugin's state itself.
+/// </summary>
+public sealed record WorkbookImportContext(
+    Func<string, DestinationTokens> TokensFor, Func<string, string>? CurrentLeafFor = null)
+{
+    public static readonly WorkbookImportContext Empty = new(_ => DestinationTokens.None);
+}
 
 public sealed record WorkbookImportResult(
     string WorkbookPath,
@@ -40,13 +57,38 @@ public sealed record WorkbookImportResult(
     IReadOnlyList<WorkbookImportRow> Rows,
     IReadOnlyList<string> Errors,
     IReadOnlyList<string> Warnings,
-    string Summary);
+    string Summary,
+    int FormatVersion = 2,
+    IReadOnlyList<CustomCode>? CustomCodes = null,
+    IReadOnlyList<WorkbookCodeUsage>? CodeUsage = null,
+    WorkbookImportCounts? Counts = null);
+
+public enum WorkbookExportMode
+{
+    /// <summary>Each mod's current folder.</summary>
+    AsIs,
+
+    /// <summary>The folders the last Sort staged.</summary>
+    AsSuggestedBySort,
+}
+
+/// <summary>
+/// Everything one export needs. The service never reads the plugin's state itself. <paramref name="Leaves"/>
+/// is each mod's real last path segment (current in As is, staged in Sort mode), so an unedited import keeps
+/// it, including a duplicate install's "Name (2)".
+/// </summary>
+public sealed record WorkbookExportRequest(
+    ScanInventory Inventory,
+    IReadOnlyList<OrganizerModProposal> Proposals,
+    WorkbookExportMode Mode,
+    string? SortFingerprint,
+    IReadOnlyList<CustomCode> CustomCodes,
+    IReadOnlyDictionary<string, string> Leaves);
 
 public static class WorkbookCategoryCatalog
 {
-    public const int CurrentFormatVersion = 2;
     public const string BlankDestinationRule = "Blank destination leaves the mod in its current folder.";
-    public const string ReviewRule = "Use mod type Others or destination 16/Others when a row still needs manual attention.";
+    public const string ReviewRule = "Use mod type Others or destination 16 when a row still needs manual attention (it files under Review).";
 
     public static IReadOnlyList<WorkbookCategoryDefinition> Definitions { get; } =
     [
