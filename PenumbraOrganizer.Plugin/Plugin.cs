@@ -8,7 +8,7 @@ using Penumbra.Api.IpcSubscribers;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Core.Services;
-using PenumbraOrganizer.Infrastructure.Exports;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 using PenumbraOrganizer.Plugin.LibrarySearch;
 using PenumbraOrganizer.Plugin.LibraryWork;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
@@ -52,7 +52,7 @@ public sealed class Plugin : IDalamudPlugin
     /// is usable on a fresh load; after a scan the published snapshot on OrganizerState always wins.
     /// </summary>
     public IReadOnlyList<string> BundledBodyLabels { get; }
-    private readonly WorkbookWorkflowService _workbookService;
+    private readonly WorkbookService _workbookService;
     private readonly HttpClient _npcHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
         Timeout = TimeSpan.FromSeconds(15),
@@ -154,8 +154,8 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Warning(ex, "Operation bundle retention failed; plugin startup will continue.");
         }
-        _workbookService = new WorkbookWorkflowService(
-            new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookWorkflowService>(Log));
+        _workbookService = new WorkbookService(
+            new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookService>(Log));
         _npcHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
             "PenumbraOrganizer.Plugin/1.0 (+https://github.com/monstersghost/PenumbraOrganizer.Plugin)");
         _npcNameRefreshService = new Organizer.NpcNames.NpcNameRefreshService(

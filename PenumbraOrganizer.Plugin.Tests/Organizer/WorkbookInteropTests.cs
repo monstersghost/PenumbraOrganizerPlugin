@@ -5,13 +5,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Core.Services;
-using PenumbraOrganizer.Infrastructure.Exports;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 using PenumbraOrganizer.Plugin.Organizer;
 
 public class WorkbookInteropTests
 {
-    private static WorkbookWorkflowService CreateService()
-        => new(new CreatorCanonicalizer(), NullLogger<WorkbookWorkflowService>.Instance);
+    private static WorkbookService CreateService()
+        => new(new CreatorCanonicalizer(), NullLogger<WorkbookService>.Instance);
 
     private static PenumbraInstallation MakeInstallation() => new(
         ConfigurationPath: "C:/Penumbra/Penumbra.json",

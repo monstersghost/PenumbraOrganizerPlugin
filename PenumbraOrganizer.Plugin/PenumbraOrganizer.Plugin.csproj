@@ -41,13 +41,11 @@
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\ModClassificationModels.cs" Link="Linked\ModClassificationModels.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Interfaces\ICreatorCanonicalizer.cs" Link="Linked\ICreatorCanonicalizer.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Services\CreatorCanonicalizer.cs" Link="Linked\CreatorCanonicalizer.cs" />
-    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Models\WorkbookWorkflowModels.cs" Link="Linked\WorkbookWorkflowModels.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Models\DomainModels.cs" Link="Linked\DomainModels.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Models\OrganizerModels.cs" Link="Linked\OrganizerModels.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Identity\ScanIdentity.cs" Link="Linked\ScanIdentity.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\EquipmentSlot.cs" Link="Linked\EquipmentSlot.cs" />
     <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Core\Classification\EquipmentSlotMapper.cs" Link="Linked\EquipmentSlotMapper.cs" />
-    <Compile Include="..\..\PenumbraOrganizer\PenumbraOrganizer.Infrastructure\Exports\WorkbookWorkflowService.cs" Link="Linked\WorkbookWorkflowService.cs" />
   </ItemGroup>
 
 </Project>

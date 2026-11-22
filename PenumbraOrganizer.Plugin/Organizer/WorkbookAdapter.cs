@@ -2,6 +2,7 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Core.Models;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 
 public static class WorkbookAdapter
 {

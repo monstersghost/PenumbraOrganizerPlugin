@@ -2,6 +2,7 @@ namespace PenumbraOrganizer.Plugin.Tests.Organizer;
 
 using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 
 public class WorkbookAdapterApplyImportResultTests
 {
