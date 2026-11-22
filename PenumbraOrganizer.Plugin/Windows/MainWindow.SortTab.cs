@@ -21,12 +21,24 @@ public sealed partial class MainWindow
 
         var gates = CurrentGates();
 
-        _sortPanel.Draw(
+        // The Sort button and its Group by / What to sort controls are pinned: drawn here, outside the
+        // scrolling child below, so they stay in view while the rest of the tab scrolls.
+        Func<IReadOnlyList<string>> bodyLabels = () => _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels;
+        _sortPanel.DrawHeader(
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
-            _creatorCanonicalizer.Canonicalize,
-            () => _plugin.OrganizerState.BodyLabels ?? _plugin.BundledBodyLabels,
+            _creatorCanonicalizer.Canonicalize, bodyLabels,
             () => _sortHelpRequested = true,
-            () => OutlineLastItem(HighlightTarget.SortButton),
+            () => OutlineLastItem(HighlightTarget.SortButton));
+
+        // Fills the rest of the tab. ImRaii.Child ends the child when this method returns, early returns
+        // below included.
+        using var scroll = ImRaii.Child("##sort-scroll", Vector2.Zero, false);
+        if (!scroll)
+            return;
+
+        _sortPanel.DrawBody(
+            _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
+            _creatorCanonicalizer.Canonicalize, bodyLabels,
             () => _plugin.ActiveCollectionReader.ReadEnabledModDirectories());
 
         ImGui.Spacing();

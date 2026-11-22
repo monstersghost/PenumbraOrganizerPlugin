@@ -352,7 +352,13 @@ public sealed class SortPanel
     private string? _collectionMessage;   // shown under the button after a check
     private string? _collectionLabel;     // which collection was read, for the messages
 
-    public void Draw(
+    /// <summary>
+    /// The pinned top of the Sort tab: Group by, What to sort, the Sort button and its summary. MainWindow
+    /// draws it OUTSIDE the scrolling region so it stays in view while the controls below scroll. It reads
+    /// the other controls' values from the previous frame, which is invisible: a click on Sort cannot land
+    /// in the same frame as a click on another control.
+    /// </summary>
+    public void DrawHeader(
         OrganizerState state,
         ActivityGates gates,
         Configuration config,             // the scraped-list opt-in is persistent, not session
@@ -360,8 +366,7 @@ public sealed class SortPanel
         Func<string, string> canonicalizeCreator,
         Func<IReadOnlyList<string>> getBodyLabels,
         Action? onShowSortHelp = null,
-        Action? onSortButtonDrawn = null,
-        Func<CollectionRead?>? readEnabledMods = null)
+        Action? onSortButtonDrawn = null)
     {
         var bodyLabels = getBodyLabels();
 
@@ -423,6 +428,67 @@ public sealed class SortPanel
 
         // The strategy is settled the moment the combo has been submitted. Every control below takes
         // its visible and enabled state from SortLayout, which is what the tests pin.
+        var strategy = Groupings[_groupingIndex].Strategy;
+        var states = SortLayout.Compute(
+            strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, _splitGear);
+        PersistSortChoices(config, saveConfig, strategy);
+
+        var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
+        var selection = BuildSelection(config, strategy, _splitGear, _splitNpc, _splitHair,
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
+            _sharedHandsFeet, _splitEmotes, raceNow, rootOnly);
+
+        // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
+        // Stable id: a label varying with mod count would vary the widget id, so a background scan
+        // publishing mid-click would drop the click.
+        bool sortClicked;
+        using (PluginTheme.PrimaryButton())
+        {
+            ImGui.BeginDisabled(!states.SortButton.Enabled);
+            sortClicked = ImGui.Button("Sort##sort-mods");
+            onSortButtonDrawn?.Invoke();
+            ImGui.EndDisabled();
+        }
+        Help.Tooltip(HelpTopics.SortButton, gates.CanStageProposals ? null : ActivityGateReason);
+        if (sortClicked)
+        {
+            SortRunner.Run(state, selection, canonicalizeCreator, ScopeFor(rootOnly));
+            _lastSorted = selection;
+        }
+
+        if (state.LastSortSummary is { } summary)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled(SortSummaryText.Describe(summary));
+            Help.Tooltip(HelpTopics.SortScopeLine);
+        }
+
+        // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.
+        ImGui.SameLine();
+        if (ImGui.Button("?##sort-help"))
+            onShowSortHelp?.Invoke();
+        Help.Tooltip(HelpTopics.SortHelpButton);
+
+        if (_lastSorted is { } last && last != selection)
+            ImGui.TextDisabled("Selection changed since the last sort.");
+
+        ImGui.Separator();
+    }
+
+    /// <summary>
+    /// Everything under the pinned header: the split sections, race, rules, body priority and Advanced. Drawn
+    /// inside MainWindow's scrolling region.
+    /// </summary>
+    public void DrawBody(
+        OrganizerState state,
+        ActivityGates gates,
+        Configuration config,
+        Action saveConfig,
+        Func<string, string> canonicalizeCreator,
+        Func<IReadOnlyList<string>> getBodyLabels,
+        Func<CollectionRead?>? readEnabledMods = null)
+    {
+        var bodyLabels = getBodyLabels();
         var strategy = Groupings[_groupingIndex].Strategy;
         var states = SortLayout.Compute(
             strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, _splitGear);
@@ -493,57 +559,13 @@ public sealed class SortPanel
         DrawRules(state, gates, config, saveConfig, canonicalizeCreator);
 
         ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        // Every control above has now been submitted, so this is the selection as the user has it
-        // THIS frame. The body priority section below may change the priority later in the frame; the
-        // staleness hint then picks that up on the next frame, which is not visible.
-        PersistSortChoices(config, saveConfig, strategy);
-
-        var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
-        var selection = BuildSelection(config, strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            _sharedHandsFeet, _splitEmotes, raceNow, rootOnly);
-
-        // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
-        // Stable id: a label varying with mod count would vary the widget id, so a background scan
-        // publishing mid-click would drop the click.
-        bool sortClicked;
-        using (PluginTheme.PrimaryButton())
-        {
-            ImGui.BeginDisabled(!states.SortButton.Enabled);
-            sortClicked = ImGui.Button("Sort##sort-mods");
-            onSortButtonDrawn?.Invoke();
-            ImGui.EndDisabled();
-        }
-        Help.Tooltip(HelpTopics.SortButton, gates.CanStageProposals ? null : ActivityGateReason);
-        if (sortClicked)
-        {
-            SortRunner.Run(state, selection, canonicalizeCreator, ScopeFor(rootOnly));
-            _lastSorted = selection;
-        }
-
-        if (state.LastSortSummary is { } summary)
-        {
-            ImGui.SameLine();
-            ImGui.TextDisabled(SortSummaryText.Describe(summary));
-            Help.Tooltip(HelpTopics.SortScopeLine);
-        }
-
-        // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.
-        ImGui.SameLine();
-        if (ImGui.Button("?##sort-help"))
-            onShowSortHelp?.Invoke();
-        Help.Tooltip(HelpTopics.SortHelpButton);
-
-        if (_lastSorted is { } last && last != selection)
-            ImGui.TextDisabled("Selection changed since the last sort.");
-
-        ImGui.Spacing();
         DrawBodyPriority(config, saveConfig, bodyLabels, states, anyBodySplit: _splitGearBody || _splitBodyMods,
             state, readEnabledMods);
         DrawAdvanced(config, saveConfig);
+
+        // The header persists at the start of the next frame; doing it here as well keeps a change made by
+        // the last control of a frame from being lost if the window closes right after it.
+        PersistSortChoices(config, saveConfig, strategy);
     }
 
     private static readonly string[] NewModActionLabels = ["Ask", "Sort automatically", "Do nothing"];
