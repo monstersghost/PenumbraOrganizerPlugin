@@ -3,6 +3,7 @@ using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Operations;
+using PenumbraOrganizer.Plugin.Organizer.Rules;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -128,6 +129,90 @@ public sealed class SortPanel
                 Rules: SortSelectionFactory.RulesFor(config)),
             rootOnly);
 
+    /// <summary>
+    /// The Rules section: a collapsible list of "condition -> folder" lines. Edits go to a working
+    /// <see cref="RulesEditor"/>; the config is written only when a text box is left, or a rule is added,
+    /// removed, moved or toggled, never per keystroke or per frame.
+    /// </summary>
+    private void DrawRules(
+        OrganizerState state, ActivityGates gates, Configuration config, Action saveConfig,
+        Func<string, string> canonicalizeCreator)
+    {
+        _rules ??= new RulesEditor(config.SortRules, () => Environment.TickCount64);
+
+        var open = ImGui.CollapsingHeader($"Rules ({_rules.Rows.Count})##sort-rules");
+        Help.Tooltip(HelpTopics.SortRules);
+        if (!open)
+            return;
+
+        _rules.Observe(state.Mods, state.ScanGeneration, canonicalizeCreator,
+            RaceSplitOptions.FromConfig(config), _bodyPriority, _splitGearBody, _splitBodyMods);
+        _rules.Tick();
+
+        var enabledEditing = gates.CanStageProposals;
+        ImGui.BeginDisabled(!enabledEditing);
+        ImGui.TextDisabled("condition -> folder. The first matching rule files the mod; the rest sort as usual.");
+        var persist = false;
+        for (var i = 0; i < _rules.Rows.Count; i++)
+        {
+            ImGui.PushID(i);
+            var row = _rules.Rows[i];
+            var on = row.Enabled;
+            if (ImGui.Checkbox("##rule-on", ref on)) { _rules.SetEnabled(i, on); persist = true; }
+            ImGui.SameLine();
+            var text = row.Text;
+            ImGui.SetNextItemWidth(-130);
+            // Buffer size is in bytes: four per UTF-16 unit leaves room for any text the 300-unit limit
+            // allows; the parser reports anything longer.
+            if (ImGui.InputText("##rule-text", ref text, RuleParser.MaxLength * 4))
+                _rules.SetText(i, text);
+            if (ImGui.IsItemDeactivatedAfterEdit())
+                persist = true;
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Up") && _rules.MoveUp(i)) persist = true;
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Dn") && _rules.MoveDown(i)) persist = true;
+            ImGui.SameLine();
+            var remove = ImGui.SmallButton("X");
+
+            var status = _rules.Status(i);
+            if (status.IsError)
+                ImGui.TextColored(PluginTheme.CollisionBad, status.Text);
+            else
+                ImGui.TextDisabled(status.Text);
+            if (_rules.Warning(i) is { } warning)
+                ImGui.TextColored(PluginTheme.Protected, warning);
+            if (_rules.ProtectionWarning(i, folder =>
+                    state.ResolveFolderRule(folder).Rule == FolderProtectionRule.Protected) is { } protectedWarning)
+                ImGui.TextColored(PluginTheme.Protected, protectedWarning);
+            ImGui.PopID();
+
+            if (remove)
+            {
+                _rules.Remove(i);
+                persist = true;
+                break;
+            }
+        }
+
+        if (ImGui.Button("Add rule##add-sort-rule") && _rules.Add())
+            persist = true;
+        if (!_rules.CanAdd)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled($"{RuleSet.MaxRules} rules is the limit.");
+        }
+
+        ImGui.EndDisabled();
+
+        if (persist)
+        {
+            config.SortRules = _rules.ToConfig();
+            config.SortRulesVersion++;
+            saveConfig();
+        }
+    }
+
     private void PersistSortChoices(Configuration config, Action saveConfig, SortStrategy strategy)
     {
         var name = strategy.ToString();
@@ -186,6 +271,7 @@ public sealed class SortPanel
     /// <summary>The scope for the "What to sort" choice; null means the whole library, as before.</summary>
     public static SortScope? ScopeFor(bool rootOnly) => rootOnly ? new SortScope(true) : null;
     private BodyPriority _bodyPriority = BodyPriority.Default([]);
+    private RulesEditor? _rules;      // the working copy of the Sort rules; saved on edit, never per frame
     private IReadOnlyList<string>? _bodyLabelsSeen;
 
     private const string Male = "\u2642";
@@ -403,6 +489,8 @@ public sealed class SortPanel
 
         GroupHeading("Race");
         DrawRaceSplit(state, states.RaceSplit, splitReason);
+
+        DrawRules(state, gates, config, saveConfig, canonicalizeCreator);
 
         ImGui.Spacing();
         ImGui.Separator();

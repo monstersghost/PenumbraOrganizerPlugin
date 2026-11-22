@@ -38,6 +38,7 @@ public static class HelpTopicUsage
         HelpTopics.SortSplitNpc,
         HelpTopics.SortSplitHair,
         HelpTopics.SortSplitHairByRace,
+        HelpTopics.SortRules,
         HelpTopics.SortRaceSplit,
         HelpTopics.SortRaceRows,
         HelpTopics.SortMultiRace,

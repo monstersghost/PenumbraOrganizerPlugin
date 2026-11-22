@@ -201,6 +201,12 @@
       "short": "Hair splits by race from the Race section: tick the master switch and leave Hair ticked. One race files under it (Hair/Viera/115); several races or none go under Hair/Multi-race."
     },
     {
+      "id": "sort.rules",
+      "title": "Sort rules",
+      "short": "Rules file mods by what they are called, who made them and more. Write condition -> folder; the first matching rule wins and unmatched mods sort as usual. Protected mods never move.",
+      "body": "A rule is one line: a condition, an arrow and a folder.\n\nname contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}\n\nFields: name, author, folder (where the mod sits now), type, subtype, race, body. Type is the category folder: Gear, Weapon, Face, Hair, Body, Skin, NPC, Minion, Mount, Pet, Ornament, Furniture, Sound, Animation and VFX, or Review.\n\nOperators: =, !=, contains, starts with, ends with, in ('a', 'b'), and not. Use and, or and brackets to combine. Text goes in straight single quotes and is not case sensitive.\n\nThe folder can use {type}, {creator} and {race}. It replaces the whole path the Sort would have chosen, so the mod is not split by body or race underneath it.\n\nThe first matching rule wins. Protected mods are never touched. Rules apply to every Sort, including the automatic sort of new mods, but not to a template used as a fallback. Each rule shows what is wrong with it, or how many mods it wins for. Rules are saved when you leave the text box."
+    },
+    {
       "id": "sort.race-split",
       "title": "Split supported categories by race",
       "short": "Master switch for the race folders. Off leaves your folders as they are. It splits by race, not gender, so male-only and female-only mods of one race share a folder."
