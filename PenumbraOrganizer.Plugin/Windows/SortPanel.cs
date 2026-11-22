@@ -28,6 +28,27 @@ public readonly record struct SortSelection(
     public bool SplitsApply => Strategy != SortStrategy.CreatorOnly;
 
     public HairPriority HairPriority => new(HairRaceCode, MidlanderFallback);
+
+    /// <summary>
+    /// A stable text for "what produced the staged paths": every setting that can change a folder and nothing
+    /// else (RootOnly is a scope, not a setting). HairPriority is computed from HairRaceCode and
+    /// MidlanderFallback, so both are included. The workbook export compares it to the current settings to
+    /// decide whether the staged sort is still current.
+    /// </summary>
+    public string Fingerprint()
+    {
+        var race = Layout.Race;
+        var raceText = race is null
+            ? "-"
+            : $"{race.Enabled}:{(int)race.Rows}:{race.MultiRaceToMultiRace}:{string.Join(',', race.Priority.Ranked)}";
+        IEnumerable<string> bodyLabels = BodyPriority?.Labels ?? [];
+
+        return string.Join(
+            '|',
+            Strategy, SplitGear, SplitNpc, SplitHair, HairRaceCode ?? "-", MidlanderFallback,
+            SplitGearBody, SplitBodyMods, string.Join(',', bodyLabels),
+            Layout.SharedHandsAndFeet, Layout.SplitHairByRace, Layout.SplitEmotes, raceText);
+    }
 }
 
 /// <summary>
