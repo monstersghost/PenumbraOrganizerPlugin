@@ -110,6 +110,24 @@ public sealed class SortPanel
         return index >= 0 ? index : DefaultGroupingIndex;
     }
 
+    /// <summary>
+    /// The panel's selection from its own control state. Public and static so a test can compare it with
+    /// <see cref="SortSelectionFactory.FromConfig"/>: the rules come from the shared cache for the same config.
+    /// </summary>
+    public static SortSelection BuildSelection(
+        Configuration config, SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
+        string? hairRaceCode, bool midlanderFallback, bool splitGearBody, bool splitBodyMods,
+        BodyPriority? bodyPriority, bool sharedHandsFeet, bool splitEmotes, RaceSplitOptions race, bool rootOnly) =>
+        new(strategy, splitGear, splitNpc, splitHair, hairRaceCode, midlanderFallback, splitGearBody,
+            splitBodyMods, bodyPriority,
+            new LayoutOptions(
+                sharedHandsFeet,
+                race.InEffect(RaceRows.Hair, splitBodyMods),
+                splitEmotes,
+                race.NullIfNoEffect(),
+                Rules: SortSelectionFactory.RulesFor(config)),
+            rootOnly);
+
     private void PersistSortChoices(Configuration config, Action saveConfig, SortStrategy strategy)
     {
         var name = strategy.ToString();
@@ -396,14 +414,9 @@ public sealed class SortPanel
         PersistSortChoices(config, saveConfig, strategy);
 
         var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
-        var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
+        var selection = BuildSelection(config, strategy, _splitGear, _splitNpc, _splitHair,
             HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            new LayoutOptions(
-                _sharedHandsFeet,
-                raceNow.InEffect(RaceRows.Hair, _splitBodyMods),
-                _splitEmotes,
-                raceNow.NullIfNoEffect()),
-            rootOnly);
+            _sharedHandsFeet, _splitEmotes, raceNow, rootOnly);
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan
