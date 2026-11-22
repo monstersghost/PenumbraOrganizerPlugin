@@ -124,3 +124,23 @@ Tick each box and paste what you saw under it.
       `Body/03. Racial Scaling/Multi-race` with the row on and the multi-race box ticked.
 - [ ] The eight `tiramisu2` variants (Rsp plus file entries) are NOT moved to Racial Scaling.
 - [ ] Downgrade then upgrade: the hair setting survives; the other rows, priority and toggle reset.
+
+## Headless results (2026-11-22, real libraries, read-only)
+
+Run by `PenumbraOrganizer.Plugin.Tests/Harness/RealLibraryHarnessTests.cs` (opt-in: set `PENUMBRA_HARNESS_LIBS`).
+It reads each mod's real files; it cannot see Penumbra's changed-item keys, so Face/Skin/Tails evidence is NOT covered
+and these results do not replace the in-game ticks above. Libraries: `C:\Mods` (287 mods) and the other PC over
+Tailscale (2557 mods).
+
+- Master off sorts exactly like the default: 0 differences over 287 and over 2557 mods.
+- Master on with only Hair ticked equals the old "Split hair by race" checkbox: 0 differences (11 and 155 mods differ
+  from no hair split, so the comparison is not vacuous).
+- Racial scaling, big library: `[IZUMI] Ultimate Height Mod` (9 races) and `[AkiraDesign] Body Scale 2.0` (8 races)
+  are flagged; row off they stay in `Gear/`; row on with multi-race they file under
+  `Body/03. Racial Scaling/Multi-race/`; row on with multi-race off and priority Viera, Miqo'te they file under
+  `Body/03. Racial Scaling/Viera/`. `Variant Miqotes v2` (local) files under `Body/03. Racial Scaling/Miqo'te/`.
+- All eight `tiramisu2` variants carry Viera evidence and are NOT flagged or moved; `tiramisu2 beta [Physics]` (local)
+  likewise.
+- Scan speed: the 25,726-entry IZUMI mod reads in 152 ms; 2557 mods in 124 s over the network share, slowest mod 268 ms,
+  0 failures. (Time is dominated by the share, not by Rsp parsing.)
+- Still needs the game: items C, D, F, the Review tab `StagedRace:` line, Face/Skin/Tails routing, downgrade/upgrade.
