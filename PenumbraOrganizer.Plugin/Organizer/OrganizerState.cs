@@ -44,6 +44,7 @@ public sealed class OrganizerState
     public void SetToolPolicy(ToolPolicy policy)
     {
         _toolPolicy = policy;
+        SortFingerprint = null;
         foreach (var row in _mods.Values)
             row.Protected = IsEffectivelyProtectedFull(row);
     }
@@ -91,6 +92,19 @@ public sealed class OrganizerState
     /// scope records <see cref="SortScope.WholeLibrary"/>.
     /// </summary>
     public SortSummary? LastSortSummary { get; private set; }
+
+    /// <summary>
+    /// The fingerprint of the Sort settings that produced the staged paths, or null when the staged paths are
+    /// not (or no longer) a pure Sort result. Anything that stages a path another way, changes protection or
+    /// tool policy, or scans clears it; the workbook's "As suggested by Sort" export is available only while
+    /// it is set and current.
+    /// </summary>
+    public string? SortFingerprint { get; private set; }
+
+    public void MarkSortedWith(string fingerprint) => SortFingerprint = fingerprint;
+
+    /// <summary>Called after an accepted workbook import, which restages paths and protection.</summary>
+    public void InvalidateSortFingerprint() => SortFingerprint = null;
 
     public bool HasScanned { get; private set; }
 
@@ -202,12 +216,14 @@ public sealed class OrganizerState
         BodyLabels = bodyLabels;
         StagedBodyPriority = null;
         LastSortSummary = null;
+        SortFingerprint = null;
         HasScanned = true;
         ScanGeneration++;
     }
 
     public void SetProtected(string identifier, bool value)
     {
+        SortFingerprint = null;
         if (value)
             _protectedModIdentifiers.Add(identifier);
         else
@@ -234,6 +250,7 @@ public sealed class OrganizerState
     // changed nothing. A protected FOLDER still wins, as it does for every other unprotect.
     public void SetHeliosphereProtection(bool value)
     {
+        SortFingerprint = null;
         // A mod that is both Heliosphere-managed and Proteus-made follows the Proteus mode, so this
         // Heliosphere action leaves it alone.
         foreach (var row in _mods.Values.Where(m => m.HeliosphereManaged && m.ProteusRole == ProteusRole.None))
@@ -247,6 +264,7 @@ public sealed class OrganizerState
 
     public void SetAllProtection(bool value)
     {
+        SortFingerprint = null;
         if (value)
             _protectedModIdentifiers.UnionWith(_mods.Keys);
         else
@@ -289,6 +307,7 @@ public sealed class OrganizerState
         if (normalized is null)
             return;
 
+        SortFingerprint = null;
         if (rule == FolderProtectionRule.None)
             _folderProtectionRules.Remove(normalized);
         else
@@ -396,6 +415,8 @@ public sealed class OrganizerState
             if (row.IsToolManaged)
                 SetToolOverride(row.Identifier, unprotected: true);
         }
+
+        SortFingerprint = null;
 
         // Full recompute through the one protection rule, as every other protection path does,
         // rather than assigning the outcome this method just reasoned about to each row by hand.
@@ -515,6 +536,7 @@ public sealed class OrganizerState
         row.ProposedPath = proposedPath;
         row.StagedBodyResolution = null;
         row.StagedRace = null;
+        SortFingerprint = null;
         return true;
     }
 
@@ -682,6 +704,7 @@ public sealed class OrganizerState
 
         // The staged record describes the last SORT; a template re-pathed rows without a body split.
         StagedBodyPriority = null;
+        SortFingerprint = null;
 
         FinishProposals(touched);
         return plan.Report;
@@ -714,6 +737,8 @@ public sealed class OrganizerState
 
         if (touched.Count == 0)
             return 0;
+
+        SortFingerprint = null;
 
         // Paths other rows hold, now or by proposal, are reserved so no staged row lands on one.
         var touchedSet = new HashSet<OrganizerModRow>(touched);

@@ -442,18 +442,46 @@ before it runs, so you can always get back to where you started — see History 
 
 A **Workbook** group above Apply holds everything for the Excel round trip:
 
-- **Group workbook by** decides what goes in the workbook's Destination column. The four sorting
-  choices fill it with suggested folders; **Keep current folders (as-is)** fills it with each mod's
-  folder as it stands, which is what you want when you intend to write the layout yourself.
-  Protected mods and mods at the top level of your library get a blank Destination, which means
-  "leave this one alone" on import.
-- **Export Workbook** writes `organizer-workbook.xlsx`, interoperable with the standalone app. **Open
-  Workbook** opens the file you just wrote.
-- **Import Workbook** opens a file picker for an `.xlsx` exported from this plugin or the standalone
-  app and applies its per-mod destination folders as proposed paths. Use it instead of the built-in
-  groupings when you want to hand-edit an assignment list in Excel first. It works with a scan
-  loaded and nothing staged, and stays greyed while a scan runs. A summary line, plus any errors or
-  warnings, appears below the buttons once the import finishes.
+- **Export mode** decides what goes in the workbook's Destination column. **As is** writes each mod's
+  current folder, which is what you want when you intend to write the layout yourself. **As suggested
+  by Sort** writes the folders the last Sort staged, including every Sort setting (splits, numbered
+  folders, race folders); it is greyed out until you press Sort, and again whenever your Sort settings
+  change or you stage paths another way (a template, a manual move, a protection change, an import).
+  Protected mods always get a blank Destination, which means "leave this one alone" on import, and so
+  do top-level mods in As is.
+- **Export Workbook** writes `organizer-workbook.xlsx` for this library. **Open Workbook** opens the
+  file you just wrote. The file belongs to your library: a workbook from another Penumbra library is
+  refused.
+- **Import Workbook** opens a file picker for an `.xlsx` exported from this plugin and applies its
+  per-mod destination folders as proposed paths. Use it instead of the built-in groupings when you
+  want to hand-edit an assignment list in Excel first. It works with a scan loaded and nothing
+  staged, and stays greyed while a scan runs. A summary line, plus any errors or warnings, appears
+  below the buttons once the import finishes; it counts moves ready for review, unchanged rows, rows
+  skipped as stale and rows blocked by errors separately, and lists how many mods used each custom
+  category. A cell you did not touch comes back exactly as exported.
+
+##### Your own categories and tokens
+
+The **Category Mapping** sheet lists the sixteen built-in codes (1 to 16) under a red banner: do not
+edit them, edits are ignored with a warning. Under them, add your own rows from **17** up: a number in
+the `code` column and a folder in the `folder` column, for example `17` and `Face/Sculpts`. Then type
+`17` in a mod's Destination instead of the whole path, and `17/Thor` becomes `Face/Sculpts/Thor`. At
+most 200 custom rows. A code used twice, a folder with `..` in it, an unknown token, or a formula in
+these cells is an error that names the cell, and only the mods that use that code are held back. After
+an import with a clean mapping table the plugin remembers your rows and writes them into the next
+export, so a re-export does not lose them.
+
+A destination (or a mapping folder) may use three tokens, in any segment: `{type}` is the mod's
+category folder (`Hair`, `Animation and VFX`, or `Review` for an unclassified mod), `{creator}` is the
+creator folder the Sort tab uses, and `{race}` is the race folder (`Viera`, `Multi-race`, and so on)
+for a mod that has one. For example `Mine/{type}/{creator}/test` becomes `Mine/Hair/Thor/test`. A
+token with nothing to fill in drops its folder level: a mod with no creator gets `Mine/Hair/test`.
+Text around a token stays, so `By-{creator}` becomes `By-` for a mod with no creator. Tokens work in
+new-format workbooks only.
+
+In the new format the built-in folders follow the Sort tab: code 13 is `Animation and VFX/VFX`, 15 is
+`Animation and VFX` and 16 is `Review`. Older workbooks still import, with their old meaning for those
+three and no tokens. The standalone app cannot read the new format.
 
 **Apply** sits below the group, in the plugin's purple, set apart from the rest.
 

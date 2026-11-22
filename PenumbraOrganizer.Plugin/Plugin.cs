@@ -8,7 +8,7 @@ using Penumbra.Api.IpcSubscribers;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Core.Services;
-using PenumbraOrganizer.Infrastructure.Exports;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 using PenumbraOrganizer.Plugin.LibrarySearch;
 using PenumbraOrganizer.Plugin.LibraryWork;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
@@ -52,7 +52,7 @@ public sealed class Plugin : IDalamudPlugin
     /// is usable on a fresh load; after a scan the published snapshot on OrganizerState always wins.
     /// </summary>
     public IReadOnlyList<string> BundledBodyLabels { get; }
-    private readonly WorkbookWorkflowService _workbookService;
+    private readonly WorkbookService _workbookService;
     private readonly HttpClient _npcHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
         Timeout = TimeSpan.FromSeconds(15),
@@ -154,8 +154,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Warning(ex, "Operation bundle retention failed; plugin startup will continue.");
         }
-        _workbookService = new WorkbookWorkflowService(
-            new CreatorCanonicalizer(), new Organizer.PluginLogAdapter<WorkbookWorkflowService>(Log));
+        _workbookService = new WorkbookService(new Organizer.PluginLogAdapter<WorkbookService>(Log));
         _npcHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
             "PenumbraOrganizer.Plugin/1.0 (+https://github.com/monstersghost/PenumbraOrganizer.Plugin)");
         _npcNameRefreshService = new Organizer.NpcNames.NpcNameRefreshService(
@@ -684,11 +683,29 @@ public sealed class Plugin : IDalamudPlugin
         return reader.ReadToEnd();
     }
 
-    internal string ExportWorkbook(OrganizationStrategy strategy, string destinationPath)
+    private static readonly CreatorCanonicalizer WorkbookCanonicalizer = new();
+
+    /// <summary>Why "As suggested by Sort" cannot be exported right now, or null when it can.</summary>
+    internal string? SuggestedWorkbookUnavailableReason()
     {
-        var inventory = Organizer.WorkbookAdapter.ToScanInventory(OrganizerState, BuildInstallation());
-        var proposals = Organizer.WorkbookAdapter.ToProposals(OrganizerState);
-        var preferences = Organizer.WorkbookAdapter.ToOrganizationPreferences(strategy);
+        var labels = OrganizerState.BodyLabels ?? BundledBodyLabels;
+        return Windows.WorkbookExportGate.SuggestedUnavailableReason(
+            OrganizerState, Windows.SortSelectionFactory.FromConfig(Config, labels));
+    }
+
+    internal string ExportWorkbook(Organizer.Workbook.WorkbookExportMode mode, string destinationPath)
+    {
+        var staged = mode == Organizer.Workbook.WorkbookExportMode.AsSuggestedBySort;
+        if (staged && SuggestedWorkbookUnavailableReason() is { } reason)
+            throw new InvalidOperationException(reason);
+
+        var request = new Organizer.Workbook.WorkbookExportRequest(
+            Organizer.WorkbookAdapter.ToScanInventory(OrganizerState, BuildInstallation()),
+            Organizer.WorkbookAdapter.ToProposals(OrganizerState, staged),
+            mode,
+            staged ? OrganizerState.SortFingerprint : null,
+            Config.WorkbookCustomCodes.Select(c => new Organizer.Workbook.CustomCode(c.Code, c.Folder)).ToList(),
+            Organizer.WorkbookAdapter.Leaves(OrganizerState, staged));
 
         // ClosedXML's SaveAs validates the file extension and rejects anything but
         // .xlsx/.xlsm/.xltx/.xltm, so the temp name must keep .xlsx as its actual extension -
@@ -696,19 +713,75 @@ public sealed class Plugin : IDalamudPlugin
         var tempPath = Path.Combine(
             Path.GetDirectoryName(destinationPath)!,
             $"{Path.GetFileNameWithoutExtension(destinationPath)}.tmp{Path.GetExtension(destinationPath)}");
-        var export = _workbookService.ExportAsync(inventory, proposals, preferences, tempPath, CancellationToken.None)
-            .GetAwaiter().GetResult();
-        File.Move(export.WorkbookPath, destinationPath, overwrite: true);
+        try
+        {
+            var export = _workbookService.ExportAsync(request, tempPath, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            try
+            {
+                File.Move(export.WorkbookPath, destinationPath, overwrite: true);
+            }
+            catch (IOException)
+            {
+                throw new IOException("The workbook could not be replaced; another program may be using it.");
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+
         return destinationPath;
     }
 
     internal WorkbookImportResult ImportWorkbook(string workbookPath)
     {
         var inventory = Organizer.WorkbookAdapter.ToScanInventory(OrganizerState, BuildInstallation());
-        var result = _workbookService.ImportAsync(workbookPath, inventory, CancellationToken.None)
+        var race = Organizer.RaceSplitOptions.FromConfig(Config);
+        var rowsById = OrganizerState.Mods.ToDictionary(r => r.Identifier, StringComparer.Ordinal);
+        var context = new Organizer.Workbook.WorkbookImportContext(
+            id => rowsById.TryGetValue(id, out var row)
+                ? Organizer.Workbook.WorkbookTokens.For(row, WorkbookCanonicalizer.Canonicalize, race)
+                : Organizer.Workbook.DestinationTokens.None,
+            id => rowsById.TryGetValue(id, out var row)
+                ? Organizer.WorkbookAdapter.SplitPath(row.CurrentPath).Leaf
+                : string.Empty);
+
+        var result = _workbookService.ImportAsync(workbookPath, inventory, context, CancellationToken.None)
             .GetAwaiter().GetResult();
-        Organizer.WorkbookAdapter.ApplyImportResult(OrganizerState, result);
-        return result;
+        var applied = Organizer.WorkbookAdapter.ApplyImportResult(OrganizerState, result);
+
+        // An import that applied rows restaged paths and maybe protection, so the staged Sort is no longer
+        // what the export would write. A rejected or empty import changes nothing and keeps it.
+        if (applied.Rows > 0)
+            OrganizerState.InvalidateSortFingerprint();
+
+        return SaveCustomCodes(result, applied);
+    }
+
+    // An accepted import with a clean mapping table becomes the seed for the next export. The sheet still wins at
+    // import; this is only so a re-export does not wipe the user's rows. Said in the result line.
+    private WorkbookImportResult SaveCustomCodes(WorkbookImportResult result, Organizer.WorkbookAdapter.ImportApplyReport applied)
+    {
+        var summary = result.Summary;
+        if (applied.NotStaged > 0)
+            summary += $" {applied.NotStaged} move(s) could not be staged because the mod is protected.";
+
+        if (result.CustomCodes is not null)
+        {
+            var before = Config.WorkbookCustomCodes
+                .Select(c => new Organizer.Workbook.CustomCode(c.Code, c.Folder)).ToList();
+            if (Organizer.Workbook.WorkbookSeed.Describe(before, result.CustomCodes) is { } message)
+            {
+                Config.WorkbookCustomCodes = result.CustomCodes
+                    .Select(c => new WorkbookCustomCode { Code = c.Code, Folder = c.Folder }).ToList();
+                SaveConfig();
+                summary += $" {message}";
+            }
+        }
+
+        return result with { Summary = summary };
     }
 
     internal async Task<Organizer.NpcNames.NpcNameRefreshResult> RefreshNpcNamesAsync(CancellationToken cancellationToken)

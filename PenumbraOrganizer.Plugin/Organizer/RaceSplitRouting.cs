@@ -33,6 +33,39 @@ public static class RaceSplitRouting
         }
     }
 
+    /// <summary>
+    /// The row a race-applicable mod belongs to, whatever the switches say (race spec, section 2). Null for a
+    /// mod with no race row at all (gear, weapons, a body replacer).
+    /// </summary>
+    public static RaceRows? ApplicableRow(OrganizerModRow row)
+    {
+        if (row.IsRacialScaling)
+            return RaceRows.RacialScaling;
+
+        return row.Category switch
+        {
+            ModCategory.Hair => RaceRows.Hair,
+            ModCategory.Face => row.KeyRaces is { IrisOnly: true } ? RaceRows.Eyes : RaceRows.Face,
+            ModCategory.Skin => RaceRows.Skin,
+            ModCategory.Body when row.BodyPart == BodyPart.TailsEarsHorns => RaceRows.TailsEarsHorns,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The race folder the workbook's {race} token uses: the same rule Sort applies, but for any applicable
+    /// mod whether or not its row or the master switch is on, because the user typed the token on purpose.
+    /// Null when the mod is not race-applicable.
+    /// </summary>
+    public static RaceFolderResult? ResolveForToken(OrganizerModRow row, RaceSplitOptions options)
+    {
+        if (ApplicableRow(row) is not { } applicable)
+            return null;
+
+        return RaceFolderResolver.Resolve(
+            EvidenceFor(row, applicable), options.MultiRaceToMultiRace, options.Priority);
+    }
+
     public static RaceEvidence EvidenceFor(OrganizerModRow row, RaceRows governing) => governing switch
     {
         RaceRows.Hair => row.HairByRaceCode is null

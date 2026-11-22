@@ -4,14 +4,13 @@ using ClosedXML.Excel;
 using Microsoft.Extensions.Logging.Abstractions;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Core.Models;
-using PenumbraOrganizer.Core.Services;
-using PenumbraOrganizer.Infrastructure.Exports;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 using PenumbraOrganizer.Plugin.Organizer;
 
 public class WorkbookInteropTests
 {
-    private static WorkbookWorkflowService CreateService()
-        => new(new CreatorCanonicalizer(), NullLogger<WorkbookWorkflowService>.Instance);
+    private static WorkbookService CreateService()
+        => new(NullLogger<WorkbookService>.Instance);
 
     private static PenumbraInstallation MakeInstallation() => new(
         ConfigurationPath: "C:/Penumbra/Penumbra.json",
@@ -23,6 +22,11 @@ public class WorkbookInteropTests
         Confidence: DiscoveryConfidence.High,
         Evidence: [],
         Warnings: []);
+
+    private static WorkbookExportRequest AsIsRequest(OrganizerState state, ScanInventory inventory) => new(
+        inventory,
+        WorkbookAdapter.ToProposals(state, staged: false),
+        WorkbookExportMode.AsIs, null, [], WorkbookAdapter.Leaves(state, staged: false));
 
     private static string MakeWorkbookPath()
     {
@@ -41,9 +45,7 @@ public class WorkbookInteropTests
 
         var service = CreateService();
         var inventory = WorkbookAdapter.ToScanInventory(state, MakeInstallation());
-        var export = await service.ExportAsync(
-            inventory, WorkbookAdapter.ToProposals(state), WorkbookAdapter.ToOrganizationPreferences(OrganizationStrategy.TypeThenCreator),
-            MakeWorkbookPath(), CancellationToken.None);
+        var export = await service.ExportAsync(AsIsRequest(state, inventory), MakeWorkbookPath(), CancellationToken.None);
 
         using (var workbook = new XLWorkbook(export.WorkbookPath))
         {
@@ -51,7 +53,7 @@ public class WorkbookInteropTests
             workbook.Save();
         }
 
-        var imported = await service.ImportAsync(export.WorkbookPath, inventory, CancellationToken.None);
+        var imported = await service.ImportAsync(export.WorkbookPath, inventory, WorkbookImportContext.Empty, CancellationToken.None);
         WorkbookAdapter.ApplyImportResult(state, imported);
 
         Assert.Empty(imported.Errors);
@@ -68,9 +70,7 @@ public class WorkbookInteropTests
 
         var service = CreateService();
         var inventory = WorkbookAdapter.ToScanInventory(state, MakeInstallation());
-        var export = await service.ExportAsync(
-            inventory, WorkbookAdapter.ToProposals(state), WorkbookAdapter.ToOrganizationPreferences(OrganizationStrategy.TypeThenCreator),
-            MakeWorkbookPath(), CancellationToken.None);
+        var export = await service.ExportAsync(AsIsRequest(state, inventory), MakeWorkbookPath(), CancellationToken.None);
 
         using (var workbook = new XLWorkbook(export.WorkbookPath))
         {
@@ -78,7 +78,7 @@ public class WorkbookInteropTests
             workbook.Save();
         }
 
-        var imported = await service.ImportAsync(export.WorkbookPath, inventory, CancellationToken.None);
+        var imported = await service.ImportAsync(export.WorkbookPath, inventory, WorkbookImportContext.Empty, CancellationToken.None);
         WorkbookAdapter.ApplyImportResult(state, imported);
 
         Assert.Empty(imported.Errors);
@@ -95,12 +95,7 @@ public class WorkbookInteropTests
 
         var service = CreateService();
         var inventory = WorkbookAdapter.ToScanInventory(state, MakeInstallation());
-        // StartManually produces a blank destination column (BuildSuggestedDestination's default
-        // case) -- the same convention the standalone app's own tests use to get a genuinely blank
-        // (not merely same-as-current) destination cell.
-        var export = await service.ExportAsync(
-            inventory, WorkbookAdapter.ToProposals(state), WorkbookAdapter.ToOrganizationPreferences(OrganizationStrategy.StartManually),
-            MakeWorkbookPath(), CancellationToken.None);
+        var export = await service.ExportAsync(AsIsRequest(state, inventory), MakeWorkbookPath(), CancellationToken.None);
 
         using (var workbook = new XLWorkbook(export.WorkbookPath))
         {
@@ -108,7 +103,7 @@ public class WorkbookInteropTests
             workbook.Save();
         }
 
-        var imported = await service.ImportAsync(export.WorkbookPath, inventory, CancellationToken.None);
+        var imported = await service.ImportAsync(export.WorkbookPath, inventory, WorkbookImportContext.Empty, CancellationToken.None);
         WorkbookAdapter.ApplyImportResult(state, imported);
 
         Assert.Empty(imported.Errors);
@@ -131,9 +126,7 @@ public class WorkbookInteropTests
 
         var service = CreateService();
         var inventory = WorkbookAdapter.ToScanInventory(state, MakeInstallation());
-        var export = await service.ExportAsync(
-            inventory, WorkbookAdapter.ToProposals(state), WorkbookAdapter.ToOrganizationPreferences(OrganizationStrategy.PreserveAndClean),
-            MakeWorkbookPath(), CancellationToken.None);
+        var export = await service.ExportAsync(AsIsRequest(state, inventory), MakeWorkbookPath(), CancellationToken.None);
 
         // Rows are written in name order, so 2/3/4 are Nested/Protected/Root. Asserting the
         // nested mod's cell holds its own folder is what distinguishes as-is from a sorting
@@ -147,7 +140,7 @@ public class WorkbookInteropTests
             Assert.Equal(string.Empty, sheet.Cell(4, 7).GetString());
         }
 
-        var imported = await service.ImportAsync(export.WorkbookPath, inventory, CancellationToken.None);
+        var imported = await service.ImportAsync(export.WorkbookPath, inventory, WorkbookImportContext.Empty, CancellationToken.None);
         WorkbookAdapter.ApplyImportResult(state, imported);
 
         Assert.Empty(imported.Errors);

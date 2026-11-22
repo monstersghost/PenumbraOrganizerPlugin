@@ -2,6 +2,7 @@ namespace PenumbraOrganizer.Plugin.Tests.Organizer;
 
 using PenumbraOrganizer.Core.Models;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
 
 public class WorkbookAdapterApplyImportResultTests
 {
@@ -89,5 +90,29 @@ public class WorkbookAdapterApplyImportResultTests
         var exception = Record.Exception(() => WorkbookAdapter.ApplyImportResult(state, result));
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void AnImportedLeaf_IsUsedInsteadOfTheModName()
+    {
+        var state = MakeStateWithOneRow("id", "Mod", "Old/Mod");
+        var result = MakeResult(new WorkbookImportRow(
+            2, "id", "Mod", "a", "Old", "Gear", false, "New", "Gear", "New", Leaf: "Mod (2)"));
+
+        WorkbookAdapter.ApplyImportResult(state, result);
+
+        Assert.Equal("New/Mod (2)", state.Mods.Single().ProposedPath);
+    }
+
+    [Fact]
+    public void ANameWithASlash_IsStagedAsPenumbraWouldStoreIt()
+    {
+        var state = MakeStateWithOneRow("id", "A/B", "Old/A" + (char)92 + "B");
+        var result = MakeResult(new WorkbookImportRow(
+            2, "id", "A/B", "a", "Old", "Gear", false, "New", "Gear", "New"));
+
+        WorkbookAdapter.ApplyImportResult(state, result);
+
+        Assert.Equal("New/A" + (char)92 + "B", state.Mods.Single().ProposedPath);
     }
 }

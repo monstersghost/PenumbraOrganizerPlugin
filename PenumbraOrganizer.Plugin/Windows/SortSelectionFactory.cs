@@ -38,8 +38,18 @@ public static class SortSelectionFactory
 public static class SortRunner
 {
     public static int Run(
-        OrganizerState state, SortSelection selection, Func<string, string> canonicalizeCreator, SortScope? scope) =>
-        state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
+        OrganizerState state, SortSelection selection, Func<string, string> canonicalizeCreator, SortScope? scope)
+    {
+        var count = state.Sort(selection.Strategy, selection.SplitGear, selection.SplitNpc, selection.SplitHair,
             canonicalizeCreator, selection.HairPriority, selection.SplitGearBody, selection.SplitBodyMods,
             selection.BodyPriority, selection.Layout, scope);
+
+        // A sort of part of the library (a root-only pass or a chosen set) leaves the rest at its old paths, so
+        // the staged paths are not one Sort's result and "As suggested by Sort" must stay unavailable.
+        if (scope is null || scope.Identifiers is null && !scope.RootOnly)
+            state.MarkSortedWith(selection.Fingerprint());
+        else
+            state.InvalidateSortFingerprint();
+        return count;
+    }
 }

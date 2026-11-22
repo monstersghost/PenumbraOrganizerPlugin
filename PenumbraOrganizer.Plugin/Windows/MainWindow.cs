@@ -48,7 +48,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private string? _lastExportPath;
     private string? _lastDiagnosticDumpPath;
     private string? _lastWorkbookExportPath;
-    private int _workbookStrategyIndex = 2; // "By Type Then Creator" default
+    private int _workbookModeIndex; // 0 As is, 1 As suggested by Sort; As is is the safe default
     private Organizer.WorkbookImportResultView? _lastWorkbookImportResult;
     private long _lastConsumedCompletion;
 
@@ -99,16 +99,8 @@ public sealed partial class MainWindow : Window, IDisposable
         ModCategory.Face, ModCategory.Hair, ModCategory.Body, ModCategory.Skin,
     ];
 
-    private static readonly (string Label, PenumbraOrganizer.Core.Models.OrganizationStrategy Strategy)[] WorkbookStrategyOptions =
-    [
-        ("By Creator", PenumbraOrganizer.Core.Models.OrganizationStrategy.CreatorOnly),
-        ("By Mod Type", PenumbraOrganizer.Core.Models.OrganizationStrategy.TypeOnly),
-        ("By Type Then Creator", PenumbraOrganizer.Core.Models.OrganizationStrategy.TypeThenCreator),
-        ("By Creator Then Type", PenumbraOrganizer.Core.Models.OrganizationStrategy.CreatorThenType),
-        // Appended deliberately: _workbookStrategyIndex defaults to 2, so inserting this earlier
-        // would silently change which strategy a fresh session exports with.
-        ("Keep current folders (as-is)", PenumbraOrganizer.Core.Models.OrganizationStrategy.PreserveAndClean),
-    ];
+    /// <summary>The Export mode choices, in index order: As is first (the default), then the staged Sort.</summary>
+    public static readonly string[] WorkbookModeLabels = ["As is (current folders)", "As suggested by Sort"];
 
     private static readonly string PluginVersion =
         typeof(MainWindow).Assembly.GetName().Version?.ToString(4) ?? "unknown";
@@ -706,7 +698,7 @@ public sealed partial class MainWindow : Window, IDisposable
         return path;
     }
 
-    private void ExportWorkbook(PenumbraOrganizer.Core.Models.OrganizationStrategy strategy)
+    private void ExportWorkbook(Organizer.Workbook.WorkbookExportMode mode)
     {
         _fileDialogManager.SaveFileDialog(
             "Save Workbook",
@@ -719,7 +711,7 @@ public sealed partial class MainWindow : Window, IDisposable
                     return;
                 try
                 {
-                    _lastWorkbookExportPath = _plugin.ExportWorkbook(strategy, path);
+                    _lastWorkbookExportPath = _plugin.ExportWorkbook(mode, path);
                     _lastError = null;
                 }
                 catch (Exception ex)
@@ -747,7 +739,11 @@ public sealed partial class MainWindow : Window, IDisposable
         try
         {
             var result = _plugin.ImportWorkbook(workbookPath);
-            _lastWorkbookImportResult = new Organizer.WorkbookImportResultView(result.Summary, result.Errors, result.Warnings);
+            var lines = (result.CodeUsage ?? [])
+                .Select(u => $"Code {u.Code} -> {u.Folder}: {u.ModCount} mod(s)")
+                .ToList();
+            _lastWorkbookImportResult = new Organizer.WorkbookImportResultView(
+                result.Summary, result.Errors, result.Warnings, lines);
             _lastError = null;
         }
         catch (Exception ex)
