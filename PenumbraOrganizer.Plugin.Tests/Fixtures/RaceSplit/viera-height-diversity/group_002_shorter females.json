@@ -1,0 +1,56 @@
+{
+  "Name": "Shorter Females",
+  "Description": "",
+  "Priority": 2,
+  "Type": "Multi",
+  "Options": [
+    {
+      "Name": "Veena",
+      "Priority": 0,
+      "Files": {},
+      "FileSwaps": {},
+      "Manipulations": [
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 0.950,
+            "SubRace": "Veena",
+            "Attribute": "FemaleMinSize"
+          }
+        },
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 1.030,
+            "SubRace": "Veena",
+            "Attribute": "FemaleMaxSize"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "Rava",
+      "Priority": 1,
+      "Files": {},
+      "FileSwaps": {},
+      "Manipulations": [
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 0.950,
+            "SubRace": "Rava",
+            "Attribute": "FemaleMinSize"
+          }
+        },
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 1.030,
+            "SubRace": "Rava",
+            "Attribute": "FemaleMaxSize"
+          }
+        }
+      ]
+    }
+  ]
+}

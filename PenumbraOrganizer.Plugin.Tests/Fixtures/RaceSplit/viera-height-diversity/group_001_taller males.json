@@ -1,0 +1,56 @@
+{
+  "Name": "Taller Males",
+  "Description": "",
+  "Priority": 1,
+  "Type": "Multi",
+  "Options": [
+    {
+      "Name": "Veena",
+      "Priority": 0,
+      "Files": {},
+      "FileSwaps": {},
+      "Manipulations": [
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 1.1,
+            "SubRace": "Veena",
+            "Attribute": "MaleMinSize"
+          }
+        },
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 1.2,
+            "SubRace": "Veena",
+            "Attribute": "MaleMaxSize"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "Rava",
+      "Priority": 1,
+      "Files": {},
+      "FileSwaps": {},
+      "Manipulations": [
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 1.1,
+            "SubRace": "Rava",
+            "Attribute": "MaleMinSize"
+          }
+        },
+        {
+          "Type": "Rsp",
+          "Manipulation": {
+            "Entry": 1.2,
+            "SubRace": "Rava",
+            "Attribute": "MaleMaxSize"
+          }
+        }
+      ]
+    }
+  ]
+}
