@@ -57,3 +57,15 @@ not Excel itself or the in-game window.
 
 - [ ] With the Race master switch OFF, `{race}` still fills in the race folder for a hair or face mod.
 - [ ] A gear mod with `{race}` in its destination drops that level instead of leaving an empty folder.
+
+## Headless results (2026-11-22, real libraries, read-only)
+
+Same harness as the race-split checklist, using the real mod names (287 and 2557) as rows. It exercises the
+workbook code through ClosedXML, not Excel itself.
+
+- An untouched As is export re-imports with 0 errors, 0 warnings and 0 changed paths (287 and 2557 mods).
+- An untouched As suggested by Sort export (after a real Sort with racial scaling on) re-imports with 0 errors and 0
+  changed staged paths (287 and 2557 mods).
+- Speed at 2557 mods: export 0.5 to 1.2 s, import 0.2 to 0.4 s, file 130 KB.
+- Still needs Excel and the game: the Excel repair prompt, file held open, the Review tab states and greyed button,
+  and every edit-then-import item.
