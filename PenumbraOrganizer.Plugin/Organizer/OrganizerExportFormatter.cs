@@ -14,7 +14,7 @@ public static class OrganizerExportFormatter
     };
 
     public static string Format(IReadOnlyList<OrganizerModRow> mods, ReviewResult validation,
-                                BodyPriority? stagedBodyPriority = null)
+                                BodyPriority? stagedBodyPriority = null, RuleSortSummary? rules = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("=== Penumbra Organizer Export ===");
@@ -24,6 +24,10 @@ public static class OrganizerExportFormatter
         sb.AppendLine($"Collisions: {validation.PathCollisions.Count}");
         if (stagedBodyPriority is not null)
             sb.AppendLine($"Body priority used for the last sort: {string.Join(" > ", stagedBodyPriority.Labels)}");
+
+        // The full list: the Sort summary line shows only the first few.
+        if (rules is { Unplaced.Count: > 0 })
+            sb.AppendLine($"RulesUnplaced: {string.Join(" | ", rules.Unplaced)}");
 
         // Only shown when at least one Gear mod exists - added after a tester report where 0 of
         // ~1500 Gear mods got a subcategory, to distinguish "config files failed to read" from
@@ -69,6 +73,8 @@ public static class OrganizerExportFormatter
                 sb.AppendLine($"StagedBody: {staged.Label} ({staged.Tier}/{staged.Source})");
             if (mod.StagedRace is { } stagedRace)
                 sb.AppendLine($"StagedRace: {stagedRace.Folder} ({stagedRace.Reason})");
+            if (mod.StagedRule is { } stagedRule)
+                sb.AppendLine($"StagedRule: #{stagedRule.Ordinal} {stagedRule.Text}");
             if (mod.GearSlotDiagnostic != GearSlotDiagnostic.NotApplicable)
                 sb.AppendLine($"GearSlotDiagnostic: {mod.GearSlotDiagnostic}");
             sb.AppendLine($"HeliosphereManaged: {mod.HeliosphereManaged}");

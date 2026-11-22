@@ -3,6 +3,7 @@ using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Operations;
+using PenumbraOrganizer.Plugin.Organizer.Rules;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -43,11 +44,20 @@ public readonly record struct SortSelection(
             : $"{race.Enabled}:{(int)race.Rows}:{race.MultiRaceToMultiRace}:{string.Join(',', race.Priority.Ranked)}";
         IEnumerable<string> bodyLabels = BodyPriority?.Labels ?? [];
 
-        return string.Join(
+        var core = string.Join(
             '|',
             Strategy, SplitGear, SplitNpc, SplitHair, HairRaceCode ?? "-", MidlanderFallback,
             SplitGearBody, SplitBodyMods, string.Join(',', bodyLabels),
             Layout.SharedHandsAndFeet, Layout.SplitHairByRace, Layout.SplitEmotes, raceText);
+
+        if (Layout.Rules is not { HasRules: true } rules)
+            return core;
+
+        // The digest is length-prefixed and goes LAST, so no character inside a rule can blur two sets together.
+        var rulesRace = rules.UsesRace
+            ? $"{rules.Race.Enabled}:{(int)rules.Race.Rows}:{rules.Race.MultiRaceToMultiRace}:{string.Join(',', rules.Race.Priority.Ranked)}"
+            : "-";
+        return $"{core}|rr={rulesRace}|rules={rules.Digest}";
     }
 }
 
@@ -99,6 +109,108 @@ public sealed class SortPanel
     {
         var index = Array.FindIndex(Groupings, g => g.Strategy.ToString() == saved);
         return index >= 0 ? index : DefaultGroupingIndex;
+    }
+
+    /// <summary>
+    /// The panel's selection from its own control state. Public and static so a test can compare it with
+    /// <see cref="SortSelectionFactory.FromConfig"/>: the rules come from the shared cache for the same config.
+    /// </summary>
+    public static SortSelection BuildSelection(
+        Configuration config, SortStrategy strategy, bool splitGear, bool splitNpc, bool splitHair,
+        string? hairRaceCode, bool midlanderFallback, bool splitGearBody, bool splitBodyMods,
+        BodyPriority? bodyPriority, bool sharedHandsFeet, bool splitEmotes, RaceSplitOptions race, bool rootOnly) =>
+        new(strategy, splitGear, splitNpc, splitHair, hairRaceCode, midlanderFallback, splitGearBody,
+            splitBodyMods, bodyPriority,
+            new LayoutOptions(
+                sharedHandsFeet,
+                race.InEffect(RaceRows.Hair, splitBodyMods),
+                splitEmotes,
+                race.NullIfNoEffect(),
+                Rules: SortSelectionFactory.RulesFor(config)),
+            rootOnly);
+
+    /// <summary>
+    /// The Rules section: a collapsible list of "condition -> folder" lines. Edits go to a working
+    /// <see cref="RulesEditor"/>; the config is written only when a text box is left, or a rule is added,
+    /// removed, moved or toggled, never per keystroke or per frame.
+    /// </summary>
+    private void DrawRules(
+        OrganizerState state, ActivityGates gates, Configuration config, Action saveConfig,
+        Func<string, string> canonicalizeCreator)
+    {
+        _rules ??= new RulesEditor(config.SortRules, () => Environment.TickCount64);
+
+        var open = ImGui.CollapsingHeader($"Rules ({_rules.Rows.Count})##sort-rules");
+        Help.Tooltip(HelpTopics.SortRules);
+        if (!open)
+            return;
+
+        _rules.Observe(state.Mods, state.ScanGeneration, canonicalizeCreator,
+            RaceSplitOptions.FromConfig(config), _bodyPriority, _splitGearBody, _splitBodyMods);
+        _rules.Tick();
+
+        var enabledEditing = gates.CanStageProposals;
+        ImGui.BeginDisabled(!enabledEditing);
+        ImGui.TextDisabled("condition -> folder. The first matching rule files the mod; the rest sort as usual.");
+        var persist = false;
+        for (var i = 0; i < _rules.Rows.Count; i++)
+        {
+            ImGui.PushID(i);
+            var row = _rules.Rows[i];
+            var on = row.Enabled;
+            if (ImGui.Checkbox("##rule-on", ref on)) { _rules.SetEnabled(i, on); persist = true; }
+            ImGui.SameLine();
+            var text = row.Text;
+            ImGui.SetNextItemWidth(-130);
+            // Buffer size is in bytes: four per UTF-16 unit leaves room for any text the 300-unit limit
+            // allows; the parser reports anything longer.
+            if (ImGui.InputText("##rule-text", ref text, RuleParser.MaxLength * 4))
+                _rules.SetText(i, text);
+            if (ImGui.IsItemDeactivatedAfterEdit())
+                persist = true;
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Up") && _rules.MoveUp(i)) persist = true;
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Dn") && _rules.MoveDown(i)) persist = true;
+            ImGui.SameLine();
+            var remove = ImGui.SmallButton("X");
+
+            var status = _rules.Status(i);
+            if (status.IsError)
+                ImGui.TextColored(PluginTheme.CollisionBad, status.Text);
+            else
+                ImGui.TextDisabled(status.Text);
+            if (_rules.Warning(i) is { } warning)
+                ImGui.TextColored(PluginTheme.Protected, warning);
+            if (_rules.ProtectionWarning(i, folder =>
+                    state.ResolveFolderRule(folder).Rule == FolderProtectionRule.Protected) is { } protectedWarning)
+                ImGui.TextColored(PluginTheme.Protected, protectedWarning);
+            ImGui.PopID();
+
+            if (remove)
+            {
+                _rules.Remove(i);
+                persist = true;
+                break;
+            }
+        }
+
+        if (ImGui.Button("Add rule##add-sort-rule") && _rules.Add())
+            persist = true;
+        if (!_rules.CanAdd)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled($"{RuleSet.MaxRules} rules is the limit.");
+        }
+
+        ImGui.EndDisabled();
+
+        if (persist)
+        {
+            config.SortRules = _rules.ToConfig();
+            config.SortRulesVersion++;
+            saveConfig();
+        }
     }
 
     private void PersistSortChoices(Configuration config, Action saveConfig, SortStrategy strategy)
@@ -159,6 +271,7 @@ public sealed class SortPanel
     /// <summary>The scope for the "What to sort" choice; null means the whole library, as before.</summary>
     public static SortScope? ScopeFor(bool rootOnly) => rootOnly ? new SortScope(true) : null;
     private BodyPriority _bodyPriority = BodyPriority.Default([]);
+    private RulesEditor? _rules;      // the working copy of the Sort rules; saved on edit, never per frame
     private IReadOnlyList<string>? _bodyLabelsSeen;
 
     private const string Male = "\u2642";
@@ -377,6 +490,8 @@ public sealed class SortPanel
         GroupHeading("Race");
         DrawRaceSplit(state, states.RaceSplit, splitReason);
 
+        DrawRules(state, gates, config, saveConfig, canonicalizeCreator);
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -387,14 +502,9 @@ public sealed class SortPanel
         PersistSortChoices(config, saveConfig, strategy);
 
         var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
-        var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
+        var selection = BuildSelection(config, strategy, _splitGear, _splitNpc, _splitHair,
             HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            new LayoutOptions(
-                _sharedHandsFeet,
-                raceNow.InEffect(RaceRows.Hair, _splitBodyMods),
-                _splitEmotes,
-                raceNow.NullIfNoEffect()),
-            rootOnly);
+            _sharedHandsFeet, _splitEmotes, raceNow, rootOnly);
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan

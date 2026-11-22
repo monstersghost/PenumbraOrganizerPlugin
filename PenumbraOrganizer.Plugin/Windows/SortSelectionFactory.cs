@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
+using PenumbraOrganizer.Plugin.Organizer.Rules;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -9,6 +10,16 @@ namespace PenumbraOrganizer.Plugin.Windows;
 /// </summary>
 public static class SortSelectionFactory
 {
+    /// <summary>
+    /// The compiled rule set for this configuration, or null when it has no rules (so a rule-free layout stays
+    /// equal to the default). Shared by the headless path and the Sort panel so their fingerprints agree.
+    /// </summary>
+    public static RuleSet? RulesFor(Configuration config)
+    {
+        var set = RuleSetCache.For(config, RaceSplitOptions.FromConfig(config));
+        return set.HasRules ? set : null;
+    }
+
     /// <summary>
     /// Never writes the configuration: a body priority that needed repair against the label list is
     /// repaired in the returned selection only (the panel saves its own repair). An empty label list
@@ -29,7 +40,8 @@ public static class SortSelectionFactory
             priority,
             new LayoutOptions(
                 config.SortSharedHandsFeet, race.InEffect(RaceRows.Hair, config.SortSplitBodyMods),
-                config.SortSplitEmotes, race.NullIfNoEffect()),
+                config.SortSplitEmotes, race.NullIfNoEffect(),
+                Rules: RulesFor(config)),
             RootOnly: false);
     }
 }

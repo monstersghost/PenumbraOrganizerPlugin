@@ -386,6 +386,20 @@ replaces it, which is how you remove a spelling that turns out to be wrong inste
 it. The file is read only if it is there, and the plugin says so in the log if it cannot use part of
 it: an entry it had to ignore, or a name you reused that a different body already answers to.
 
+#### Sort rules
+
+Rules let you file particular mods yourself. Open **Rules** on the Sort tab and press **Add rule**. A rule is one line: a condition, an arrow and a folder.
+
+    name contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}
+
+- **Fields:** `name`, `author`, `folder` (where the mod sits now), `type`, `subtype`, `race` and `body`. `type` is the category folder: Gear, Weapon, Face, Hair, Body, Skin, NPC, Minion, Mount, Pet, Ornament, Furniture, Sound, Animation and VFX, or Review.
+- **Operators:** `=`, `!=`, `contains`, `starts with`, `ends with`, `in ('a', 'b')`, and `not` before an operator. Combine with `and`, `or` and brackets (`not` binds first, then `and`, then `or`). Text goes in straight single quotes and ignores capitals; write two quotes for a quote inside the text.
+- **Folder:** may use `{type}`, `{creator}` and `{race}`. It replaces the whole path the Sort would have chosen, so the mod is not split by body or race underneath it.
+- **Order:** the first matching rule wins. Use Up and Dn to reorder, the tick box to switch a rule off, and X to delete it. Up to 100 rules, 300 characters each.
+- **Protected mods** are never touched. Rules apply to every Sort, including the automatic sort of new mods, but not to a template used as a fallback.
+
+Each rule shows what is wrong with it and where (a red message with a position and, for a typo, a suggestion), or how many mods it wins for a moment after you stop typing. An amber line warns when a rule's folder would no longer match its own `folder` condition, or sits inside a protected folder. Rules are saved when you leave the text box. After you change a rule, press Sort again; the workbook's "As suggested by Sort" stays unavailable until you do.
+
 #### After sorting
 
 If you change the grouping or any checkbox after sorting, a line appears reminding you that the

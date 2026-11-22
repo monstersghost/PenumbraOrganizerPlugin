@@ -6,6 +6,7 @@ using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Plugin.LibraryWork.Pure;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Rules;
 using PenumbraOrganizer.Plugin.Organizer.Workbook;
 using PenumbraOrganizer.Plugin.Windows;
 
@@ -174,6 +175,57 @@ public class RealLibraryHarnessTests
             flagged.All(x => scalingOn.First(p => p.Id == x.Identifier).Path.Contains("Racial Scaling", StringComparison.Ordinal)));
         Check("impure Rsp mods (tiramisu2 and similar) are never moved to Racial Scaling",
             impure.All(x => !scalingOn.First(p => p.Id == x.Identifier).Path.Contains("Racial Scaling", StringComparison.Ordinal)));
+
+        // ---- keyword rules pass
+        {
+            var author = rows.Select(x => x.Author).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)) ?? "nobody";
+            var ruleTexts = new[]
+            {
+                "name contains 'hair' -> Hair/By name",
+                $"author = '{author.Replace("'", "''")}' -> {{creator}}/{{type}}",
+                "type = 'Gear' and subtype in ('Top','Legs') -> Gear/Outfits",
+                "race = '' and type = 'Body' -> Body/Unknown race",
+                "not type in ('Gear','Hair') and name starts with 'a' -> A/{type}",
+            };
+            var set = RuleSet.Compile(ruleTexts.Select(t => new RuleEntry(t, true)).ToList(), RaceSplitOptions.Off);
+            Check("all five example rules parse", set.Rules.All(x => x.Rule is not null),
+                string.Join("; ", set.Rules.Where(x => x.Error is not null).Select(x => $"#{x.Ordinal}: {x.Error!.Message}")));
+
+            var baseSelection = SortSelectionFactory.FromConfig(new Configuration { SortSplitBodyMods = true }, labels);
+            List<(string Id, string Path, StagedRule? Rule)> RunSort(RuleSet? rules)
+            {
+                var s = new OrganizerState();
+                s.LoadScan(rows, new HashSet<string>());
+                SortRunner.Run(s, baseSelection with { Layout = baseSelection.Layout with { Rules = rules } }, n => n, scope: null);
+                return s.Mods.Select(m => (m.Identifier, m.ProposedPath, m.StagedRule))
+                    .OrderBy(p => p.Identifier, StringComparer.Ordinal).ToList();
+            }
+
+            var none = RunSort(null);
+            var empty = RunSort(RuleSet.Empty);
+            Check("an empty RuleSet gives the same proposals as no rules",
+                none.Zip(empty).All(p => p.First.Path == p.Second.Path), $"{none.Count} mods");
+
+            var ruleWatch = Stopwatch.StartNew();
+            List<(string Id, string Path, StagedRule? Rule)> ruled;
+            try { ruled = RunSort(set); }
+            catch (Exception ex)
+            {
+                Check("rules pass raised no exception", false, ex.GetType().Name + ": " + ex.Message);
+                ruled = none;
+            }
+
+            ruleWatch.Stop();
+            var wins = ruled.Where(p => p.Rule is not null).ToList();
+            r.AppendLine($"Rules pass: {wins.Count} of {ruled.Count} mods filed by a rule in {ruleWatch.Elapsed.TotalMilliseconds:F0} ms.");
+            foreach (var rule in set.Rules)
+                r.AppendLine($"  rule #{rule.Ordinal} wins {wins.Count(p => p.Rule!.Ordinal == rule.Ordinal)}: {rule.Text}");
+            Check("every ruled ProposedPath is non-empty and has no '..'",
+                wins.All(p => p.Path.Length > 0 && !p.Path.Contains("..", StringComparison.Ordinal)));
+            if (rows.Count >= 2557)
+                Check("rules pass at 2,557 mods or more takes under 2 seconds", ruleWatch.Elapsed.TotalSeconds < 2,
+                    $"{ruleWatch.Elapsed.TotalMilliseconds:F0} ms for {rows.Count} mods");
+        }
 
         // ---- workbook round trips on the real names
         var installation = new PenumbraInstallation(

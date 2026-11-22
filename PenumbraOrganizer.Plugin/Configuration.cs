@@ -176,6 +176,17 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public List<WorkbookCustomCode> WorkbookCustomCodes { get; set; } = [];
 
+    /// <summary>The Sort tab's keyword rules, in priority order. Empty means no rules.</summary>
+    public List<SortRuleEntry> SortRules { get; set; } = [];
+
+    /// <summary>
+    /// Bumped by whoever edits <see cref="SortRules"/>; the compiled-rule cache keys on it so the Review tab's
+    /// per-frame selection never re-parses. Not saved: a loaded config starts at 0 and the cache is cold.
+    /// </summary>
+    [Newtonsoft.Json.JsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int SortRulesVersion { get; set; }
+
     /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
     public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;
 
@@ -274,4 +285,12 @@ public sealed class WorkbookCustomCode
     public int Code { get; set; }
 
     public string Folder { get; set; } = string.Empty;
+}
+
+/// <summary>One saved Sort keyword rule. A plain class so any config serializer can read it.</summary>
+public sealed class SortRuleEntry
+{
+    public string Text { get; set; } = string.Empty;
+
+    public bool Enabled { get; set; } = true;
 }

@@ -3,6 +3,9 @@ using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
+using PenumbraOrganizer.Plugin.Organizer.Rules;
+using PenumbraOrganizer.Plugin.Organizer.Workbook;
+
 namespace PenumbraOrganizer.Plugin.Organizer;
 
 public sealed class OrganizerState
@@ -195,6 +198,7 @@ public sealed class OrganizerState
             row.Protected = ProtectionRule.IsProtected(
                 row, replacementProtectedIdentifiers, replacementFolderRules, _toolPolicy, replacementToolOverrides);
             row.ProposedPath = row.CurrentPath;
+            row.StagedRule = null;
             replacementMods[row.Identifier] = row;
         }
 
@@ -536,6 +540,7 @@ public sealed class OrganizerState
         row.ProposedPath = proposedPath;
         row.StagedBodyResolution = null;
         row.StagedRace = null;
+        row.StagedRule = null;
         SortFingerprint = null;
         return true;
     }
@@ -609,9 +614,50 @@ public sealed class OrganizerState
         // proposal cannot disagree. A resolution is kept only for rows whose own category's flag is
         // on, and cleared otherwise so a stale one never lingers.
         StagedBodyPriority = splitGearBody || splitBodyMods ? bodyPriority : null;
+
+        // Keyword rules are matched ONCE per row, before race and body are staged and before the numbered
+        // layouts are built: a ruled row takes no body or race, and must not take a layout number either.
+        var rules = options?.Rules;
+        var ruled = new Dictionary<OrganizerModRow, string>();
+        var stay = new HashSet<OrganizerModRow>();
+        var ruleSummary = rules is { AnyRuns: true } || rules is { Broken.Count: > 0 }
+            ? new RuleSortSummaryBuilder(rules)
+            : null;
+
         foreach (var row in Mods)
         {
-            if (IsResetByScope(row, scope))
+            row.StagedRule = null;
+            if (row.Protected || IsResetByScope(row, scope) || rules is not { AnyRuns: true })
+                continue;
+
+            // The tool placement overrides any path for a managed Proteus row, so a rule could not
+            // change where it goes; it gets no StagedRule and is not counted as filed.
+            if (row.ProteusRole == ProteusRole.Managed && _toolPolicy.ProteusManagedAtRoot)
+                continue;
+
+            var raceOptions = rules.Race;
+            var body = RuleFields.BodyLabel(row, bodyPriority, splitGearBody, splitBodyMods);
+            var values = RuleFields.For(row, canonicalizeCreator, raceOptions, body);
+            if (rules.Match(values) is not { } match)
+                continue;
+
+            var tokens = WorkbookTokens.For(row, canonicalizeCreator, raceOptions);
+            var folder = DestinationResolver.ResolveRuleFolder(match.Rule.Rule!.FolderTemplate, tokens);
+            if (folder.Destination is null)
+            {
+                stay.Add(row);
+                ruleSummary?.Unplaced.Add($"Rule {match.Rule.Ordinal} for \"{row.Name}\": {folder.Error}");
+                continue;
+            }
+
+            ruled[row] = folder.Destination;
+            row.StagedRule = new StagedRule(match.Rule.Ordinal, match.Rule.Text);
+            ruleSummary!.Applied++;
+        }
+
+        foreach (var row in Mods)
+        {
+            if (IsResetByScope(row, scope) || ruled.ContainsKey(row) || stay.Contains(row))
             {
                 row.StagedBodyResolution = null;
                 row.StagedRace = null;
@@ -629,7 +675,8 @@ public sealed class OrganizerState
 
         // One numbered layout per anchor root. A tool's mods kept under their own folder (Heliosphere,
         // sort-inside) are numbered among themselves, so they do not leave gaps in the plain folders.
-        var layouts = _mods.Values.Where(m => !m.Protected)
+        // Ruled and left-in-place rows are not numbered.
+        var layouts = _mods.Values.Where(m => !m.Protected && !ruled.ContainsKey(m) && !stay.Contains(m))
             .GroupBy(AnchorRootOf, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
@@ -637,15 +684,22 @@ public sealed class OrganizerState
                       Body: SortFolderSelectors.BuildBodyLayout(g, splitBodyMods, bodyPriority)),
                 StringComparer.OrdinalIgnoreCase);
 
-        return Sort(row =>
+        var count = Sort(row =>
         {
+            if (ruled.TryGetValue(row, out var ruleFolder))
+                return (ruleFolder, null);
+
             var layout = layouts[AnchorRootOf(row)];
             return SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
                                               splitHair: splitHair, hairPriority: hairPriority,
                                               splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
                                               bodyPriority: bodyPriority, gearLayout: layout.Gear,
                                               bodyLayout: layout.Body, options: options);
-        }, scope);
+        }, scope, stay, reserveProtected: ruled.Count > 0 || stay.Count > 0);
+
+        if (ruleSummary is not null && LastSortSummary is { } last)
+            LastSortSummary = last with { Rules = ruleSummary.Build() };
+        return count;
     }
 
     // An unprotected row a scoped sort leaves alone: its proposal goes back to its current path.
@@ -699,6 +753,7 @@ public sealed class OrganizerState
             row.ProposedPath = ToolAdjustedPath(row, BuildPath(folder, null, row.Name));
             row.StagedBodyResolution = null;
             row.StagedRace = null;
+            row.StagedRule = null;
             touched.Add(row);
         }
 
@@ -732,6 +787,7 @@ public sealed class OrganizerState
             row.ProposedPath = $"{target}/{row.CurrentPath}";
             row.StagedBodyResolution = null;
             row.StagedRace = null;
+            row.StagedRule = null;
             touched.Add(row);
         }
 
@@ -762,7 +818,9 @@ public sealed class OrganizerState
     // such untouched row's current path is reserved, so no touched row is proposed onto a path a
     // mod still occupies (Validate would block Apply). Without a scope nothing is reserved, which
     // is the whole-library behaviour from before scopes.
-    private int Sort(Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector, SortScope? scope)
+    private int Sort(
+        Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector, SortScope? scope,
+        IReadOnlySet<OrganizerModRow>? stay = null, bool reserveProtected = false)
     {
         var touched = new List<OrganizerModRow>();
         var untouchedPaths = new List<string>();
@@ -781,12 +839,24 @@ public sealed class OrganizerState
                 continue;
             }
 
+            // A rule matched but could not expand: the mod stays where it is, and its path is held.
+            if (stay is not null && stay.Contains(row))
+            {
+                row.ProposedPath = row.CurrentPath;
+                untouchedPaths.Add(row.CurrentPath);
+                continue;
+            }
+
             var (primary, secondary) = folderSelector(row);
             row.ProposedPath = ToolAdjustedPath(row, BuildPath(primary, secondary, row.Name));
             touched.Add(row);
         }
 
-        FinishProposals(touched, scope is null ? null : untouchedPaths);
+        // Protected paths are reserved only when a scope is set or a rule fired. A rule can name an occupied
+        // folder, so a ruled row is renamed instead of caught later by Validate. Accepted side effect: in a
+        // whole-library sort where any rule fires, every other mod also sees protected paths reserved
+        // (renamed instead of caught by Validate).
+        FinishProposals(touched, scope is null && !reserveProtected ? null : untouchedPaths);
 
         LastSortSummary = new SortSummary(
             scope ?? SortScope.WholeLibrary,
@@ -857,4 +927,16 @@ public sealed record ReviewResult(
     IReadOnlyDictionary<string, List<string>> PathCollisions)
 {
     public bool HasIssues => ProtectedViolations.Count > 0 || PathCollisions.Count > 0;
+}
+
+file sealed class RuleSortSummaryBuilder(RuleSet rules)
+{
+    public int Applied;
+    public List<string> Unplaced { get; } = [];
+
+    public RuleSortSummary Build() => new(
+        Applied,
+        rules.Broken.Select(r => $"Rule {r.Ordinal}: {r.Error!.Message}"
+            + (r.Error.Position > 0 ? $" (at {r.Error.Position})" : string.Empty)).ToList(),
+        Unplaced);
 }

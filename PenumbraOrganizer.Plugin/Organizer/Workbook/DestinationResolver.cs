@@ -166,6 +166,55 @@ public static class DestinationResolver
             : DestinationResult.Ok(final, codeUsed);
     }
 
+    /// <summary>
+    /// A sort rule's folder: tokens always on, never read as a category code or built-in name (a rule's
+    /// "17/x" is the literal folder 17), each segment trimmed, a whole-token segment that expands empty
+    /// dropped, and a stray brace an error. Pure.
+    /// </summary>
+    public static DestinationResult ResolveRuleFolder(string raw, DestinationTokens tokens)
+    {
+        var normalized = NormalizePath(raw);
+        if (normalized.Length == 0)
+            return DestinationResult.Fail("Destination is empty.");
+
+        var expanded = new List<string>();
+        foreach (var part in normalized.Split('/'))
+        {
+            var segment = part.Trim();
+
+            // Checked before expansion so a token value that itself contains a brace is not an error.
+            if (TokenPattern.Replace(segment, string.Empty).Any(c => c is '{' or '}'))
+                return DestinationResult.Fail("Folder has an unmatched { or }.");
+
+            string? unknown = null;
+            var text = TokenPattern.Replace(segment, match =>
+            {
+                var value = ValueOf(match.Groups[1].Value, tokens);
+                if (value is null)
+                {
+                    unknown ??= match.Groups[1].Value;
+                    return match.Value;
+                }
+
+                return value;
+            });
+
+            if (unknown is not null)
+                return DestinationResult.Fail($"unknown token {{{unknown}}}");
+
+            text = text.Trim();
+            if (text.Length == 0)
+                continue;
+            expanded.Add(text);
+        }
+
+        if (expanded.Count == 0)
+            return DestinationResult.Fail("Folder expands to nothing for this mod.");
+
+        var final = string.Join('/', expanded);
+        return StructureError(final) is { } error ? DestinationResult.Fail(error) : DestinationResult.Ok(final);
+    }
+
     private static string? ValueOf(string name, DestinationTokens tokens) => name.ToLowerInvariant() switch
     {
         "creator" => tokens.Creator,
