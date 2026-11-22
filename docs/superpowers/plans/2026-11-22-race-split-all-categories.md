@@ -1128,9 +1128,11 @@ In `PenumbraOrganizer.Plugin/Windows/SortSelectionFactory.cs`, replace the `From
             priority,
             new LayoutOptions(
                 config.SortSharedHandsFeet, race.InEffect(RaceRows.Hair, config.SortSplitBodyMods),
-                config.SortSplitEmotes, race),
+                config.SortSplitEmotes, race.NullIfNoEffect()),
             RootOnly: false);
 ```
+
+(Found while implementing: `Race` must be null whenever it adds nothing beyond today's legacy hair flag, so a default config still gives a default `LayoutOptions`. Two existing factory tests assert exactly that. `RaceSplitOptions.NullIfNoEffect()` is: null when the master is off, no row is ticked, or only Hair is ticked with the multi-race box on and no priority; otherwise the options themselves. It is defined next to `FromConfig` and tested in `RaceSplitOptionsTests`.)
 
 Replace the whole of `PenumbraOrganizer.Plugin/Organizer/Classification/HairRaceFolders.cs` with:
 
@@ -2506,7 +2508,9 @@ and add this method just after `PersistSortChoices`:
 3. In the `_prefsLoaded` block, replace `_splitHairByRace = loaded.Layout.SplitHairByRace;` with:
 
 ```csharp
-            var race = loaded.Layout.Race ?? RaceSplitOptions.Off;
+            // Read from the config, not from loaded.Layout.Race: the selection carries null when the race
+            // split adds nothing beyond the legacy hair flag, which would lose the user's rows and priority.
+            var race = RaceSplitOptions.FromConfig(config);
             _raceEnabled = race.Enabled;
             _raceRows = race.Rows;
             _multiRaceToMultiRace = race.MultiRaceToMultiRace;
@@ -2523,15 +2527,20 @@ and add this method just after `PersistSortChoices`:
         DrawRaceSplit(state, states.RaceSplit, splitReason);
 ```
 
-6. In the `selection` construction (lines 344-346), replace `new LayoutOptions(_sharedHandsFeet, _splitHairByRace, _splitEmotes)` with:
+6. Just before the `var selection = new SortSelection(...)` statement, add the panel's current race options:
+
+```csharp
+        var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
+```
+
+then in the `selection` construction (lines 344-346), replace `new LayoutOptions(_sharedHandsFeet, _splitHairByRace, _splitEmotes)` with:
 
 ```csharp
             new LayoutOptions(
                 _sharedHandsFeet,
-                new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority)
-                    .InEffect(RaceRows.Hair, _splitBodyMods),
+                raceNow.InEffect(RaceRows.Hair, _splitBodyMods),
                 _splitEmotes,
-                new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority)),
+                raceNow.NullIfNoEffect()),
 ```
 
 7. Add these methods to the class, next to `DrawBodyModsHelpMarker`:

@@ -39,6 +39,24 @@ public class RaceSplitOptionsTests
     }
 
     [Fact]
+    public void NullIfNoEffect_IsNullWhenNothingBeyondTheLegacyHairFlagIsSet()
+    {
+        Assert.Null(RaceSplitOptions.Off.NullIfNoEffect());
+        Assert.Null((RaceSplitOptions.Off with { Enabled = true, Rows = RaceRows.None }).NullIfNoEffect());
+        Assert.Null(On(RaceRows.Hair).NullIfNoEffect());
+        Assert.Null((On(RaceRows.All) with { Enabled = false, Priority = RacePriority.Empty.Add("Viera") }).NullIfNoEffect());
+    }
+
+    [Fact]
+    public void NullIfNoEffect_KeepsAnythingThatCanChangeAFolder()
+    {
+        Assert.NotNull(On(RaceRows.Hair | RaceRows.Face).NullIfNoEffect());
+        Assert.NotNull(On(RaceRows.Face).NullIfNoEffect());
+        Assert.NotNull((On(RaceRows.Hair) with { MultiRaceToMultiRace = false }).NullIfNoEffect());
+        Assert.NotNull((On(RaceRows.Hair) with { Priority = RacePriority.Empty.Add("Viera") }).NullIfNoEffect());
+    }
+
+    [Fact]
     public void Equality_ComparesThePriorityBySequence()
     {
         var a = new RaceSplitOptions(true, RaceRows.All, true, RacePriority.Empty.Add("Viera"));

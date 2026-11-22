@@ -106,6 +106,59 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Hair: split by race, with a Multi-race folder. Off keeps 0.6.4.0 behavior.</summary>
     public bool SortSplitHairByRace { get; set; }
 
+    /// <summary>
+    /// Race split master switch. Null means "not migrated yet": <see cref="MigrateRaceSplit"/> fills it
+    /// from the legacy <see cref="SortSplitHairByRace"/>. Nullable on purpose, because every other
+    /// property here is non-nullable with a default and "absent" could not be told from "default" (an
+    /// older build that re-saves the file drops fields it does not know).
+    /// </summary>
+    public bool? RaceSplitEnabled { get; set; }
+
+    /// <summary>Ticked rows of the Race section as names (see <c>RaceRowNames</c>). Null means all ticked.</summary>
+    /// <remarks>No initializer: Newtonsoft appends to a pre-filled list instead of replacing it.</remarks>
+    public List<string>? RaceSplitRows { get; set; }
+
+    /// <summary>The user's ranked races for choosing a folder for a multi-race mod, highest first. May be partial.</summary>
+    public List<string> RacePriority { get; set; } = [];
+
+    /// <summary>On: a multi-race mod goes to Multi-race. Off: it goes to the top-ranked race it covers.</summary>
+    public bool SendMultiRaceToMultiRace { get; set; } = true;
+
+    /// <summary>Whether the Hair row is in effect: the master is on and Hair is ticked (or no row was ever unticked).</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool EffectiveHairRaceSplit =>
+        RaceSplitEnabled == true && (RaceSplitRows is null || RaceSplitRows.Contains("Hair"));
+
+    /// <summary>
+    /// Fills the race settings once, while <see cref="RaceSplitEnabled"/> is null. An old hair-race user gets
+    /// master on with only Hair ticked, so nothing else moves; everyone else gets master off with every row
+    /// ticked (the fresh-install state). Never re-runs once the master has a value.
+    /// </summary>
+    public void MigrateRaceSplit()
+    {
+        if (RaceSplitEnabled is not null)
+            return;
+
+        if (SortSplitHairByRace)
+        {
+            RaceSplitEnabled = true;
+            RaceSplitRows = ["Hair"];
+        }
+        else
+        {
+            RaceSplitEnabled = false;
+            RaceSplitRows = null;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites the legacy hair checkbox from the EFFECTIVE Hair row (not from the master alone), so a
+    /// downgrade keeps the user's hair behavior. <see cref="HairRaceCode"/> and <see cref="MidlanderFallback"/>
+    /// are never touched.
+    /// </summary>
+    public void SyncLegacyRaceFields() => SortSplitHairByRace = EffectiveHairRaceSplit;
+
     /// <summary>Animation: split Emotes by the emote a mod replaces. Off keeps 0.6.5.0 behavior.</summary>
     public bool SortSplitEmotes { get; set; }
 
@@ -202,6 +255,8 @@ public sealed class Configuration : IPluginConfiguration
     {
         foreach (var folder in ProtectedFolderPaths)
             FolderProtectionRules.TryAdd(folder, true);
+
+        MigrateRaceSplit();
 
         Version = CurrentVersion;
     }

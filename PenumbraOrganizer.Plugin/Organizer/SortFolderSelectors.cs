@@ -84,7 +84,7 @@ public static class SortFolderSelectors
                 var hairRoot = TypeFolder(row.Category, null, renameFolder);
                 return hairRoot is null
                     ? null
-                    : $"{hairRoot}/{HairRaceFolders.Tail(row.HairFlat, row.HairByRaceCode, hairPriority, row.SubCategory, splitHair)}";
+                    : $"{hairRoot}/{HairRaceFolders.Tail(row.HairFlat, row.HairByRaceCode, hairPriority, row.SubCategory, splitHair, opts.Race)}";
             }
             var sub = row.SubCategory;
             // A priority only changes a hair row's number, and only while hair is split. With no

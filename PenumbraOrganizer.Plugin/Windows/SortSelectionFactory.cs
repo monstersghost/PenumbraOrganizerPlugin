@@ -21,12 +21,15 @@ public static class SortSelectionFactory
             ? BodyPriority.Default([])
             : BodyPriority.Repair(config.BodyPriority, bodyLabels, out _);
 
+        var race = RaceSplitOptions.FromConfig(config);
         return new SortSelection(
             strategy, config.SortSplitGear, config.SortSplitNpc, config.SortSplitHair,
             SortPanel.HairRaceCodeAt(SortPanel.HairRaceIndexFor(config.HairRaceCode)),
             config.MidlanderFallback, config.SortSplitGearBody, config.SortSplitBodyMods,
             priority,
-            new LayoutOptions(config.SortSharedHandsFeet, config.SortSplitHairByRace, config.SortSplitEmotes),
+            new LayoutOptions(
+                config.SortSharedHandsFeet, race.InEffect(RaceRows.Hair, config.SortSplitBodyMods),
+                config.SortSplitEmotes, race.NullIfNoEffect()),
             RootOnly: false);
     }
 }

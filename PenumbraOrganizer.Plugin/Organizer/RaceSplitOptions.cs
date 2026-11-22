@@ -67,4 +67,32 @@ public sealed record RaceSplitOptions(
     /// <summary>A row applies only when the master is on, the row is ticked and its dependencies hold.</summary>
     public bool InEffect(RaceRows row, bool bodySplit) =>
         Enabled && Rows.HasFlag(row) && (!NeedsBodySplit(row) || bodySplit);
+
+    /// <summary>
+    /// What Sort carries in <c>LayoutOptions.Race</c>: null when these options add nothing beyond today's
+    /// legacy hair flag (master off, no row ticked, or only Hair ticked with the multi-race box on and no
+    /// priority). So a default configuration gives a default <c>LayoutOptions</c>, as it always has, and
+    /// a change that cannot affect any folder is not reported as "selection changed since the last sort".
+    /// The Sort tab itself reads the full value from <see cref="FromConfig"/>, never from this.
+    /// </summary>
+    public RaceSplitOptions? NullIfNoEffect() =>
+        !Enabled || Rows == RaceRows.None
+        || (Rows == RaceRows.Hair && MultiRaceToMultiRace && Priority.Ranked.Count == 0)
+            ? null
+            : this;
+
+    /// <summary>
+    /// The options the saved configuration describes. Reads the legacy hair checkbox when the config has
+    /// not been migrated yet, so a headless caller that skipped migration still sees the user's hair setting.
+    /// </summary>
+    public static RaceSplitOptions FromConfig(Configuration config)
+    {
+        var migrated = config.RaceSplitEnabled is not null;
+        var enabled = config.RaceSplitEnabled ?? config.SortSplitHairByRace;
+        var rows = migrated
+            ? RaceRowNames.Parse(config.RaceSplitRows)
+            : config.SortSplitHairByRace ? RaceRows.Hair : RaceRows.All;
+        return new RaceSplitOptions(
+            enabled, rows, config.SendMultiRaceToMultiRace, RacePriority.Normalize(config.RacePriority));
+    }
 }
