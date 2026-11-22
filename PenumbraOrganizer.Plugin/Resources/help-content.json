@@ -197,8 +197,28 @@
     },
     {
       "id": "sort.split-hair-by-race",
-      "title": "Split hair by race",
-      "short": "One-race hair files under its race: Hair/Viera/115. Hair for several races, or with no race found, goes under Hair/Multi-race. With the hair number split off you get just the race folder."
+      "title": "Split hair by race (now the Hair row)",
+      "short": "Hair splits by race from the Race section: tick the master switch and leave Hair ticked. One race files under it (Hair/Viera/115); several races or none go under Hair/Multi-race."
+    },
+    {
+      "id": "sort.race-split",
+      "title": "Split supported categories by race",
+      "short": "Master switch for the race folders. Off leaves your folders as they are. It splits by race, not gender, so male-only and female-only mods of one race share a folder."
+    },
+    {
+      "id": "sort.race-rows",
+      "title": "Race rows",
+      "short": "Hair, Face, Eyes, Skin, Tails/ears/horns and Racial scaling get a race folder. The last two need Split body mods. Gear, bodies and face paint are never split. Scan again after updating."
+    },
+    {
+      "id": "sort.multi-race",
+      "title": "Send multi-race mods to Multi-race",
+      "short": "On: a mod for several races goes to Multi-race. Off: it goes to the top-ranked race it covers (Race priority). No race found, or an unreadable mod, always goes to Multi-race."
+    },
+    {
+      "id": "sort.race-priority",
+      "title": "Race priority",
+      "short": "Ranked races, highest first, used only when the Multi-race box is off. An unranked race never wins. Separate from Priority race under Hair, which only picks the hair number."
     },
     {
       "id": "sort.split-emotes",

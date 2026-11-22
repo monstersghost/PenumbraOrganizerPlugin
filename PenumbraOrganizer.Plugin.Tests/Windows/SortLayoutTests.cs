@@ -11,6 +11,21 @@ public class SortLayoutTests
         SortLayout.Compute(strategy, splitHair, scrapedFeature, gateOpen);
 
     [Fact]
+    public void RaceSection_IsAlwaysVisibleAndGreyedUnderCreatorGrouping()
+    {
+        var typeThenCreator = Compute();
+        var creator = Compute(strategy: SortStrategy.CreatorOnly);
+        var gateClosed = Compute(gateOpen: false);
+
+        Assert.True(typeThenCreator.RaceSplit.Visible);
+        Assert.True(typeThenCreator.RaceSplit.Enabled);
+        Assert.True(creator.RaceSplit.Visible);
+        Assert.False(creator.RaceSplit.Enabled);
+        Assert.True(gateClosed.RaceSplit.Visible);
+        Assert.False(gateClosed.RaceSplit.Enabled);
+    }
+
+    [Fact]
     public void HairDependents_AreHiddenUntilTheHairBoxIsTicked()
     {
         var off = Compute(splitHair: false);

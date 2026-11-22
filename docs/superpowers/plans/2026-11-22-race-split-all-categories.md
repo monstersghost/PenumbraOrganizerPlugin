@@ -2662,7 +2662,7 @@ In `Windows/HelpTopicUsage.cs`, in the Sort block, add the four topics right aft
         HelpTopics.SortRacePriority,
 ```
 
-Because the old checkbox is gone, `SortSplitHairByRace` is no longer shown on a control. Remove its entry from `HelpTopicUsage.ReferencedByControls` (line 40) and keep its text in `help-content.json` for the Help tab (its tooltip text is reused as the Hair row's explanation by `SortRaceRows`). In `Windows/HelpTab.cs`, in the `HelpTabSort` group list, add the four new topics after `HelpTopics.SortSplitHairByRace,` (line 126).
+The old topic `SortSplitHairByRace` stays in `HelpTopicUsage.ReferencedByControls`: a test requires every topic with help text to be used by a control, so the Hair row's tooltip uses it (`row == RaceRows.Hair ? HelpTopics.SortSplitHairByRace : HelpTopics.SortRaceRows`) and the other rows use `SortRaceRows`. In `Windows/HelpTab.cs`, in the `HelpTabSort` group list, add the four new topics after `HelpTopics.SortSplitHairByRace,` (line 126). Every help text must be 200 characters or fewer (`HelpContentTests`), so the texts below are the final, shortened ones.
 
 In `Resources/help-content.json`, add these four entries immediately after the `"sort.split-hair-by-race"` entry (keep the existing entry, but replace its `short` with the first line below):
 
@@ -2670,27 +2670,27 @@ In `Resources/help-content.json`, add these four entries immediately after the `
     {
       "id": "sort.split-hair-by-race",
       "title": "Split hair by race (now the Hair row)",
-      "short": "Hair is split by race from the Race section: tick the master switch and leave Hair ticked. One-race hair files under its race (Hair/Viera/115). Hair for several races, or with no race found, goes under Hair/Multi-race."
+      "short": "Hair splits by race from the Race section: tick the master switch and leave Hair ticked. One race files under it (Hair/Viera/115); several races or none go under Hair/Multi-race."
     },
     {
       "id": "sort.race-split",
       "title": "Split supported categories by race",
-      "short": "Master switch for the race folders below. Off keeps your folders exactly as they are. It only changes the rows you leave ticked, and the split is by race, not gender, so a male-only and a female-only mod of one race share a folder."
+      "short": "Master switch for the race folders. Off leaves your folders as they are. It splits by race, not gender, so male-only and female-only mods of one race share a folder."
     },
     {
       "id": "sort.race-rows",
       "title": "Race rows",
-      "short": "Hair, Face, Eyes, Skin, Tails/ears/horns and Racial scaling get a race folder (Face/Viera). Tails/ears/horns and Racial scaling need Split body mods by body type. Face paint, Body meshes, gear and the rest are never split. Face, Skin, Tails and Ears use data read at scan time, so scan again after updating."
+      "short": "Hair, Face, Eyes, Skin, Tails/ears/horns and Racial scaling get a race folder. The last two need Split body mods. Gear, bodies and face paint are never split. Scan again after updating."
     },
     {
       "id": "sort.multi-race",
       "title": "Send multi-race mods to Multi-race",
-      "short": "On: a mod made for several races goes to Multi-race. Off: it goes to the folder of the highest-ranked race it covers (Race priority). A mod with no race found, or one that could not be read, always goes to Multi-race."
+      "short": "On: a mod for several races goes to Multi-race. Off: it goes to the top-ranked race it covers (Race priority). No race found, or an unreadable mod, always goes to Multi-race."
     },
     {
       "id": "sort.race-priority",
       "title": "Race priority",
-      "short": "Your ranked races, highest first. Only used when the Multi-race box is off. A race you do not rank never wins. This is separate from Priority race under Hair, which only picks the hair number."
+      "short": "Ranked races, highest first, used only when the Multi-race box is off. An unranked race never wins. Separate from Priority race under Hair, which only picks the hair number."
     },
 ```
 

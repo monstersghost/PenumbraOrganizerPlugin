@@ -87,7 +87,7 @@ public sealed class SortPanel
             && config.SortSplitGear == _splitGear && config.SortSplitNpc == _splitNpc
             && config.SortSplitHair == _splitHair && config.SortSplitGearBody == _splitGearBody
             && config.SortSplitBodyMods == _splitBodyMods
-            && config.SortSharedHandsFeet == _sharedHandsFeet && config.SortSplitHairByRace == _splitHairByRace
+            && config.SortSharedHandsFeet == _sharedHandsFeet && RaceMatchesConfig(config)
             && config.SortSplitEmotes == _splitEmotes)
             return;
 
@@ -98,10 +98,20 @@ public sealed class SortPanel
         config.SortSplitGearBody = _splitGearBody;
         config.SortSplitBodyMods = _splitBodyMods;
         config.SortSharedHandsFeet = _sharedHandsFeet;
-        config.SortSplitHairByRace = _splitHairByRace;
+        config.RaceSplitEnabled = _raceEnabled;
+        config.RaceSplitRows = RaceRowNames.ToNames(_raceRows);
+        config.SendMultiRaceToMultiRace = _multiRaceToMultiRace;
+        config.RacePriority = [.. _racePriority.Ranked];
+        config.SyncLegacyRaceFields();
         config.SortSplitEmotes = _splitEmotes;
         saveConfig();
     }
+
+    private bool RaceMatchesConfig(Configuration config) =>
+        config.RaceSplitEnabled == _raceEnabled
+        && RaceRowNames.Parse(config.RaceSplitRows) == _raceRows
+        && config.SendMultiRaceToMultiRace == _multiRaceToMultiRace
+        && RacePriority.Normalize(config.RacePriority) == _racePriority;
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
@@ -110,8 +120,14 @@ public sealed class SortPanel
     private bool _splitGearBody;         // off: no body folders until asked, like gear and hair
     private bool _splitBodyMods;
     private bool _sharedHandsFeet;           // off: hands and feet stay under their body
-    private bool _splitHairByRace;           // off: hair keeps the 0.6.4.0 layout
     private bool _splitEmotes;       // off: emotes stay in one Emotes folder
+
+    // The Race section. Master off and every row ticked is the fresh-install state; the master is a pure
+    // gate that never changes the ticks. Saved the moment any of them changes, like the other Sort choices.
+    private bool _raceEnabled;
+    private RaceRows _raceRows = RaceRows.All;
+    private bool _multiRaceToMultiRace = true;
+    private RacePriority _racePriority = RacePriority.Empty;
     private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;
@@ -228,7 +244,13 @@ public sealed class SortPanel
             _splitGearBody = loaded.SplitGearBody;
             _splitBodyMods = loaded.SplitBodyMods;
             _sharedHandsFeet = loaded.Layout.SharedHandsAndFeet;
-            _splitHairByRace = loaded.Layout.SplitHairByRace;
+            // Read from the config, not from loaded.Layout.Race: the selection carries null when the race
+            // split adds nothing beyond the legacy hair flag, which would lose the user's rows and priority.
+            var race = RaceSplitOptions.FromConfig(config);
+            _raceEnabled = race.Enabled;
+            _raceRows = race.Rows;
+            _multiRaceToMultiRace = race.MultiRaceToMultiRace;
+            _racePriority = race.Priority;
             _splitEmotes = loaded.Layout.SplitEmotes;
             if (loaded.BodyPriority is { } loadedPriority)
                 _bodyPriority = loadedPriority;
@@ -300,7 +322,6 @@ public sealed class SortPanel
 
         GroupHeading("Hair");
         DrawCheckbox("Split hair by hair number", ref _splitHair, states.SplitHair, HelpTopics.SortSplitHair, splitReason);
-        DrawCheckbox("Split hair by race", ref _splitHairByRace, states.SplitHairByRace, HelpTopics.SortSplitHairByRace, splitReason);
         if (states.PriorityRace.Visible)
         {
             ImGui.BeginDisabled(!states.PriorityRace.Enabled);
@@ -332,6 +353,9 @@ public sealed class SortPanel
         DrawCheckbox("Split emotes by emote", ref _splitEmotes, states.SplitEmotes,
             HelpTopics.SortSplitEmotes, splitReason);
 
+        GroupHeading("Race");
+        DrawRaceSplit(state, states.RaceSplit, splitReason);
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -341,9 +365,15 @@ public sealed class SortPanel
         // staleness hint then picks that up on the next frame, which is not visible.
         PersistSortChoices(config, saveConfig, strategy);
 
+        var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
         var selection = new SortSelection(strategy, _splitGear, _splitNpc, _splitHair,
             HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            new LayoutOptions(_sharedHandsFeet, _splitHairByRace, _splitEmotes), rootOnly);
+            new LayoutOptions(
+                _sharedHandsFeet,
+                raceNow.InEffect(RaceRows.Hair, _splitBodyMods),
+                _splitEmotes,
+                raceNow.NullIfNoEffect()),
+            rootOnly);
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan
@@ -426,6 +456,101 @@ public sealed class SortPanel
         ImGui.Checkbox(label, ref value);
         ImGui.EndDisabled();
         Help.Tooltip(topic, state.Enabled ? null : disabledReason);
+    }
+
+    private const string RaceNeedsBodySplitReason = "This row's folder only exists while body mods are split by body type.";
+    private const string RaceRescanHint = "Scan again to use race split for faces, skin, tails and ears.";
+
+    // The Race section: master switch, the six rows, the multi-race toggle and the ranked race list.
+    // Every row is always visible. A row that needs the body split stays ticked while that split is off
+    // and simply greys, so nothing the user chose is cleared. Under Creator grouping the whole section is
+    // readable but not editable, with the reason in each tooltip.
+    private void DrawRaceSplit(OrganizerState state, ControlState section, string? reason)
+    {
+        DrawCheckbox("Split supported categories by race", ref _raceEnabled, section, HelpTopics.SortRaceSplit, reason);
+
+        foreach (var (row, _, label) in RaceRowNames.All)
+        {
+            var ticked = _raceRows.HasFlag(row);
+            var needsBody = RaceSplitOptions.NeedsBodySplit(row);
+            var enabled = section.Enabled && (!needsBody || _splitBodyMods);
+
+            ImGui.Indent();
+            ImGui.BeginDisabled(!enabled);
+            if (ImGui.Checkbox($"{label}##race-row-{row}", ref ticked))
+                _raceRows = ticked ? _raceRows | row : _raceRows & ~row;
+            ImGui.EndDisabled();
+            Help.Tooltip(
+                row == RaceRows.Hair ? HelpTopics.SortSplitHairByRace : HelpTopics.SortRaceRows,
+                enabled ? null : needsBody && section.Enabled ? RaceNeedsBodySplitReason : reason);
+            ImGui.Unindent();
+        }
+
+        ImGui.Indent();
+        DrawCheckbox("Send multi-race mods to Multi-race", ref _multiRaceToMultiRace, section, HelpTopics.SortMultiRace, reason);
+        ImGui.Unindent();
+
+        DrawRacePriority(section);
+
+        if (_raceEnabled && state.Mods.Any(m => m.KeyRaces is null
+                && m.Category is Core.Classification.ModCategory.Face or Core.Classification.ModCategory.Skin
+                    or Core.Classification.ModCategory.Body))
+            ImGui.TextDisabled(RaceRescanHint);
+    }
+
+    // Collapsed by default, like Body priority. Ranked races win in order; an unranked race never wins.
+    private void DrawRacePriority(ControlState section)
+    {
+        var open = ImGui.CollapsingHeader("Race priority##race-priority");
+        Help.Tooltip(HelpTopics.SortRacePriority);
+        if (!open)
+            return;
+
+        ImGui.BeginDisabled(!section.Enabled);
+        ImGui.TextDisabled("Highest first. Used when a mod supports more than one race and the Multi-race box above is off.");
+
+        var ranked = _racePriority.Ranked; // immutable: safe to iterate while a click replaces the field
+        for (var i = 0; i < ranked.Count; i++)
+        {
+            ImGui.PushID(i);
+
+            ImGui.BeginDisabled(i == 0);
+            if (ImGui.ArrowButton("##up", ImGuiDir.Up))
+                _racePriority = _racePriority.MoveUp(i);
+            ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            ImGui.BeginDisabled(i == ranked.Count - 1);
+            if (ImGui.ArrowButton("##down", ImGuiDir.Down))
+                _racePriority = _racePriority.MoveDown(i);
+            ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Remove##remove"))
+                _racePriority = _racePriority.Remove(ranked[i]);
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted($"{i + 1}. {ranked[i]}");
+
+            ImGui.PopID();
+        }
+
+        var unranked = RaceNames.All.Where(r => _racePriority.RankOf(r) < 0).ToList();
+        if (unranked.Count > 0)
+        {
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.BeginCombo("Add a race##race-priority-add", "Choose a race"))
+            {
+                foreach (var race in unranked)
+                {
+                    if (ImGui.Selectable($"{race}##race-add-{race}"))
+                        _racePriority = _racePriority.Add(race);
+                }
+                ImGui.EndCombo();
+            }
+        }
+
+        ImGui.EndDisabled();
     }
 
     // The "(?)" beside "Split body mods by body type": a small CLICKABLE button that opens the
