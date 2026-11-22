@@ -85,4 +85,46 @@ public class SortSelectionFactoryTests
         Assert.NotNull(state.LastSortSummary);
         Assert.True(state.LastSortSummary!.Scope.RootOnly);
     }
+
+    [Fact]
+    public void FromConfig_CarriesTheRaceSplitAndTheEffectiveHairFlag()
+    {
+        var config = new Configuration
+        {
+            RaceSplitEnabled = true,
+            RaceSplitRows = ["Hair", "Skin"],
+            SendMultiRaceToMultiRace = false,
+            RacePriority = ["Viera"],
+        };
+
+        var selection = SortSelectionFactory.FromConfig(config, Labels);
+
+        Assert.True(selection.Layout.SplitHairByRace);
+        Assert.NotNull(selection.Layout.Race);
+        Assert.True(selection.Layout.Race!.Enabled);
+        Assert.Equal(RaceRows.Hair | RaceRows.Skin, selection.Layout.Race.Rows);
+        Assert.False(selection.Layout.Race.MultiRaceToMultiRace);
+        Assert.Equal(new[] { "Viera" }, selection.Layout.Race.Priority.Ranked);
+    }
+
+    [Fact]
+    public void FromConfig_FaceOnly_LeavesTheHairFlagOff()
+    {
+        var config = new Configuration { RaceSplitEnabled = true, RaceSplitRows = ["Face"] };
+        Assert.False(SortSelectionFactory.FromConfig(config, Labels).Layout.SplitHairByRace);
+    }
+
+    [Fact]
+    public void SelectionEquality_SeesAChangedRacePriority()
+    {
+        var a = SortSelectionFactory.FromConfig(
+            new Configuration { RaceSplitEnabled = true, RacePriority = ["Viera"] }, Labels);
+        var same = SortSelectionFactory.FromConfig(
+            new Configuration { RaceSplitEnabled = true, RacePriority = ["Viera"] }, Labels);
+        var other = SortSelectionFactory.FromConfig(
+            new Configuration { RaceSplitEnabled = true, RacePriority = ["Elezen"] }, Labels);
+
+        Assert.Equal(a, same);
+        Assert.NotEqual(a, other);
+    }
 }

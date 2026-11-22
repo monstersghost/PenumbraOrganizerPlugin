@@ -375,4 +375,84 @@ public class ScanProcessorTests
         Assert.Equal(ProteusRole.None, row.ProteusRole);
         Assert.True(row.IsToolManaged);
     }
+
+    [Fact]
+    public void FaceRow_CarriesTheRacesItsKeysName()
+    {
+        // A Face row is not walked, so the mod directory does not need to exist.
+        var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        var row = NewProcessor().Process(
+            Seed(missing, changedItemKeys: ["Customization: Viera Female Face 3", "Customization: Au Ra Female Skin Textures"]),
+            CancellationToken.None);
+
+        Assert.Equal(ModCategory.Face, row!.Category);
+        Assert.Equal(new[] { "Viera" }, row.KeyRaces!.Face);
+        Assert.Equal(new[] { "Au Ra" }, row.KeyRaces.Skin);
+        Assert.False(row.IsRacialScaling);
+    }
+
+    [Fact]
+    public void PureRspMod_StaysGearButIsFlaggedWithItsRace()
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{},"Manipulations":[{"Type":"Rsp","Manipulation":{"SubRace":"SeekerOfTheSun","Attribute":"MaleMinSize","Entry":1.0}}]}}""");
+
+            // An Rsp changed item has no "Customization:" prefix, so it parses as the Gear shape and the
+            // classifier files the mod under Gear today. The flag is what lets Sort route it later.
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, changedItemKeys: "Seeker of the Sun Male Minimum Size"), CancellationToken.None);
+
+            Assert.Equal(ModCategory.Gear, row!.Category);
+            Assert.True(row.IsRacialScaling);
+            Assert.Equal(new[] { "Miqo'te" }, row.Rsp!.Races);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RealLegacyLayoutVieraPack_IsGearFlaggedWithItsRace()
+    {
+        // The real "Viera Height Diversity" folder (older layout, Rsp inside group options), copied to the
+        // test output. Its changed items read "Veena Male Minimum Size" and so on: no Customization prefix.
+        var fixtureDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "RaceSplit", "viera-height-diversity");
+
+        var row = NewProcessor().Process(
+            Seed(fixtureDir, changedItemKeys: ["Veena Male Minimum Size", "Rava Female Maximum Size"]),
+            CancellationToken.None);
+
+        Assert.Equal(ModCategory.Gear, row!.Category);
+        Assert.True(row.IsRacialScaling);
+        Assert.Equal(new[] { "Viera" }, row.Rsp!.Races);
+    }
+
+    [Fact]
+    public void RspModThatAlsoRedirectsFiles_IsNotFlagged()
+    {
+        var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        dir.Create();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "meta.json"),
+                """{"DefaultData":{"Files":{"chara/equipment/e0001/model/c0101e0001_top.mdl":"x.mdl"},"Manipulations":[{"Type":"Rsp","Manipulation":{"SubRace":"Midlander","Attribute":"BustMinX","Entry":1.0}}]}}""");
+
+            var row = NewProcessor().Process(
+                Seed(dir.FullName, changedItemKeys: "Ala Mhigan Gown"), CancellationToken.None);
+
+            Assert.Equal(ModCategory.Gear, row!.Category);
+            Assert.False(row.IsRacialScaling);
+            Assert.False(row.Rsp!.Pure);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
 }

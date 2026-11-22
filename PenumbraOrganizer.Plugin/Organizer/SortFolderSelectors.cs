@@ -51,7 +51,7 @@ public static class SortFolderSelectors
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
 
-        string? Type()
+        string? BaseType()
         {
             // The numbered gear layout owns Gear rows entirely. The template rename still applies,
             // to the whole numbered path, exactly where TypeFolder applies it.
@@ -84,7 +84,7 @@ public static class SortFolderSelectors
                 var hairRoot = TypeFolder(row.Category, null, renameFolder);
                 return hairRoot is null
                     ? null
-                    : $"{hairRoot}/{HairRaceFolders.Tail(row.HairFlat, row.HairByRaceCode, hairPriority, row.SubCategory, splitHair)}";
+                    : $"{hairRoot}/{HairRaceFolders.Tail(row.HairFlat, row.HairByRaceCode, hairPriority, row.SubCategory, splitHair, opts.Race)}";
             }
             var sub = row.SubCategory;
             // A priority only changes a hair row's number, and only while hair is split. With no
@@ -113,6 +113,32 @@ public static class SortFolderSelectors
             return folder is not null && body is not null && splitBodyMods && row.Category == ModCategory.Body
                 ? $"{folder}/{BodyPartFolders.Folder(row.BodyPart)}"
                 : folder;
+        }
+
+        // The race split (race spec sections 2 and 4). A scan-flagged racial-scaling mod is filed as Gear
+        // by the classifier; while its row is in effect it is routed under Body as a shared part instead.
+        // Every governed non-hair row then gets its race tail appended after whatever path it already has,
+        // so the template rename of the root and the numbered Body layout keep working untouched.
+        string? Type()
+        {
+            string? path;
+            if (RaceSplitRouting.IsRoutedToRacialScaling(row, opts.Race, splitBodyMods))
+            {
+                var root = TypeFolder(ModCategory.Body, null, renameFolder);
+                path = root is null
+                    ? null
+                    : $"{root}/{(bodyLayout is not null ? BodyFolderLayout.PartFolder(BodyPart.RacialScaling) : BodyPartFolders.Folder(BodyPart.RacialScaling))}";
+            }
+            else
+            {
+                path = BaseType();
+            }
+
+            if (path is null)
+                return null;
+
+            var tail = RaceSplitRouting.Tail(row, opts.Race, splitBodyMods);
+            return tail is null ? path : $"{path}/{tail}";
         }
 
         return strategy switch

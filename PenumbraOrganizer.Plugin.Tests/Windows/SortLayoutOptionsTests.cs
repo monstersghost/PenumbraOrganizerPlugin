@@ -17,8 +17,8 @@ public class SortLayoutOptionsTests
     {
         var s = SortLayout.Compute(SortStrategy.CreatorOnly, false, false, true, splitGear: true);
         Assert.False(s.SharedHandsFeet.Enabled);
-        Assert.False(s.SplitHairByRace.Enabled);
-        Assert.True(s.SplitHairByRace.Visible);
+        Assert.False(s.RaceSplit.Enabled);
+        Assert.True(s.RaceSplit.Visible);
     }
 
     [Fact]

@@ -1,0 +1,237 @@
+{
+	"FileVersion": 4,
+	"Identifier": "8ad77624-6459-4ba7-89ff-6ff4752bca45",
+	"LastWrite": "2026-11-22T12:19:53.7522847Z",
+	"Name": "Variant Miqotes v2",
+	"Author": "Sel",
+	"Description": "Mod imported from TexTools mod pack.",
+	"Version": "2.0.0",
+	"DefaultData": {
+		"Manipulations": [
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "MaleMinSize",
+					"Entry": 0.95
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "MaleMaxSize",
+					"Entry": 1.05
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "MaleMinTail",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "MaleMaxTail",
+					"Entry": 1.5
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "FemaleMinSize",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "FemaleMaxSize",
+					"Entry": 1.08
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "FemaleMinTail",
+					"Entry": 0.75
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "FemaleMaxTail",
+					"Entry": 1.25
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "BustMinX",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "BustMinY",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "BustMinZ",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "BustMaxX",
+					"Entry": 1.16
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "BustMaxY",
+					"Entry": 1.4
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "SeekerOfTheSun",
+					"Attribute": "BustMaxZ",
+					"Entry": 1.368
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "MaleMinSize",
+					"Entry": 0.85
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "MaleMaxSize",
+					"Entry": 0.95
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "MaleMinTail",
+					"Entry": 0.5
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "MaleMaxTail",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "FemaleMinSize",
+					"Entry": 0.92
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "FemaleMaxSize",
+					"Entry": 0.96
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "FemaleMinTail",
+					"Entry": 0.25
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "FemaleMaxTail",
+					"Entry": 0.75
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "BustMinX",
+					"Entry": 0.84
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "BustMinY",
+					"Entry": 0.6
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "BustMinZ",
+					"Entry": 0.632
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "BustMaxX",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "BustMaxY",
+					"Entry": 1
+				}
+			},
+			{
+				"Type": "Rsp",
+				"Manipulation": {
+					"SubRace": "KeeperOfTheMoon",
+					"Attribute": "BustMaxZ",
+					"Entry": 1
+				}
+			}
+		]
+	}
+}

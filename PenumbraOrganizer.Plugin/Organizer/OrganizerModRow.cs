@@ -35,6 +35,23 @@ public sealed class OrganizerModRow
     public IReadOnlySet<string>? EmoteNames { get; init; }
 
     /// <summary>
+    /// The races this mod's customization keys name, by part. Filled at scan time for Face, Skin and Body
+    /// rows only. Null for any other row and for a row scanned before race evidence existed, which counts as
+    /// "no evidence" until the next scan.
+    /// </summary>
+    public RowRaceData? KeyRaces { get; init; }
+
+    /// <summary>The mod's Rsp (racial scaling) evidence. Null unless the walked config had an Rsp manipulation.</summary>
+    public RspEvidence? Rsp { get; init; }
+
+    /// <summary>
+    /// True for a pure racial-scaling mod (only Rsp manipulations, no file redirects). A FLAG, not a category:
+    /// the classifier files these mods under Gear, and rewriting that at scan time would move them whatever
+    /// the settings. Sort routes a flagged row under Body only while the Racial scaling row is in effect.
+    /// </summary>
+    public bool IsRacialScaling { get; init; }
+
+    /// <summary>
     /// The body replacer this mod is for, as the body-type list spells it ("Bibo+"), or null when
     /// its name matched none.
     /// </summary>
@@ -64,6 +81,13 @@ public sealed class OrganizerModRow
     /// dump after a custom-priority sort explains the folder the row was actually proposed.
     /// </summary>
     public BodyResolution? StagedBodyResolution { get; set; }
+
+    /// <summary>
+    /// Why the most recent sort gave this row the race folder it got (one race, several races and which rule
+    /// chose, no evidence, unreadable evidence), or null when no race row governed it. Cleared whenever the
+    /// row's proposal is set by anything other than that sort.
+    /// </summary>
+    public RaceFolderResult? StagedRace { get; set; }
 
     /// <summary>
     /// Every body this mod could file under, by tier. Null unless the row passed the body gate

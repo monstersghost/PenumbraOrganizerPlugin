@@ -106,4 +106,38 @@ public class HairRaceFoldersTests
         Assert.Equal("Hair/115",
             SortFolderSelectors.Select(SortStrategy.TypeOnly, false, false, row, splitHair: true).Primary);
     }
+
+    private static string TailWith(IReadOnlyDictionary<string, IReadOnlySet<int>>? by, RaceSplitOptions race,
+        bool byNumber = false)
+    {
+        var flat = by?.Values.SelectMany(v => v).ToHashSet();
+        return HairRaceFolders.Tail(flat, by, null, null, byNumber, race);
+    }
+
+    private static RaceSplitOptions Race(bool toMulti, params string[] ranked) =>
+        new(true, RaceRows.All, toMulti, RacePriority.Normalize(ranked));
+
+    [Fact]
+    public void ToggleOff_SeveralRaces_FilesUnderTheTopRankedRace() =>
+        Assert.Equal("Viera", TailWith(By(("1801", [115]), ("0801", [105])), Race(false, "Viera")));
+
+    [Fact]
+    public void ToggleOff_PickedRaceWithOneNumber_GetsThatNumber() =>
+        Assert.Equal("Viera/115", TailWith(By(("1801", [115]), ("0801", [105])), Race(false, "Viera"), byNumber: true));
+
+    [Fact]
+    public void ToggleOff_PickedRaceWithSeveralNumbers_GetsNoNumber() =>
+        Assert.Equal("Viera", TailWith(By(("1801", [115, 120]), ("0801", [105])), Race(false, "Viera"), byNumber: true));
+
+    [Fact]
+    public void ToggleOff_NothingRanked_StaysMultiRace() =>
+        Assert.Equal("Multi-race", TailWith(By(("1801", [115]), ("0801", [105])), Race(false)));
+
+    [Fact]
+    public void ToggleOn_BehavesExactlyAsBefore() =>
+        Assert.Equal("Multi-race", TailWith(By(("1801", [115]), ("0801", [105])), Race(true, "Viera")));
+
+    [Fact]
+    public void NullRaceOptions_IsTodaysBehavior() =>
+        Assert.Equal("Multi-race/115", Tail(By(("1801", [115]), ("0801", [115])), stored: "115"));
 }

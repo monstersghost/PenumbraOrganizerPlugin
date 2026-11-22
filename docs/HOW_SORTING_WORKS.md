@@ -194,15 +194,42 @@ agree with that reading, but no real library has confirmed it yet. The manual ch
 
 The **Split hair by hair number** checkbox defaults off and is disabled when Group by is Creator.
 
-### Split hair by race
+### Race split (hair and the other race rows)
 
-The **Split hair by race** checkbox (off by default) adds a race folder below `Hair/`, built by
-`HairRaceFolders.Tail` from the per-race numbers the same reader collects (race codes map to a race
-name, so male and female folders of one race count as that race):
+The **Race** section of the Sort tab replaces the old **Split hair by race** checkbox. A master switch,
+**Split supported categories by race** (off by default), gates six rows: Hair, Face, Eyes, Skin, Tails, ears
+and horns, and Racial scaling. A fresh install has every row ticked, so turning the master on splits all of
+them; unticking a row leaves that row sorting as before. Someone who used the old hair checkbox is migrated to
+master on with only Hair ticked, so nothing else moves.
+
+Folders are by race, never by gender, using the nine names Penumbra uses (Midlander and Highlander are two
+folders): `Face/Viera`, `Skin/Miqo'te`, `Body/02. Tails, Ears and Horns/Viera`. A mod made for one race files
+under it. A mod made for several races files under `Multi-race` while **Send multi-race mods to Multi-race**
+is on; with it off it files under the highest-ranked race it covers in **Race priority** (a race you do not
+rank never wins; if none of its races is ranked it still goes to `Multi-race`). A mod with no race found, or
+whose evidence could not be read, always goes to `Multi-race`, and the Review export's `StagedRace:` line says
+which of the three it was.
+
+Race comes from different places per row. Hair reads the mod's file paths, as before. Face, Eyes, Skin and
+Tails/ears/horns read the race words in the mod's changed-item keys, by body part (a face mod's incidental
+skin keys never add a race to Face); an iris-only mod is the Eyes row and files under `Face/Eyes/<race>`.
+These are stored at scan time, so scan again after updating. Racial scaling reads the sub-race of the mod's
+racial-scaling manipulations. Tails/ears/horns and Racial scaling need **Split body mods by body type**.
+
+Racial scaling: a mod made only of racial-scaling manipulations (no gear or other files) is filed under Gear
+today. With the Racial scaling row in effect it files under `Body/03. Racial Scaling/<race>` instead; with the
+row off it stays in Gear exactly as before.
+
+**Priority race** under Hair is separate and unchanged: it is chosen per race and gender and only picks the
+hair number. **Race priority** only chooses a folder.
+
+The existing hair rules below still apply:
 
 - Hair files for exactly one race go under that race: `Hair/Viera`. Priority race and the Midlander
   fallback do not apply here.
-- Hair files for several races, or with no race found, go under `Hair/Multi-race`.
+- Hair files for several races go under `Hair/Multi-race` while **Send multi-race mods to Multi-race** is on
+  (with it off they go under the top-ranked race in Race priority, numbered as that race's own mod); hair
+  files with no race found always go under `Hair/Multi-race`.
 - With Split hair by hair number also on, a one-race mod that uses exactly one number gets it
   appended (`Hair/Viera/115`, padded to three digits); a one-race mod with several numbers stays in the
   race folder. In `Hair/Multi-race` the number comes from the Priority race rule when one is set, and

@@ -244,6 +244,55 @@ public class ModEquipmentFileReaderTests
     }
 
     [Fact]
+    public void ReadEquipmentSlots_MetadataOnlyMetaJson_StillReadsOldFormatFiles()
+    {
+        // The older Penumbra layout: meta.json holds only the name and author, beside default_mod.json and
+        // group_*.json. Treating that meta.json as the whole config would hide every option.
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "meta.json", """{"FileVersion":1,"Name":"Old Mod","Author":"A","Version":"1.0"}""");
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/equipment/e0686/model/c0201e0686_top.mdl":"x"},"Manipulations":[]}
+            """);
+        WriteJson(mod, "group_001_options.json", """
+            {"Name":"Opt","Type":"Single","Options":[{"Name":"a","Files":{"chara/equipment/e0387/model/c0101e0387_sho.mdl":"y"},"Manipulations":[]}]}
+            """);
+
+        var result = ModEquipmentFileReader.ReadEquipmentSlots(mod);
+
+        Assert.NotNull(result);
+        Assert.True(result!.SetEquals([EquipmentSlot.Feet, EquipmentSlot.Top]));
+    }
+
+    [Fact]
+    public void ReadEquipmentSlots_MetaJsonWithOnlyAGroupsKey_TakesPrecedenceOverStaleOldFormatFiles()
+    {
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "meta.json", """
+            {"FileVersion":4,"Name":"Test Mod","Groups":[{"Type":"Multi","Name":"g","Options":[
+               {"Name":"o","Files":{"chara/equipment/e0387/model/c0101e0387_sho.mdl":"x"},"Manipulations":[]}]}]}
+            """);
+        WriteJson(mod, "default_mod.json", """
+            {"Files":{"chara/equipment/e0686/model/c0201e0686_top.mdl":"x"},"Manipulations":[]}
+            """);
+
+        var result = ModEquipmentFileReader.ReadEquipmentSlots(mod);
+
+        Assert.NotNull(result);
+        Assert.Equal([EquipmentSlot.Feet], result);
+    }
+
+    [Fact]
+    public void CountConfigFiles_MetadataOnlyMetaJson_CountsMetaDefaultAndGroups()
+    {
+        var mod = MakeTempModDirectory();
+        WriteJson(mod, "meta.json", """{"FileVersion":1,"Name":"Old Mod"}""");
+        WriteJson(mod, "default_mod.json", "{}");
+        WriteJson(mod, "group_001_a.json", "{}");
+
+        Assert.Equal(3, ModEquipmentFileReader.CountConfigFiles(mod));
+    }
+
+    [Fact]
     public void CountConfigFiles_MetaJsonPresent_CountsOne()
     {
         var mod = MakeTempModDirectory();

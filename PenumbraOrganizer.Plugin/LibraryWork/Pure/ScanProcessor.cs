@@ -131,6 +131,13 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             ? BodyPartClassifier.Classify(item.Name, content?.GamePaths)
             : BodyPart.Replacer;
 
+        // Race evidence. Key-based for Face, Skin and Body rows (no disk read); Rsp-based for the
+        // racial-scaling flag, which needs the walked content, so only rows the walk already covered.
+        RowRaceData? keyRaces = classification.Category is ModCategory.Face or ModCategory.Skin or ModCategory.Body
+            ? CustomizationRaceReader.From(item.ChangedItemKeys.Select(ChangedItemKeyParser.Parse))
+            : null;
+        var rsp = content?.Rsp;
+
         return new OrganizerModRow
         {
             Identifier = item.Identifier,
@@ -153,6 +160,9 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
                     .Where(k => k.Shape == ChangedItemKeyShape.Emote && !string.IsNullOrWhiteSpace(k.ItemName))
                     .Select(k => k.ItemName!).ToHashSet(StringComparer.Ordinal)
                 : null,
+            KeyRaces = keyRaces,
+            Rsp = rsp,
+            IsRacialScaling = rsp is { Pure: true },
             GearSlotDiagnostic = gearSlotDiagnostic,
         };
     }
