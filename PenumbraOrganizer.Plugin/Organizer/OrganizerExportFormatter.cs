@@ -41,6 +41,9 @@ public static class OrganizerExportFormatter
                 + $"{zeroEvidence} zero-evidence, {directoryMissing} directory-missing, {readFailure} read/parse failures");
         }
 
+        if (RaceReasonSummary.Describe(mods) is { } raceSummary)
+            sb.AppendLine(raceSummary);
+
         sb.AppendLine();
         sb.AppendLine("--- Mods ---");
 
@@ -64,6 +67,8 @@ public static class OrganizerExportFormatter
                 sb.AppendLine($"BodyEvidence: {candidates.Describe()}");
             if (mod.StagedBodyResolution is { } staged)
                 sb.AppendLine($"StagedBody: {staged.Label} ({staged.Tier}/{staged.Source})");
+            if (mod.StagedRace is { } stagedRace)
+                sb.AppendLine($"StagedRace: {stagedRace.Folder} ({stagedRace.Reason})");
             if (mod.GearSlotDiagnostic != GearSlotDiagnostic.NotApplicable)
                 sb.AppendLine($"GearSlotDiagnostic: {mod.GearSlotDiagnostic}");
             sb.AppendLine($"HeliosphereManaged: {mod.HeliosphereManaged}");

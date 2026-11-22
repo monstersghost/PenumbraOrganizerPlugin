@@ -245,4 +245,33 @@ public class OrganizerExportFormatterTests
         Assert.Contains("ManagedBy: ProteusManaged", text);
         Assert.Contains("ManagedBy: (none)", text);
     }
+
+    [Fact]
+    public void StagedRace_IsPrintedWithItsReason()
+    {
+        var row = new OrganizerModRow
+        {
+            Identifier = "r", Name = "Face mod", Author = "a", CurrentPath = "Face mod", ProposedPath = "Face/Viera/Face mod",
+            StagedRace = new RaceFolderResult("Viera", RaceFolderReason.OneRace),
+        };
+
+        var text = OrganizerExportFormatter.Format([row], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.Contains("StagedRace: Viera (OneRace)", text);
+        Assert.Contains("Race split: 1 one race", text);
+    }
+
+    [Fact]
+    public void NoStagedRace_PrintsNoRaceLines()
+    {
+        var row = new OrganizerModRow
+        {
+            Identifier = "r", Name = "m", Author = "a", CurrentPath = "m", ProposedPath = "m",
+        };
+
+        var text = OrganizerExportFormatter.Format([row], new ReviewResult([], new Dictionary<string, List<string>>()));
+
+        Assert.DoesNotContain("StagedRace:", text);
+        Assert.DoesNotContain("Race split:", text);
+    }
 }

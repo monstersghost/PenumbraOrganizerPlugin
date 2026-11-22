@@ -514,6 +514,7 @@ public sealed class OrganizerState
 
         row.ProposedPath = proposedPath;
         row.StagedBodyResolution = null;
+        row.StagedRace = null;
         return true;
     }
 
@@ -591,6 +592,7 @@ public sealed class OrganizerState
             if (IsResetByScope(row, scope))
             {
                 row.StagedBodyResolution = null;
+                row.StagedRace = null;
                 continue;
             }
 
@@ -599,6 +601,8 @@ public sealed class OrganizerState
             row.StagedBodyResolution = applies && bodyPriority is not null
                 ? BodyPriorityResolver.Resolve(row.BodyCandidates, bodyPriority, nameFirst: row.Category == ModCategory.Body)
                 : null;
+
+            row.StagedRace = RaceSplitRouting.Resolve(row, options?.Race, splitBodyMods);
         }
 
         // One numbered layout per anchor root. A tool's mods kept under their own folder (Heliosphere,
@@ -672,6 +676,7 @@ public sealed class OrganizerState
             // Proteus mod out of the folder its mode says to keep it in.
             row.ProposedPath = ToolAdjustedPath(row, BuildPath(folder, null, row.Name));
             row.StagedBodyResolution = null;
+            row.StagedRace = null;
             touched.Add(row);
         }
 
@@ -703,6 +708,7 @@ public sealed class OrganizerState
 
             row.ProposedPath = $"{target}/{row.CurrentPath}";
             row.StagedBodyResolution = null;
+            row.StagedRace = null;
             touched.Add(row);
         }
 

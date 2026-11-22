@@ -690,6 +690,12 @@ public sealed partial class MainWindow : Window, IDisposable
         }
         sb.AppendLine();
 
+        if (Organizer.RaceReasonSummary.Describe(_plugin.OrganizerState.Mods) is { } raceSummary)
+        {
+            sb.AppendLine(raceSummary);
+            sb.AppendLine();
+        }
+
         sb.AppendLine("== Session event log (most recent first) ==");
         foreach (var line in _eventLog.Lines)
             sb.AppendLine(line);

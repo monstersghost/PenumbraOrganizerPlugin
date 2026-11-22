@@ -83,6 +83,13 @@ public sealed class OrganizerModRow
     public BodyResolution? StagedBodyResolution { get; set; }
 
     /// <summary>
+    /// Why the most recent sort gave this row the race folder it got (one race, several races and which rule
+    /// chose, no evidence, unreadable evidence), or null when no race row governed it. Cleared whenever the
+    /// row's proposal is set by anything other than that sort.
+    /// </summary>
+    public RaceFolderResult? StagedRace { get; set; }
+
+    /// <summary>
     /// Every body this mod could file under, by tier. Null unless the row passed the body gate
     /// (Gear cut to a body's shape, or a Body mod). Resolved against the user's priority at SORT
     /// time, so reordering the priority re-files mods without a rescan; <see cref="BodyType"/>
