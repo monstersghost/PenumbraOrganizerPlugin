@@ -121,15 +121,32 @@ public static class ModConfigFileWalker
         // Materialized eagerly: DirectoryInfo.EnumerateFiles is lazy, so a permission error during
         // enumeration would otherwise surface outside the caller's catch.
         var metaJson = new FileInfo(Path.Combine(modDirectory.FullName, "meta.json"));
-        if (metaJson.Exists)
+        if (metaJson.Exists && CarriesTheOptions(metaJson))
             return [metaJson];
 
+        // The older layout: meta.json (when present) holds only the mod's name and author and has nothing
+        // to walk, and the options live in default_mod.json and the group_*.json files beside it.
         var files = new List<FileInfo>();
+        if (metaJson.Exists)
+            files.Add(metaJson);
         var defaultMod = new FileInfo(Path.Combine(modDirectory.FullName, "default_mod.json"));
         if (defaultMod.Exists)
             files.Add(defaultMod);
         files.AddRange(modDirectory.EnumerateFiles("group_*.json"));
         return files;
+    }
+
+    // Penumbra 1.7's meta.json carries the options (DefaultData and Groups). The older layout's meta.json
+    // is metadata only and tiny, so a large file is taken to be the current layout without reading it.
+    // The quoted key names cannot match inside a description: an escaped quote has a backslash before it.
+    private static bool CarriesTheOptions(FileInfo metaJson)
+    {
+        if (metaJson.Length > 65536)
+            return true;
+
+        var text = File.ReadAllText(metaJson.FullName);
+        return text.Contains("\"DefaultData\"", StringComparison.Ordinal)
+            || text.Contains("\"Groups\"", StringComparison.Ordinal);
     }
 
     private static bool IsExpectedFileSystemException(Exception ex) =>
