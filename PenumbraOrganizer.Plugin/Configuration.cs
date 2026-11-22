@@ -170,6 +170,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool TemplateExportSplitGearBody { get; set; }
     public bool TemplateExportSplitBodyMods { get; set; }
 
+    /// <summary>
+    /// The custom workbook categories (code 17 and up) from the last accepted import. Only a seed for the next
+    /// export: the sheet always wins at import and this is never consulted then.
+    /// </summary>
+    public List<WorkbookCustomCode> WorkbookCustomCodes { get; set; } = [];
+
     /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
     public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;
 
@@ -260,4 +266,12 @@ public sealed class Configuration : IPluginConfiguration
 
         Version = CurrentVersion;
     }
+}
+
+/// <summary>One saved custom workbook category. A plain class so any config serializer can read it.</summary>
+public sealed class WorkbookCustomCode
+{
+    public int Code { get; set; }
+
+    public string Folder { get; set; } = string.Empty;
 }
