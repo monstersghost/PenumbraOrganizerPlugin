@@ -1,7 +1,7 @@
 namespace PenumbraOrganizer.Plugin.Organizer.Classification;
 
 /// <summary>Which piece of a body setup a Body-category mod is. Replacer is the default and the fallback.</summary>
-public enum BodyPart { Replacer, Skeleton, Physics, HandsAndFeet, Sfw, TailsEarsHorns }
+public enum BodyPart { Replacer, Skeleton, Physics, HandsAndFeet, Sfw, TailsEarsHorns, RacialScaling }
 
 public static class BodyPartFolders
 {
@@ -13,6 +13,7 @@ public static class BodyPartFolders
         BodyPart.HandsAndFeet => "Hands and Feet",
         BodyPart.Sfw => "SFW",
         BodyPart.TailsEarsHorns => "Tails, Ears and Horns",
+        BodyPart.RacialScaling => "Racial Scaling",
         _ => throw new ArgumentOutOfRangeException(nameof(part), part, "Unknown body part."),
     };
 }

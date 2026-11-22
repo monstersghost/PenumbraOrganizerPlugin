@@ -30,6 +30,7 @@ public sealed class BodyFolderLayout
         BodyPart.Skeleton => "00. Skeleton",
         BodyPart.Physics => "01. Physics",
         BodyPart.TailsEarsHorns => "02. Tails, Ears and Horns",
+        BodyPart.RacialScaling => "03. Racial Scaling",
         BodyPart.Replacer => "00. Replacer",
         BodyPart.Sfw => "01. SFW",
         BodyPart.HandsAndFeet => "02. Hands and Feet",
@@ -38,7 +39,7 @@ public sealed class BodyFolderLayout
 
     /// <summary>True for the parts that sit above the bodies and belong to no body.</summary>
     public static bool IsShared(BodyPart part) =>
-        part is BodyPart.Skeleton or BodyPart.Physics or BodyPart.TailsEarsHorns;
+        part is BodyPart.Skeleton or BodyPart.Physics or BodyPart.TailsEarsHorns or BodyPart.RacialScaling;
 
     /// <summary>
     /// The folder below <c>Body/</c> for a mod's part and (optional) body, or null when the mod has
