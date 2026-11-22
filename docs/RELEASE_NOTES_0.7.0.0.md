@@ -107,3 +107,4 @@ This is a small test, and **the interface is not final**. It may be moved, resiz
 - Not verified in game or in Excel yet.
 - There is no per-mod tooltip for the winning rule; it appears only in the diagnostics export (`StagedRule:` and `RulesUnplaced:` lines).
 - The Sort tab layout is a test and is not final. See the pinned Sort row above.
+- The guide PDF behind the Help tab's button has not been rebuilt for this testing build, so it is out of date. The guide in the repo (`docs/USER_GUIDE.md`) and the Help tab text are current.
