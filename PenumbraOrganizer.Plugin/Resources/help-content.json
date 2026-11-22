@@ -325,7 +325,7 @@
     {
       "id": "sort.import-workbook",
       "title": "Import Workbook",
-      "short": "Reads folder choices back from an exported spreadsheet, so you can plan a large reorganisation outside the game."
+      "short": "Reads your folder choices and any custom categories back from an exported workbook and stages them for review. Codes and {type}, {creator}, {race} in a destination are filled in for you."
     },
     {
       "id": "sort.manual-assign",
@@ -359,8 +359,8 @@
     },
     {
       "id": "review.workbook-destinations",
-      "title": "Group workbook by",
-      "short": "How the exported workbook groups mods into suggested folders. This affects only the exported file, not the proposed paths shown above."
+      "title": "Export mode",
+      "short": "As is writes each mod's current folder. As suggested by Sort writes the folders the last Sort staged; it is greyed until you Sort, and again whenever the settings or staged paths change."
     },
     {
       "id": "review.diagnostics",
@@ -370,7 +370,7 @@
     {
       "id": "review.export-workbook",
       "title": "Export Workbook",
-      "short": "Writes every mod and its destination to a spreadsheet you can edit outside the game, then bring back with Import Workbook in the same Workbook group."
+      "short": "Writes every mod and its destination to a spreadsheet you can edit outside the game. Add your own categories (code 17 and up) on the Category Mapping sheet, then bring it back with Import Workbook."
     },
     {
       "id": "review.protect-and-skip",

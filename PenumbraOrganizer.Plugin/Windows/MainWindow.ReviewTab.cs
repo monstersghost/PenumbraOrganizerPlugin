@@ -150,8 +150,8 @@ public sealed partial class MainWindow
         DrawOrphanedFoldersSection();
     }
 
-    // Export and import side by side: the workflow is sort, export a pre-sorted workbook, tune it
-    // in Excel, import it, then review. Import is available whenever the activity gate allows it,
+    // Export and import side by side: the workflow is sort, export a workbook (as is, or the staged
+    // Sort), tune it in Excel, import it, then review. Import is available whenever the activity gate allows it,
     // including with a scan loaded and nothing staged, so a workbook can be imported without
     // sorting first. Results stay inside this group: the export path with Open Workbook, and the
     // import summary, errors and warnings, each until its own next run.
@@ -159,14 +159,22 @@ public sealed partial class MainWindow
     {
         ImGui.TextColored(PluginTheme.ChangedGood, "Workbook");
 
-        var strategyLabels = WorkbookStrategyOptions.Select(o => o.Label).ToArray();
         ImGui.SetNextItemWidth(220);
-        ImGui.Combo("Group workbook by", ref _workbookStrategyIndex, strategyLabels, strategyLabels.Length);
+        ImGui.Combo("Export mode", ref _workbookModeIndex, WorkbookModeLabels, WorkbookModeLabels.Length);
         Help.Tooltip(HelpTopics.ReviewWorkbookDestinations);
 
+        var mode = _workbookModeIndex == 1
+            ? Organizer.Workbook.WorkbookExportMode.AsSuggestedBySort
+            : Organizer.Workbook.WorkbookExportMode.AsIs;
+        var unavailable = mode == Organizer.Workbook.WorkbookExportMode.AsSuggestedBySort
+            ? _plugin.SuggestedWorkbookUnavailableReason()
+            : null;
+
+        ImGui.BeginDisabled(unavailable is not null);
         if (ImGui.Button("Export Workbook"))
-            ExportWorkbook(WorkbookStrategyOptions[_workbookStrategyIndex].Strategy);
-        Help.Tooltip(HelpTopics.ReviewExportWorkbook);
+            ExportWorkbook(mode);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.ReviewExportWorkbook, unavailable);
 
         ImGui.SameLine();
         // Re-established here from the Sort tab, where it used to live. The dialog callback fires on
@@ -194,6 +202,8 @@ public sealed partial class MainWindow
         }
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortImportWorkbook, gates.CanStageProposals ? null : ActivityGateReason);
+        if (unavailable is not null)
+            ImGui.TextDisabled(unavailable);
 
         if (_lastWorkbookExportPath is not null)
         {
@@ -210,6 +220,11 @@ public sealed partial class MainWindow
                 TextColoredWrapped(PluginTheme.CollisionBad, $"  {error}");
             foreach (var warning in _lastWorkbookImportResult.Warnings)
                 TextColoredWrapped(ImGuiColors.DalamudYellow, $"  {warning}");
+            if (_lastWorkbookImportResult.Lines is { Count: > 0 } lines)
+            {
+                foreach (var line in lines)
+                    ImGui.TextWrapped($"  {line}");
+            }
         }
     }
 
