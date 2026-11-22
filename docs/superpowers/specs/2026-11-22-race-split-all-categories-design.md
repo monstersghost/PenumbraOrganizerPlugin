@@ -140,7 +140,8 @@ Each row yields a race set plus whether the read was complete.
   without subtype `Iris`; Eyes is part `Face` with subtype `Iris`; Skin is any part containing `Skin` (real
   keys read `Skin Textures`, and the classifier already matches by containing); Tails/Ears/Horns is parts
   `Tail` and `Ears`. No fixture exists yet for ear or horn keys, so those names are confirmed in step 0. A key
-  with no race (`Player Face`) is no evidence.
+  with no race (`Player Face`) is no evidence. An iris-only mod has no other Face keys, so when it is
+  governed by the Face row (the Eyes row off) its race evidence is its iris keys.
 - **New scan data.** The keys exist only while a scan runs: `OrganizerModRow` keeps no changed-item keys
   today. This evidence therefore adds a row field (as `EmoteNames` is), filled at scan time, and takes effect
   only after a re-scan. Rows scanned before the upgrade have no such field and count as "no evidence"

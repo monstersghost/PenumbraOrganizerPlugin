@@ -317,10 +317,26 @@ files gloves, gauntlets, boots and nails under `Gear/03. Hands` and `Gear/05. Fe
 each body, since they fit most bodies. Tops, legs and sets still go under their body. A body that
 only had hands or feet mods no longer gets a folder.
 
-**Split hair by race** (off by default) files hair made for one race under that race, such as
-`Hair/Viera`. Hair made for several races, or with no race found, goes under `Hair/Multi-race`. With
-Split hair by hair number also on, the number is added below, as in `Hair/Viera/115`. With it off you
-get just the race folder.
+**Race** (its own section on the Sort tab) replaces the old Split hair by race box. **Split supported
+categories by race** is a master switch, off by default and greyed out under Creator grouping. Under it
+are six rows: Hair, Face, Eyes, Skin, Tails, ears and horns, and Racial scaling. A fresh install has every
+row ticked, so turning the master on splits all of them; untick a row to leave it as it is. If you used
+the old hair box, the update turns the master on with only Hair ticked, so nothing else moves.
+
+Folders are by race, never by gender, using Midlander, Highlander, Elezen, Miqo'te, Roegadyn, Lalafell,
+Au Ra, Hrothgar and Viera, such as `Face/Viera` or `Skin/Miqo'te`. A mod made for one race files under
+it. A mod made for several races goes to `Multi-race` while **Send multi-race mods to Multi-race** is
+ticked. Untick it and the mod goes under the highest-ranked race it covers in **Race priority**; a race
+you do not rank never wins. A mod with no race found, or one that could not be read, always goes to
+`Multi-race`. With Split hair by hair number also on, the hair number is added below, as in
+`Hair/Viera/115`.
+
+Eyes files iris-only face mods under `Face/Eyes/<race>`. Face paint is never split, because its files
+carry no race. Tails, ears and horns and Racial scaling need Split body mods by body type. A mod made only
+of racial scaling is filed under Gear today; with Racial scaling ticked it goes to
+`Body/03. Racial Scaling/<race>` instead. Face, Eyes, Skin and tails read their race when the library is
+scanned, so scan again after updating. Race priority is separate from Priority race under Hair, which only
+picks the hair number.
 
 **Split emotes by emote** (Animation section; off by default; greyed out under Creator grouping) breaks
 up `Animation and VFX/Emotes`. A mod with one emote goes to `Emotes/<emote name>`, a mod with several
