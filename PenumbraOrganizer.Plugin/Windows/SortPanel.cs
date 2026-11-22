@@ -43,11 +43,20 @@ public readonly record struct SortSelection(
             : $"{race.Enabled}:{(int)race.Rows}:{race.MultiRaceToMultiRace}:{string.Join(',', race.Priority.Ranked)}";
         IEnumerable<string> bodyLabels = BodyPriority?.Labels ?? [];
 
-        return string.Join(
+        var core = string.Join(
             '|',
             Strategy, SplitGear, SplitNpc, SplitHair, HairRaceCode ?? "-", MidlanderFallback,
             SplitGearBody, SplitBodyMods, string.Join(',', bodyLabels),
             Layout.SharedHandsAndFeet, Layout.SplitHairByRace, Layout.SplitEmotes, raceText);
+
+        if (Layout.Rules is not { HasRules: true } rules)
+            return core;
+
+        // The digest is length-prefixed and goes LAST, so no character inside a rule can blur two sets together.
+        var rulesRace = rules.UsesRace
+            ? $"{rules.Race.Enabled}:{(int)rules.Race.Rows}:{rules.Race.MultiRaceToMultiRace}:{string.Join(',', rules.Race.Priority.Ranked)}"
+            : "-";
+        return $"{core}|rr={rulesRace}|rules={rules.Digest}";
     }
 }
 

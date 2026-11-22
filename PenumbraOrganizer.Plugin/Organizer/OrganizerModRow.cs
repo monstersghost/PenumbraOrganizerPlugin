@@ -90,6 +90,12 @@ public sealed class OrganizerModRow
     public RaceFolderResult? StagedRace { get; set; }
 
     /// <summary>
+    /// The keyword rule that chose this row's folder in the most recent sort (ordinal and text captured at
+    /// staging time), or null. Cleared wherever <see cref="StagedRace"/> is.
+    /// </summary>
+    public StagedRule? StagedRule { get; set; }
+
+    /// <summary>
     /// Every body this mod could file under, by tier. Null unless the row passed the body gate
     /// (Gear cut to a body's shape, or a Body mod). Resolved against the user's priority at SORT
     /// time, so reordering the priority re-files mods without a rescan; <see cref="BodyType"/>
@@ -99,3 +105,6 @@ public sealed class OrganizerModRow
 
     public GearSlotDiagnostic GearSlotDiagnostic { get; init; } = GearSlotDiagnostic.NotApplicable;
 }
+
+/// <summary>The keyword rule that filed a row in the last sort.</summary>
+public sealed record StagedRule(int Ordinal, string Text);
