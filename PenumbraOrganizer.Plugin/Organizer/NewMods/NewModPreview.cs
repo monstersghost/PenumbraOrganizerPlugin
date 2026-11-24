@@ -1,10 +1,12 @@
 namespace PenumbraOrganizer.Plugin.Organizer.NewMods;
 
 /// <summary>One staged proposal: a mod whose proposed path differs from where it is.</summary>
-public readonly record struct StagedMove(string Name, string CurrentPath, string ProposedPath);
+/// <param name="Tool">"Heliosphere" or "Proteus" when a tool manages the mod (NewModPromptText.ToolTag), else null.</param>
+public readonly record struct StagedMove(string Name, string CurrentPath, string ProposedPath, string? Tool = null);
 
 /// <summary>One line of the confirm window: the mod, the folder it is in, the folder it would move to.</summary>
-public sealed record NewModPreviewRow(string Name, string From, string To);
+/// <param name="Tool">The managing tool's name, shown as a small tag beside the mod, or null.</param>
+public sealed record NewModPreviewRow(string Name, string From, string To, string? Tool = null);
 
 /// <summary>
 /// What a staged new-mod (or sortroot) sort would do, for the confirm window. Pure data: built from the
@@ -19,7 +21,8 @@ public sealed record NewModPreview(string Title, string ScopeText, IReadOnlyList
     public static NewModPreview Build(IEnumerable<StagedMove> moves, string? scopeText, bool newMods)
     {
         var rows = moves
-            .Select(m => new NewModPreviewRow(m.Name, FolderOf(m.CurrentPath, m.Name), FolderOf(m.ProposedPath, m.Name)))
+            .Select(m => new NewModPreviewRow(
+                m.Name, FolderOf(m.CurrentPath, m.Name), FolderOf(m.ProposedPath, m.Name), m.Tool))
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.To, StringComparer.OrdinalIgnoreCase)
             .ToList();

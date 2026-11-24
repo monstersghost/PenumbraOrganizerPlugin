@@ -31,7 +31,8 @@ internal sealed class PluginNewModHost : INewModSortHost
     public bool HasStagedProposals => StagedRows().Any();
 
     public IReadOnlyList<StagedMove> StagedMoves() =>
-        StagedRows().Select(m => new StagedMove(m.Name, m.CurrentPath, m.ProposedPath)).ToList();
+        StagedRows().Select(m => new StagedMove(m.Name, m.CurrentPath, m.ProposedPath,
+            NewModPromptText.ToolTag(m.HeliosphereManaged, m.ProteusRole))).ToList();
 
     public void DiscardStaged()
     {

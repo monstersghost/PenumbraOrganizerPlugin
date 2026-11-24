@@ -176,7 +176,7 @@ public sealed class Plugin : IDalamudPlugin
             new Organizer.NewMods.PluginNewModHost(this, _mainWindow, SendChat));
         // Their own windows, so they show with the main window closed. Each opens and closes itself
         // from the pipeline's state; their buttons only record answers for OnFrameworkUpdate.
-        WindowSystem.AddWindow(new Windows.NewModPopup(NewModPipeline, Config, SaveConfig));
+        WindowSystem.AddWindow(new Windows.NewModPopup(NewModPipeline, Config, SaveConfig, _mainWindow.OpenOnProtect));
         WindowSystem.AddWindow(new Windows.SortConfirmWindow(NewModPipeline));
 
         // Observe live changes. SetModPath is now reached only through the operation engine
@@ -385,18 +385,22 @@ public sealed class Plugin : IDalamudPlugin
 
         if (NewModTracker.TakeReady() is { Count: > 0 } batch)
         {
-            var eligible = EligibleNewMods(batch);
+            var (eligible, held) = ClassifyNewMods(batch);
             if (eligible.Count == 0)
-                Log.Information($"{batch.Count} new mods noticed; none would be moved by a root-only sort.");
-            else
-                NewModPipeline.Offer(batch, eligible.Count);
+                Log.Information($"{batch.Count} new mods noticed; none would be moved by a root-only sort"
+                    + (held.Total > 0
+                        ? $" ({held.Heliosphere} Heliosphere and {held.Proteus} Proteus kept in place by their Protected mode)."
+                        : "."));
+            NewModPipeline.Offer(batch, eligible.Count, held);
         }
 
         NewModPipeline.Update(now);
     }
 
-    // One mod-list read, no scan: which of these mods a root-only sort would actually move.
-    private IReadOnlyList<Organizer.OrganizerModRow> EligibleNewMods(IReadOnlyCollection<string> batch)
+    // One mod-list read, no scan: which of these mods a root-only sort would actually move, and how many
+    // new tool-managed mods the Protect tab's Protected mode keeps in place (told to the user, not moved).
+    private (IReadOnlyList<Organizer.OrganizerModRow> Eligible, Organizer.NewMods.ToolHeldCounts Held) ClassifyNewMods(
+        IReadOnlyCollection<string> batch)
     {
         var wanted = batch.ToHashSet(StringComparer.Ordinal);
         var candidates = new List<Organizer.NewMods.NewModCandidate>();
@@ -411,9 +415,11 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        return Organizer.NewMods.NewModEligibility.Filter(
+        var policy = Config.ToolPolicy;
+        var eligible = Organizer.NewMods.NewModEligibility.Filter(
             candidates, OrganizerState.ProtectedModIdentifiers.ToHashSet(StringComparer.Ordinal),
-            OrganizerState.FolderProtectionRules, Config.ToolPolicy);
+            OrganizerState.FolderProtectionRules, policy);
+        return (eligible, Organizer.NewMods.NewModEligibility.ToolHeld(candidates, policy));
     }
 
     private bool _eventLogDrainFaulted;

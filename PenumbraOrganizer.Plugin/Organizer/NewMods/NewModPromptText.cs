@@ -1,7 +1,17 @@
 namespace PenumbraOrganizer.Plugin.Organizer.NewMods;
 
 /// <summary>The new-mod popup as data: the question, the warnings that apply right now, the buttons.</summary>
-public sealed record NewModBanner(int Count, string Message, IReadOnlyList<string> Warnings);
+/// <param name="ToolLine">
+/// One extra line for new Heliosphere/Proteus mods of the same batch that their Protected mode keeps in place
+/// (NewModPromptText.BannerToolLine), or null.
+/// </param>
+public sealed record NewModBanner(int Count, string Message, IReadOnlyList<string> Warnings, string? ToolLine = null);
+
+/// <summary>
+/// The popup's notice when every new mod is one a tool's Protected mode keeps in place: nothing to sort,
+/// but the user is told why, with the way to the Protect tab.
+/// </summary>
+public sealed record NewModToolNotice(ToolHeldCounts Counts, string Message);
 
 /// <summary>Every line the new-mod popup, the confirm window and chat use. Plain ASCII.</summary>
 public static class NewModPromptText
@@ -29,6 +39,53 @@ public static class NewModPromptText
 
         return new NewModBanner(count, message, warnings);
     }
+
+    public const string OpenProtectTabLabel = "Open Protect tab";
+    public const string ToolNoticeOkLabel = "OK";
+    public const string ToolNoticeTitle = "New tool-managed mods";
+    private const string ToolNoticeHint = "You can change this on the Protect tab.";
+
+    /// <summary>The notice for new mods that only a tool's Protected mode holds back. Follows the Protect tab.</summary>
+    public static NewModToolNotice ToolNotice(ToolHeldCounts held)
+    {
+        var parts = new List<string>();
+        if (held.Heliosphere > 0)
+            parts.Add(ToolNoticeSentence(held.Heliosphere, "Heliosphere"));
+        if (held.Proteus > 0)
+            parts.Add(ToolNoticeSentence(held.Proteus, "Proteus"));
+        parts.Add(ToolNoticeHint);
+        return new NewModToolNotice(held, string.Join(" ", parts));
+    }
+
+    /// <summary>The banner's one extra line for the held tool mods of a mixed batch, or null when there are none.</summary>
+    public static string? BannerToolLine(ToolHeldCounts held)
+    {
+        if (held.Total <= 0)
+            return null;
+
+        var counts = new List<string>();
+        if (held.Heliosphere > 0)
+            counts.Add(ModCount(held.Heliosphere, "Heliosphere"));
+        if (held.Proteus > 0)
+            counts.Add(ModCount(held.Proteus, "Proteus"));
+
+        var stays = held.Total == 1
+            ? "It is Protected, so it stays where it is."
+            : "They are Protected, so they stay where they are.";
+        return $"Also added: {string.Join(" and ", counts)}. {stays} {ToolNoticeHint}";
+    }
+
+    /// <summary>The confirm window's tag for a tool-managed mod: "Heliosphere", "Proteus", or null.</summary>
+    public static string? ToolTag(bool heliosphereManaged, ProteusRole proteusRole) =>
+        proteusRole != ProteusRole.None ? "Proteus"
+        : heliosphereManaged ? "Heliosphere"
+        : null;
+
+    private static string ToolNoticeSentence(int count, string tool) => count == 1
+        ? $"1 new {tool} mod added. {tool} mods are Protected, so it stays where it is."
+        : $"{count} new {tool} mods added. {tool} mods are Protected, so they stay where they are.";
+
+    private static string ModCount(int count, string tool) => count == 1 ? $"1 {tool} mod" : $"{count} {tool} mods";
 
     public const string PopupTitle = "New mods";
     public const string DontShowPopupLabel = "Don't show this popup";

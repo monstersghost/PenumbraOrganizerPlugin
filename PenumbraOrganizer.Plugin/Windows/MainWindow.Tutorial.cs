@@ -37,6 +37,13 @@ public sealed partial class MainWindow
         RequestTab(HighlightTarget.ReviewTab);
     }
 
+    /// <summary>Opens the window on the Protect tab (the tool-mode notices' Open Protect tab button).</summary>
+    internal void OpenOnProtect()
+    {
+        IsOpen = true;
+        RequestTab(HighlightTarget.ProtectTab);
+    }
+
     // The flags for a tab: selects it for one frame when the walkthrough has just moved to it. The
     // caller opens the tab with these, then calls OutlineLastItem for the same target.
     private ImGuiTabItemFlags TutorialTabFlags(HighlightTarget me, ImGuiTabItemFlags extra = ImGuiTabItemFlags.None)

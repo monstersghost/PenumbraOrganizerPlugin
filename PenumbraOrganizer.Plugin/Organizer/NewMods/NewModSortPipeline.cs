@@ -65,6 +65,9 @@ public sealed class NewModSortPipeline
     private int _pendingEligible;
     private bool _bannerVisible;
     private Run? _run;
+    // New tool-managed mods their Protected mode keeps in place, told once: as the banner's extra line when
+    // a banner shows, otherwise as the standalone notice. Cleared when either is answered.
+    private ToolHeldCounts _held;
 
     public NewModSortPipeline(INewModSortHost host)
     {
@@ -78,10 +81,22 @@ public sealed class NewModSortPipeline
     /// under Do nothing. Warnings reflect the host's state at the moment of reading.
     /// </summary>
     public NewModBanner? Banner =>
-        _run is null && _bannerVisible && _pendingEligible > 0 && _host.ShowPopup
-        && _host.Setting != NewModAction.DoNothing
+        _run is null && _bannerVisible && _pendingEligible > 0 && PopupAllowed
             ? NewModPromptText.Banner(_pendingEligible, _host.HasStagedProposals, _host.HasSessionOverrides)
+                with { ToolLine = NewModPromptText.BannerToolLine(_held) }
             : null;
+
+    /// <summary>
+    /// The notice for new Heliosphere/Proteus mods their Protected mode keeps in place, or null. Shown only when
+    /// no banner is (a banner carries them as its extra line), never during a run, and silenced exactly like the
+    /// banner: popup turned off, or Do nothing.
+    /// </summary>
+    public NewModToolNotice? ToolNotice =>
+        _run is null && _held.Total > 0 && PopupAllowed && Banner is null
+            ? NewModPromptText.ToolNotice(_held)
+            : null;
+
+    private bool PopupAllowed => _host.ShowPopup && _host.Setting != NewModAction.DoNothing;
 
     /// <summary>What the confirm window shows, or null when no staged sort is waiting for an answer.</summary>
     public NewModPreview? Preview =>
@@ -117,6 +132,28 @@ public sealed class NewModSortPipeline
         Decide(new Batch(batch, eligibleCount));
     }
 
+    /// <summary>
+    /// <see cref="Offer(IReadOnlyCollection{string}, int)"/> plus the batch's new tool-managed mods that their
+    /// Protected mode keeps in place. Those are told about (banner line or notice) unless the popup is off or
+    /// the setting is Do nothing, in which case they are dropped silently, as before.
+    /// </summary>
+    public void Offer(IReadOnlyCollection<string> batch, int eligibleCount, ToolHeldCounts held)
+    {
+        if (held.Total > 0 && PopupAllowed)
+            _held += held;
+
+        Offer(batch, eligibleCount);
+    }
+
+    /// <summary>The notice's OK, X or Open Protect tab: it has been read.</summary>
+    public void DismissToolNotice()
+    {
+        if (ToolNotice is null)
+            return;
+
+        _held = default;
+    }
+
     /// <summary>Adds mods to pending without a banner or a run (the undebounced mods before sortnew).</summary>
     public void AddPending(IReadOnlyCollection<string> batch, int eligibleCount)
     {
@@ -132,6 +169,7 @@ public sealed class NewModSortPipeline
             return;
 
         _bannerVisible = false;
+        _held = default; // the banner's extra line told the user
         if (choice == NewModChoice.NotNow)
             return;
 

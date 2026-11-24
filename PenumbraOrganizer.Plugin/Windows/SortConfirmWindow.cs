@@ -89,6 +89,11 @@ public sealed class SortConfirmWindow : Window
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.Name);
+            if (row.Tool is { } tool)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled($"({tool})");
+            }
             ImGui.TableNextColumn();
             ImGui.TextDisabled(row.From);
             ImGui.TableNextColumn();
