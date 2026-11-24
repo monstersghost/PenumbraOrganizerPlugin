@@ -21,8 +21,8 @@ Other modes
 - [ ] Proteus: make a new Proteus mod with Proteus mods = Protected: the notice names Proteus. (Skip if Proteus does not create root mods for you; note where it puts them.)
 
 Silenced
-- [ ] Tick **Don't show this popup** on the notice: it closes and does not come back for later Heliosphere installs. Turn **Show a popup when new mods are found** back on in Sort settings.
-- [ ] Sort settings: new mods = Do nothing. Install a Heliosphere mod: no notice. Set it back.
+- [ ] Tick **Don't show this popup** on the notice: it closes and does not come back for later Heliosphere installs. Turn **Show a popup when new mods are found** back on in Sort > Auto sort.
+- [ ] Sort > Auto sort: new mods = Do nothing. Install a Heliosphere mod: no notice. Set it back.
 - [ ] Automatic sorting on, one ordinary + one Heliosphere mod: the ordinary one is sorted (chat line), then the notice about the Heliosphere one appears.
 
 Sort tab status line

@@ -56,10 +56,10 @@ public class NewModPromptTextTests
     public void PopupOff_ChatLine()
     {
         Assert.Equal(
-            "Penumbra Organizer: 3 new mods are loose in the root. Turn the popup back on in Sort > Advanced to sort them.",
+            "Penumbra Organizer: 3 new mods are loose in the root. Turn the popup back on in Sort > Auto sort to sort them.",
             NewModPromptText.PopupOff(3));
         Assert.Equal(
-            "Penumbra Organizer: 1 new mod is loose in the root. Turn the popup back on in Sort > Advanced to sort it.",
+            "Penumbra Organizer: 1 new mod is loose in the root. Turn the popup back on in Sort > Auto sort to sort it.",
             NewModPromptText.PopupOff(1));
     }
 

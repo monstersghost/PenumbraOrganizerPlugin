@@ -68,7 +68,7 @@
     {
       "id": "help.tab-sort",
       "title": "Sort",
-      "body": "Proposes a folder layout for your mods. The bar at the top stays in view while the rest scrolls: switch between Recommended and Advanced, press Sort, and see how many mods the sort covers.\n\nRecommended is one tidy layout for every kind of mod. Choose what to sort and how to group, and the example paths show where mods will go. Customise per category opens Advanced.\n\nAdvanced lists the 16 kinds of mod. Pick one to set its folder (nest with /, as Equipment/Gear), where its creator folder goes, and which splits it uses. Custom marks a category that differs from Recommended, and Reset to Recommended puts it back. The race, body priority and hair settings sit under the categories they affect.\n\nRules (in Advanced) file particular mods yourself and win over everything above. They still apply when you sort from Recommended, which says how many are active. Sort settings say what happens when new mods are installed.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand. The ? beside the Sort button brings you back here."
+      "body": "Proposes a folder layout for your mods. The bar at the top stays in view while the rest scrolls: switch between Recommended and Advanced, press Sort, and see how many mods the sort covers.\n\nRecommended is one tidy layout for every kind of mod. Choose what to sort and how to group, and the example paths show where mods will go. Customise per category opens Advanced.\n\nAdvanced lists the 16 kinds of mod. Pick one to set its folder (nest with /, as Equipment/Gear), where its creator folder goes, and which splits it uses. Custom marks a category that differs from Recommended, and Reset to Recommended puts it back. The race, body priority and hair settings sit under the categories they affect.\n\nRules (in Advanced) file particular mods yourself and win over everything above. They still apply when you sort from Recommended, which says how many are active. Auto sort says what happens when new mods are installed.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand. The ? beside the Sort button brings you back here."
     },
     {
       "id": "help.tab-review",
@@ -337,7 +337,7 @@
     {
       "id": "newmods.popup-dont-show",
       "title": "Don't show this popup",
-      "short": "Stops this popup. New mods still wait, with one chat line. Turn it back on in Sort > Advanced."
+      "short": "Stops this popup. New mods still wait, with one chat line. Turn it back on in Sort > Auto sort."
     },
     {
       "id": "newmods.confirm",

@@ -225,7 +225,7 @@ public class NewModSortPipelineTests
         Assert.Equal(3, pipeline.PendingCount);
         Assert.Equal(0, host.ScanStarts);
         Assert.Equal(
-            ["Penumbra Organizer: 3 new mods are loose in the root. Turn the popup back on in Sort > Advanced to sort them."],
+            ["Penumbra Organizer: 3 new mods are loose in the root. Turn the popup back on in Sort > Auto sort to sort them."],
             host.Chats);
     }
 

@@ -215,7 +215,7 @@ Sort now, since nothing would move. When the same batch also holds ordinary new 
 question appears with one extra line about the protected tool mods instead of a second popup. In
 **Sort inside their folder** or **Treat as normal** mode the new tool mods are offered like any other,
 and the confirm window marks them `(Heliosphere)` or `(Proteus)`. Turning the popup off (**Don't show
-this popup**, or **Show a popup when new mods are found** in Sort settings) or choosing Do nothing
+this popup**, or **Show a popup when new mods are found** in Sort > Auto sort) or choosing Do nothing
 also silences this notice.
 
 #### Sort inside folders
@@ -255,7 +255,7 @@ Choose a layout and press Sort. That computes a proposed folder path for every u
 The bar at the top stays in view while the rest of the tab scrolls. It holds the **Recommended** and
 **Advanced** switch, the **Sort** button, the line saying how many mods the sort covers, and the **?**
 button, which opens the Help tab at its Sort section. Below it are the screen you picked, then (in
-Advanced only) the **Rules** card, the **Sort settings** card (what happens when new mods are
+Advanced only) the **Rules** card, the **Auto sort** card (what happens when new mods are
 installed) and manual assignment.
 
 **Heliosphere and Proteus status line.** At the top of the scrolling area, on both Recommended and
@@ -278,7 +278,7 @@ with **Customise per category**, which opens Advanced. If you have customised a 
 how many and the examples show your layout, so the screen never describes a layout the Sort will not use.
 Rules are edited in Advanced only, but they still apply when you sort from Recommended; while any rule
 is active, Recommended says so ("2 rules active, edit them in Advanced") with **Show rules**, which opens
-Advanced.
+Advanced with the Rules card open and scrolled into view.
 
 **Advanced** has the 16 kinds of mod on the left and the selected one's settings on the right. A
 **Custom** badge marks a category that differs from Recommended, and the header counts them. Group by

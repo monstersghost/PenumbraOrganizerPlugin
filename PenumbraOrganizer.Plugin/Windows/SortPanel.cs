@@ -78,7 +78,7 @@ public readonly record struct SortSelection(
 
 /// <summary>
 /// The Sort tab's host (spec 2): the pinned bar (Recommended | Advanced, Sort, the scope line, ?), then the
-/// Recommended or Advanced screen, then the Rules card (Advanced only) and the Sort settings card. The category splits are read from the
+/// Recommended or Advanced screen, then the Rules card (Advanced only) and the Auto sort card. The category splits are read from the
 /// saved layouts; the Advanced editor (<see cref="CategoryLayoutEditor"/>) is the only thing that writes them.
 /// </summary>
 /// <remarks>
@@ -515,7 +515,7 @@ public sealed partial class SortPanel
 
     /// <summary>
     /// Everything under the pinned header: the Recommended or Advanced screen, then the Rules card (Advanced only)
-    /// and the Sort settings card. Drawn inside MainWindow's scrolling region.
+    /// and the Auto sort card. Drawn inside MainWindow's scrolling region.
     /// </summary>
     public void DrawBody(
         OrganizerState state,
@@ -541,7 +541,7 @@ public sealed partial class SortPanel
             DrawAdvancedLayout(state, gates, config, saveConfig, strategy, states, splitReason, bodyLabels, readEnabledMods);
 
         // Rules only in Advanced, so Recommended stays simple; they still apply in both (saved settings), and the
-        // Recommended card says how many are active. Sort settings is not a layout choice, so both screens show it.
+        // Recommended card says how many are active. Auto sort is not a layout choice, so both screens show it.
         if (_mode == SortTabMode.Advanced)
         {
             DrawRulesCard(state, gates, config, saveConfig, canonicalizeCreator);
@@ -563,11 +563,12 @@ public sealed partial class SortPanel
 
     private static readonly string[] NewModActionLabels = ["Ask", "Sort automatically", "Do nothing"];
 
-    // The Sort settings card (formerly the "Advanced" section; Advanced is now a mode). Collapsed by default. Saved
-    // the moment it changes, like the other Sort tab choices.
+    // The Auto sort card (first the "Advanced" section, then "Sort settings"; Advanced is now a mode). Collapsed by
+    // default. Saved the moment it changes, like the other Sort tab choices. The ### id is the one the card had as
+    // Sort settings, so a header the user left open stays open after the rename.
     private static void DrawSortSettings(Configuration config, Action saveConfig)
     {
-        if (!ImGui.CollapsingHeader("Sort settings###sort-settings"))
+        if (!ImGui.CollapsingHeader("Auto sort###sort-settings"))
             return;
 
         var index = (int)config.NewModAction;

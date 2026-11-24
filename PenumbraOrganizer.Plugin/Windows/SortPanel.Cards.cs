@@ -4,7 +4,7 @@ using PenumbraOrganizer.Plugin.Windows.Widgets;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
-// The two collapsible cards under the screens: Rules (Advanced only), then Sort settings (both screens).
+// The two collapsible cards under the screens: Rules (Advanced only), then Auto sort (both screens).
 public sealed partial class SortPanel
 {
     // Set by Recommended's Show rules: Advanced then scrolls the page to the Rules card and opens its header. Kept

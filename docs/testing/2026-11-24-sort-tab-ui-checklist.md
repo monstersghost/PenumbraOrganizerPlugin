@@ -9,7 +9,7 @@ Screens and the bar
 - [ ] Recommended: the four example paths change when Group by changes (Creator only shows `Ann / Medieval Dress`), and the Hair example gains `Viera` when Split by race is turned on in Advanced.
 - [ ] Recommended: "Customise per category" opens Advanced; after customising a category the "N categories customised" line and "Show in Advanced" appear, and the examples show the customised layout.
 - [ ] Recommended: the "Everything else" line says "Race split is off." with the master off and "Split by race is on (see Advanced)." with it on.
-- [ ] Rules only in Advanced: Recommended shows no Rules card (Sort settings and Manual assignment still show); Advanced shows the Rules card between the Advanced layout card and Sort settings.
+- [ ] Rules only in Advanced: Recommended shows no Rules card (Auto sort and Manual assignment still show); Advanced shows the Rules card between the Advanced layout card and Auto sort.
 - [ ] Recommended with rules: with one enabled, valid rule the first card says "1 rule active, edit it in Advanced"; with two, "2 rules active, edit them in Advanced"; a switched-off rule or one with a red error is not counted; with none the line is gone. "Show rules" opens Advanced; its tooltip is the Rules help.
 - [ ] "Show rules" shows the rules (fix/ui-round3): with the Rules header closed and the page scrolled to the top, click it on Recommended. Advanced opens with the Rules header open, and the page scrolls so the Rules card's top is at (or near) the top of the view and stays there once the cards above have finished growing (no jump a frame later). Repeat with a short window, with Gear selected (tall Advanced card) and with the header already open. Close the header by hand afterwards: it stays closed (the open happens once). Type into a rule, switch to Recommended, click Show rules: the typed text is still there and saved.
 - [ ] Rules still apply from Recommended: with an active rule, press Sort on Recommended and the matching mod gets the rule's folder on Review Changes.
@@ -35,9 +35,9 @@ Advanced
 - [ ] NPC: with the scraped-list feature compiled in, "Also use the NPC list scraped from the wiki" shows under the NPC editor and saves; with it compiled out (today's builds) nothing shows.
 - [ ] Labels before controls everywhere on the tab: Group by, What to sort, Priority race, First-choice body, Add a race, When new mods are installed, Search mods and Destination folder each read label first, the label text level with the text inside its box; tooltips still show over the control.
 - [ ] Split rows: the depth number sits level with the toggle's label, not a few pixels above it.
-- [ ] Right margin: every top-level card (Recommended, What Recommended does, Advanced layout, Rules, Sort settings) and the Manual assignment mod list stop a small gap short of the scrollbar (or the window edge when there is no scrollbar); the example-path strips end inside their card; no horizontal scrollbar appears at any width. The Body types and Race cards inside Advanced fill the editor column.
+- [ ] Right margin: every top-level card (Recommended, What Recommended does, Advanced layout, Rules, Auto sort) and the Manual assignment mod list stop a small gap short of the scrollbar (or the window edge when there is no scrollbar); the example-path strips end inside their card; no horizontal scrollbar appears at any width. The Body types and Race cards inside Advanced fill the editor column.
 - [ ] Pinned bar: the ? icon sits at the right end of the bar; a long scope line (several rule notes) wraps before it instead of running under it or off the window, at 900 px and wide.
-- [ ] Card spacing: the gap between consecutive cards is the same on both screens (Recommended no longer has a double gap above Sort settings).
+- [ ] Card spacing: the gap between consecutive cards is the same on both screens (Recommended no longer has a double gap above Auto sort).
 - [ ] Manual assignment: with 0 mods ticked, tick one and click Assign in the same motion; the click lands (stable ### id). At 900 px the Assign button fits on the Destination folder line.
 - [ ] Narrow window: at the 900 px minimum width the list and editor stay side by side (stacking needs a lower minimum, B14); nothing overlaps or clips badly.
 
@@ -60,7 +60,7 @@ Cards, help, staleness
 - [ ] Cards: the first frame of a card, opening Rules or Body priority inside a card, and adding a rule grow the card on the next frame without visible flicker or clipping; the page scrolls with the mouse wheel over a card.
 - [ ] Scroll jump (fixed): on Advanced with Gear selected, open Body priority and Full priority order, then expand Manual assignment and wheel down to the bottom of the mod list and back up. The page scrolls smoothly and never jumps back up; the scrollbar thumb does not change size while scrolling. Repeat on Recommended with a short window.
 - [ ] Rules card (Advanced): add a rule; the header label count changes and the header stays open (### id).
-- [ ] Sort settings card: When new mods are installed and the popup option still save.
+- [ ] Auto sort card (renamed from Sort settings in fix/ui-round3): the header reads "Auto sort" on both screens; When new mods are installed and the popup option still save. If the Sort settings header was open before updating, it is still open (same ### id). With the popup turned off, installing a mod prints the chat line "... Turn the popup back on in Sort > Auto sort to sort it."; the Help text of "Don't show this popup" says "Turn it back on in Sort > Auto sort."
 - [ ] "Selection changed since the last sort" appears in the bar after changing a split, a folder, a creator level, Group by, the race master or a rule.
 - [ ] Tooltips: every new control shows its help text; the segmented controls show it over the last segment (known limit); the Help tab's Sort section lists Recommended or Advanced, Categories, Folder, Creator folder, Splits, Example, Select all splits and Reset to Recommended, and the renamed split topics.
 - [ ] Walkthrough: the Sort step still outlines the Sort button; its text reads true.
@@ -79,7 +79,7 @@ Decisions that need the author's OK:
 
 Wording left as it is:
 
-- **"Sort > Advanced".** The new-mod chat line (`NewModPromptText`, pinned word for word by `NewModPromptTextTests` and `NewModSortPipelineTests`) and the help short of `newmods.popup-dont-show` still say "Turn it back on in Sort > Advanced". The setting now lives in the **Sort settings** card, and "Advanced" is now a screen of the Sort tab, so the line points to the wrong place. Changing it means changing those tests' expected text; it was left for the author to decide (suggested: "Sort > Sort settings").
+- **"Sort > Advanced" (resolved in fix/ui-round3).** The author renamed the Sort settings card to **Auto sort**; the new-mod chat line (`NewModPromptText`, with `NewModPromptTextTests` and `NewModSortPipelineTests` updated to match) and the help short of `newmods.popup-dont-show` now say "Sort > Auto sort".
 - The Templates tab's export section still has its own checkboxes named "Split gear by equipment slot" and so on. They belong to template export, not the Sort tab, and were out of scope.
 
 Other things to know:

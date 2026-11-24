@@ -98,10 +98,13 @@ public static class NewModPromptText
     /// <summary>Why a confirm window was closed without applying: its staged sort no longer matches the library.</summary>
     public const string ConfirmStale = "The library changed before the sort was confirmed, so nothing was applied.";
 
-    /// <summary>The one chat line sent instead of the popup when the user has turned the popup off.</summary>
+    /// <summary>
+    /// The one chat line sent instead of the popup when the user has turned the popup off. "Auto sort" is the Sort
+    /// tab card that holds the popup setting (SortPanel.DrawSortSettings).
+    /// </summary>
     public static string PopupOff(int count) => count == 1
-        ? Prefix + "1 new mod is loose in the root. Turn the popup back on in Sort > Advanced to sort it."
-        : Prefix + $"{count} new mods are loose in the root. Turn the popup back on in Sort > Advanced to sort them.";
+        ? Prefix + "1 new mod is loose in the root. Turn the popup back on in Sort > Auto sort to sort it."
+        : Prefix + $"{count} new mods are loose in the root. Turn the popup back on in Sort > Auto sort to sort them.";
 
     /// <summary>After /porganizer sortnew or sortroot staged its sort: the confirm window is open in game.</summary>
     public static string ConfirmOpened(int count, bool newMods)
