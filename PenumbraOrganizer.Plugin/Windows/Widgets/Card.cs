@@ -10,7 +10,9 @@ namespace PenumbraOrganizer.Plugin.Windows.Widgets;
 /// <remarks>
 /// Dalamud's ImGui binding has no child auto-resize flag (no ImGuiChildFlags), so the card remembers where its
 /// content ended last frame and opens at that height (<see cref="WidgetLayout.CardHeight"/>); the first frame of a
-/// new card, or a frame where its content grows, is one frame short. The wheel scrolls the page, not the card.
+/// new card, or a frame where its content grows, is one frame short. A card scrolled out of view keeps its last
+/// height (<see cref="WidgetLayout.CardContentBottom"/>), so the page never shrinks under the scroll position. The
+/// wheel scrolls the page, not the card.
 /// </remarks>
 public static class Card
 {
@@ -32,7 +34,11 @@ public static class Card
         return new CardScope(id, visible);
     }
 
-    internal static void Remember(string id, float contentBottom) => Heights[id] = contentBottom;
+    internal static void Remember(string id, float contentBottom, bool drawn)
+    {
+        Heights.TryGetValue(id, out var remembered);
+        Heights[id] = WidgetLayout.CardContentBottom(drawn, remembered, contentBottom);
+    }
 }
 
 /// <summary>Ends a <see cref="Card"/>. A class, so a second Dispose cannot end the child twice.</summary>
@@ -57,8 +63,9 @@ public sealed class CardScope : IDisposable
         if (_ended)
             return;
         _ended = true;
-        // The cursor's local Y is where the content ended (it already includes the top padding).
-        Card.Remember(_id, ImGui.GetCursorPosY());
+        // The cursor's local Y is where the content ended (it already includes the top padding). A clipped card drew
+        // nothing, so its cursor says nothing about its height: it keeps the last measurement (no scroll jump).
+        Card.Remember(_id, ImGui.GetCursorPosY(), Visible);
         ImGui.EndChild(); // BeginChild needs EndChild whatever it returned
     }
 }

@@ -110,6 +110,15 @@ public static class WidgetLayout
         contentBottom <= 0f ? paddingY * 2f + 1f : contentBottom + paddingY;
 
     /// <summary>
+    /// What a card remembers for next frame's <see cref="CardHeight"/>: the new measurement when its content was
+    /// drawn, otherwise the previous one. A card scrolled fully out of view is skipped by ImGui (BeginChild returns
+    /// false), so its cursor stays at the top padding; remembering that collapsed the card, shortened the page by
+    /// the card's height and made ImGui clamp the scroll position, which is the Sort tab's scroll jump.
+    /// </summary>
+    public static float CardContentBottom(bool drawn, float remembered, float measured) =>
+        drawn ? measured : remembered;
+
+    /// <summary>
     /// The pieces of a path preview interleaved with separators: the widths of segment 0, separator, segment 1, and
     /// so on, so <see cref="Offsets"/> places them. Empty for no segments.
     /// </summary>

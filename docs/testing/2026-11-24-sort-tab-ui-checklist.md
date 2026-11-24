@@ -51,6 +51,7 @@ Old controls gone, settings kept (Task 9)
 
 Cards, help, staleness
 - [ ] Cards: the first frame of a card, opening Rules or Body priority inside a card, and adding a rule grow the card on the next frame without visible flicker or clipping; the page scrolls with the mouse wheel over a card.
+- [ ] Scroll jump (fixed): on Advanced with Gear selected, open Body priority and Full priority order, then expand Manual assignment and wheel down to the bottom of the mod list and back up. The page scrolls smoothly and never jumps back up; the scrollbar thumb does not change size while scrolling. Repeat on Recommended with a short window.
 - [ ] Rules card (Advanced): add a rule; the header label count changes and the header stays open (### id).
 - [ ] Sort settings card: When new mods are installed and the popup option still save.
 - [ ] "Selection changed since the last sort" appears in the bar after changing a split, a folder, a creator level, Group by, the race master or a rule.

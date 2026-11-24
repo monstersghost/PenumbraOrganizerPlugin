@@ -95,4 +95,33 @@ public class WidgetLayoutTests
         Assert.Equal(21f, WidgetLayout.CardHeight(0f, 10f));
         Assert.Equal(21f, WidgetLayout.CardHeight(-3f, 10f));
     }
+
+    // The scroll-jump fix: a card scrolled out of view is skipped by ImGui, so its cursor never moves past the top
+    // padding. Remembering that would collapse the card, shrink the page and make ImGui clamp the scroll position.
+    [Fact]
+    public void CardContentBottom_KeepsTheLastMeasurement_WhileTheCardIsClipped()
+    {
+        Assert.Equal(480f, WidgetLayout.CardContentBottom(drawn: false, remembered: 480f, measured: 10f));
+        Assert.Equal(0f, WidgetLayout.CardContentBottom(drawn: false, remembered: 0f, measured: 10f));
+    }
+
+    [Fact]
+    public void CardContentBottom_TakesTheNewMeasurement_WhenTheCardWasDrawn()
+    {
+        Assert.Equal(520f, WidgetLayout.CardContentBottom(drawn: true, remembered: 480f, measured: 520f));
+        Assert.Equal(200f, WidgetLayout.CardContentBottom(drawn: true, remembered: 480f, measured: 200f));
+    }
+
+    [Fact]
+    public void CardHeight_StaysTheSame_AcrossAClippedFrame()
+    {
+        // Drawn, then clipped (measured only the top padding), then drawn again: the height never dips.
+        var padding = 10f;
+        var remembered = WidgetLayout.CardContentBottom(true, 0f, 300f);
+        var visibleHeight = WidgetLayout.CardHeight(remembered, padding);
+        remembered = WidgetLayout.CardContentBottom(false, remembered, padding);
+        Assert.Equal(visibleHeight, WidgetLayout.CardHeight(remembered, padding));
+        remembered = WidgetLayout.CardContentBottom(true, remembered, 300f);
+        Assert.Equal(visibleHeight, WidgetLayout.CardHeight(remembered, padding));
+    }
 }
