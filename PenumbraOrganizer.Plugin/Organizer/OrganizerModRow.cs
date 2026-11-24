@@ -25,6 +25,14 @@ public sealed class OrganizerModRow
     public ModCategory? Category { get; init; }
     public string? SubCategory { get; init; }
 
+    /// <summary>
+    /// A Weapon row's job folder: a job abbreviation such as SAM or PLD (a class folds into its job), or
+    /// <c>Multiclass</c>. Null for every other row, and for a weapon whose items matched no job, which then stays
+    /// directly under the Weapon folder. Set at scan time from the game's item data; used only while the Weapon
+    /// category's Job split is on. Its own field, like <see cref="BodyType"/>, so SubCategory keeps its meaning.
+    /// </summary>
+    public string? WeaponJob { get; init; }
+
     /// <summary>Every supported hair number the mod's files and EST entries carry. Null unless a readable hair mod.</summary>
     public IReadOnlySet<int>? HairFlat { get; init; }
 

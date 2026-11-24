@@ -41,16 +41,47 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
     /// is classified Weapon (<see cref="ModTypeClassifier.EnrichWeapon"/>). Off (the default): classification is
     /// exactly what it was before the split existed.
     /// </param>
+    /// <param name="itemJobLookup">
+    /// The jobs an item name belongs to, for a Weapon row's job folder. Null (and with classifyWeapons off) means no
+    /// job is ever looked up. A lookup that throws is treated as "no job" for the rest of this scan, with one warning.
+    /// </param>
     public ScanProcessor(
         string configDirectory,
         bool useScrapedNpcNameList,
         IReadOnlySet<string>? knownHeliosphereIdentifiers = null,
-        bool classifyWeapons = false)
+        bool classifyWeapons = false,
+        IItemJobLookup? itemJobLookup = null)
     {
         _configDirectory = configDirectory;
         _useScrapedNpcNameList = useScrapedNpcNameList;
         _knownHeliosphereIdentifiers = knownHeliosphereIdentifiers ?? new HashSet<string>(StringComparer.Ordinal);
         ClassifiesWeapons = classifyWeapons;
+        _itemJobLookup = itemJobLookup;
+    }
+
+    private IItemJobLookup? _itemJobLookup;
+
+    // The job folder for a Weapon row, from the Gear-shaped changed-item keys (a weapon's key is its item name).
+    // Fail-soft: the real lookup reads game data, so any failure drops the lookup for this scan and warns once.
+    private string? WeaponJobFor(IEnumerable<string> changedItemKeys)
+    {
+        if (_itemJobLookup is not { } lookup)
+            return null;
+
+        try
+        {
+            return WeaponJobs.Resolve(
+                changedItemKeys.Select(ChangedItemKeyParser.Parse)
+                    .Where(k => k.Shape == ChangedItemKeyShape.Gear && !string.IsNullOrWhiteSpace(k.ItemName))
+                    .Select(k => k.ItemName!),
+                lookup);
+        }
+        catch (Exception ex)
+        {
+            _itemJobLookup = null;
+            _warnings.Add($"Weapon job lookup failed ({ex.GetType().Name}: {ex.Message}); weapons are filed without a job folder this scan.");
+            return null;
+        }
     }
 
     /// <summary>Whether this scan classifies weapon-only mods as Weapon. Published with the rows.</summary>
@@ -165,6 +196,7 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
             ProteusRole = ProteusDetector.Classify(item.Identifier, item.Author),
             Category = classification.Category,
             SubCategory = classification.SubCategory,
+            WeaponJob = classification.Category == ModCategory.Weapon ? WeaponJobFor(item.ChangedItemKeys) : null,
             BodyType = bodyType,
             BodyCandidates = bodyCandidates,
             BodyPart = bodyPart,

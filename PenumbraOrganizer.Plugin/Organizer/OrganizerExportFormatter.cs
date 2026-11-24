@@ -58,6 +58,9 @@ public static class OrganizerExportFormatter
             sb.AppendLine($"Author: {mod.Author}");
             sb.AppendLine($"Category: {(mod.Category is null ? "(none)" : mod.Category.Value.ToString())}");
             sb.AppendLine($"SubCategory: {mod.SubCategory ?? "(none)"}");
+            // Weapon rows only (they exist only while the Weapon Job split is on), so every other export is unchanged.
+            if (mod.Category == PenumbraOrganizer.Core.Classification.ModCategory.Weapon)
+                sb.AppendLine($"WeaponJob: {mod.WeaponJob ?? "(none)"}");
             // Always emitted, including "(none)", unlike GearSlotDiagnostic below which is
             // suppressed when not applicable. A body type is read from the mod's NAME, so it is
             // the classification signal most likely to be wrong, and "this mod matched no body"

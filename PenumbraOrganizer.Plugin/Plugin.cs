@@ -24,6 +24,14 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+
+    // The Item sheet lookup for the Weapon Job split, created on first use and kept, so its index is built once per
+    // session (lazily, on the scan's background thread). Null DataManager (never in game) means no lookup.
+    private LuminaItemJobLookup? _itemJobLookup;
+
+    private IItemJobLookup? ItemJobLookup =>
+        DataManager is null ? null : _itemJobLookup ??= new LuminaItemJobLookup(DataManager);
 
     private const string CommandName = "/porganizer";
 
@@ -525,7 +533,9 @@ public sealed class Plugin : IDalamudPlugin
         EnsureAdmitted();
         ScanWork.Start(new ScanJob(
             this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList,
-            Config.KnownHeliosphereIdentifiers));
+            Config.KnownHeliosphereIdentifiers,
+            classifyWeapons: false, // Not switchable yet: the Weapon Job split arrives in the next change.
+            itemJobLookup: ItemJobLookup));
     }
 
     /// <summary>

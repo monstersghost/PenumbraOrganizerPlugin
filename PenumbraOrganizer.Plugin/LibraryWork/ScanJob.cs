@@ -1,6 +1,7 @@
 using Penumbra.Api.IpcSubscribers;
 using PenumbraOrganizer.Plugin.LibraryWork.Pure;
 using PenumbraOrganizer.Plugin.Organizer;
+using PenumbraOrganizer.Plugin.Organizer.Classification;
 
 namespace PenumbraOrganizer.Plugin.LibraryWork;
 
@@ -15,6 +16,8 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
     private readonly string _configDirectory;
     private readonly bool _useScrapedNpcNameList;
     private readonly IReadOnlySet<string> _knownHeliosphereIdentifiers;
+    private readonly bool _classifyWeapons;
+    private readonly IItemJobLookup? _itemJobLookup;
     private ScanProcessor? _processor;
 
     /// <param name="knownHeliosphereIdentifiers">
@@ -25,12 +28,16 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
         Plugin plugin,
         string configDirectory,
         bool useScrapedNpcNameList,
-        IReadOnlySet<string>? knownHeliosphereIdentifiers = null)
+        IReadOnlySet<string>? knownHeliosphereIdentifiers = null,
+        bool classifyWeapons = false,
+        IItemJobLookup? itemJobLookup = null)
     {
         _plugin = plugin;
         _configDirectory = configDirectory;
         _useScrapedNpcNameList = useScrapedNpcNameList;
         _knownHeliosphereIdentifiers = knownHeliosphereIdentifiers ?? new HashSet<string>(StringComparer.Ordinal);
+        _classifyWeapons = classifyWeapons;
+        _itemJobLookup = itemJobLookup;
     }
 
     public string DisplayName => "Scan";
@@ -53,7 +60,9 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
                 ? changedItems.Keys.ToList()
                 : [])).ToList();
 
-        _processor = new ScanProcessor(_configDirectory, _useScrapedNpcNameList, _knownHeliosphereIdentifiers);
+        _processor = new ScanProcessor(
+            _configDirectory, _useScrapedNpcNameList, _knownHeliosphereIdentifiers, _classifyWeapons,
+            _classifyWeapons ? _itemJobLookup : null);
         return new LibraryWorkBatch<ScanSeed, OrganizerModRow>(seeds, _processor);
     }
 

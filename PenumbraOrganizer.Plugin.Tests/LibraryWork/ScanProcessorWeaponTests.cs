@@ -14,7 +14,11 @@ public class ScanProcessorWeaponTests
     private const string Katana = "chara/weapon/w2201/obj/body/b0001/model/w2201b0001.mdl";
     private const string KatanaTexture = "chara/weapon/w2201/obj/body/b0001/texture/v01_w2201b0001_n.tex";
 
-    private static OrganizerModRow Scan(bool classifyWeapons, string name, string changedItem, params string[] gamePaths)
+    private static OrganizerModRow Scan(bool classifyWeapons, string name, string changedItem, params string[] gamePaths) =>
+        ScanWith(classifyWeapons, null, name, [changedItem], gamePaths).Row;
+
+    private static (OrganizerModRow Row, ScanProcessor Processor) ScanWith(
+        bool classifyWeapons, IItemJobLookup? lookup, string name, string[] changedItems, params string[] gamePaths)
     {
         var dir = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
         dir.Create();
@@ -24,16 +28,65 @@ public class ScanProcessorWeaponTests
             File.WriteAllText(Path.Combine(dir.FullName, "default_mod.json"), "{\"Files\":{" + entries + "}}");
             var processor = new ScanProcessor(
                 Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()), useScrapedNpcNameList: false,
-                classifyWeapons: classifyWeapons);
+                classifyWeapons: classifyWeapons, itemJobLookup: lookup);
             processor.Prepare(CancellationToken.None);
-            return processor.Process(
-                new ScanSeed("mod-dir", name, "An Author", "Gear/" + name, dir.FullName, [changedItem]),
+            var row = processor.Process(
+                new ScanSeed("mod-dir", name, "An Author", "Gear/" + name, dir.FullName, changedItems),
                 CancellationToken.None)!;
+            return (row, processor);
         }
         finally
         {
             dir.Delete(recursive: true);
         }
+    }
+
+    private sealed class ThrowingLookup : IItemJobLookup
+    {
+        public int Calls { get; private set; }
+
+        public IReadOnlySet<string>? JobsFor(string itemName)
+        {
+            Calls++;
+            throw new InvalidOperationException("sheet unavailable");
+        }
+    }
+
+    [Fact]
+    public void On_AWeaponGetsTheJobOfItsItems_FromTheInjectedLookup()
+    {
+        var lookup = new Organizer.Classification.WeaponJobsTests.FakeLookup(new() { ["Some Katana"] = ["SAM"] });
+        var (row, _) = ScanWith(true, lookup, "Onikage Shura", ["Some Katana", "Vfx"], Katana);
+
+        Assert.Equal(ModCategory.Weapon, row.Category);
+        Assert.Equal("SAM", row.WeaponJob);
+    }
+
+    [Fact]
+    public void On_AWeaponWithNoMatchingItem_HasNoJob()
+    {
+        var lookup = new Organizer.Classification.WeaponJobsTests.FakeLookup(new());
+        Assert.Null(ScanWith(true, lookup, "Onikage Shura", ["Some Katana"], Katana).Row.WeaponJob);
+    }
+
+    [Fact]
+    public void Off_OrNotAWeapon_TheLookupIsNeverAsked()
+    {
+        var lookup = new Organizer.Classification.WeaponJobsTests.FakeLookup(new() { ["Some Katana"] = ["SAM"] });
+        Assert.Null(ScanWith(false, lookup, "Onikage Shura", ["Some Katana"], Katana).Row.WeaponJob);
+        Assert.Null(ScanWith(true, lookup, "Dress", ["Some Katana"], "chara/equipment/e0001/model/c0101e0001_top.mdl").Row.WeaponJob);
+        Assert.Empty(lookup.Asked);
+    }
+
+    [Fact]
+    public void ALookupThatThrows_FailsSoft_NoJobAndOneWarning()
+    {
+        var lookup = new ThrowingLookup();
+        var (row, processor) = ScanWith(true, lookup, "Onikage Shura", ["Some Katana"], Katana);
+
+        Assert.Equal(ModCategory.Weapon, row.Category);
+        Assert.Null(row.WeaponJob);
+        Assert.Single(processor.Warnings, w => w.Contains("sheet unavailable", StringComparison.Ordinal));
     }
 
     [Fact]
