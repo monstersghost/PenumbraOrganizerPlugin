@@ -709,7 +709,8 @@ public sealed class Plugin : IDalamudPlugin
             mode,
             staged ? OrganizerState.SortFingerprint : null,
             Config.WorkbookCustomCodes.Select(c => new Organizer.Workbook.CustomCode(c.Code, c.Folder)).ToList(),
-            Organizer.WorkbookAdapter.Leaves(OrganizerState, staged));
+            Organizer.WorkbookAdapter.Leaves(OrganizerState, staged),
+            Windows.SortSelectionFactory.PlacementFor(Config));
 
         // ClosedXML's SaveAs validates the file extension and rejects anything but
         // .xlsx/.xlsm/.xltx/.xltm, so the temp name must keep .xlsx as its actual extension -
@@ -743,14 +744,16 @@ public sealed class Plugin : IDalamudPlugin
     {
         var inventory = Organizer.WorkbookAdapter.ToScanInventory(OrganizerState, BuildInstallation());
         var race = Organizer.RaceSplitOptions.FromConfig(Config);
+        var placement = Windows.SortSelectionFactory.PlacementFor(Config);
         var rowsById = OrganizerState.Mods.ToDictionary(r => r.Identifier, StringComparer.Ordinal);
         var context = new Organizer.Workbook.WorkbookImportContext(
             id => rowsById.TryGetValue(id, out var row)
-                ? Organizer.Workbook.WorkbookTokens.For(row, WorkbookCanonicalizer.Canonicalize, race)
+                ? Organizer.Workbook.WorkbookTokens.For(row, WorkbookCanonicalizer.Canonicalize, race, placement)
                 : Organizer.Workbook.DestinationTokens.None,
             id => rowsById.TryGetValue(id, out var row)
                 ? Organizer.WorkbookAdapter.SplitPath(row.CurrentPath).Leaf
-                : string.Empty);
+                : string.Empty,
+            placement);
 
         var result = _workbookService.ImportAsync(workbookPath, inventory, context, CancellationToken.None)
             .GetAwaiter().GetResult();

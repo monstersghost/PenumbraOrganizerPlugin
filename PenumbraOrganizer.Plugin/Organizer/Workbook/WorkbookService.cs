@@ -1,6 +1,7 @@
 namespace PenumbraOrganizer.Plugin.Organizer.Workbook;
 
 using ClosedXML.Excel;
+using System.Globalization;
 using System.IO.Compression;
 using System.Xml;
 using Microsoft.Extensions.Logging;
@@ -66,7 +67,7 @@ public sealed class WorkbookService
 
             using var workbook = new XLWorkbook();
             BuildEditableSheet(workbook, request);
-            BuildCategorySheet(workbook, request.CustomCodes);
+            BuildCategorySheet(workbook, request.CustomCodes, request.Placement);
             BuildMetadataSheet(workbook, sourceExportId, generatedAtUtc, scanIdentity, installationIdentity, request);
             workbook.SaveAs(workbookPath);
 
@@ -150,7 +151,8 @@ public sealed class WorkbookService
         sheet.Columns().AdjustToContents();
     }
 
-    private static void BuildCategorySheet(XLWorkbook workbook, IReadOnlyList<CustomCode> customCodes)
+    private static void BuildCategorySheet(
+        XLWorkbook workbook, IReadOnlyList<CustomCode> customCodes, Layouts.CategoryPlacement? placement)
     {
         var sheet = workbook.Worksheets.Add(CategorySheetName);
         sheet.Cell(1, 1).Value = "This sheet explains category shorthand and lets you add your own categories (code 17 and up).";
@@ -174,7 +176,7 @@ public sealed class WorkbookService
             sheet.Cell(row, 1).Value = category.Code;
             sheet.Cell(row, 2).Value = category.Name;
             sheet.Cell(row, 3).Value = category.Description;
-            sheet.Cell(row, 4).Value = category.Folder;
+            sheet.Cell(row, 4).Value = WorkbookCatalog.FolderFor(category.Code, placement);
             sheet.Cell(row, 5).Value = $"{category.Code}/{{creator}}";
             row++;
         }
@@ -229,6 +231,12 @@ public sealed class WorkbookService
             ["blankDestinationRule"] = WorkbookCategoryCatalog.BlankDestinationRule,
             ["reviewRule"] = WorkbookCategoryCatalog.ReviewRule,
         };
+
+        // The built-in codes whose folder this export wrote differently from the catalog (renamed categories),
+        // so an import after a later rename can tell "the folder moved since" from "the row was edited". Only
+        // written when something is renamed: an export without renames keeps exactly its old metadata.
+        if (ExportedFolderText(request.Placement) is { } exportedFolders)
+            values[CategoryFoldersKey] = exportedFolders;
 
         var row = 1;
         foreach (var pair in values)
@@ -322,12 +330,12 @@ public sealed class WorkbookService
         MappingParseResult? mapping = null;
         if (isV3)
         {
-            mapping = ReadMappingSheet(workbook, errors, warnings, out var structural);
+            mapping = ReadMappingSheet(workbook, errors, warnings, context.Placement, ExportedFolders(meta), out var structural);
             if (structural)
                 return BuildImportResult(workbookPath, meta, rows, errors, warnings, version, null, tally);
         }
 
-        var rules = isV3 ? BuildVersionThreeRules(mapping ?? NoMapping) : BuildVersionTwoRules();
+        var rules = isV3 ? BuildVersionThreeRules(mapping ?? NoMapping, context.Placement) : BuildVersionTwoRules();
         var leafColumn = isV3 && headerMap.TryGetValue("_leaf", out var leafIndex) ? leafIndex : 0;
         var exportedColumn = isV3 && headerMap.TryGetValue("_exported", out var exportedIndex) ? exportedIndex : 0;
 
@@ -507,10 +515,64 @@ public sealed class WorkbookService
     private static readonly MappingParseResult NoMapping =
         new([], new Dictionary<int, string>(), [], []);
 
-    private static DestinationRules BuildVersionThreeRules(MappingParseResult mapping) => new(
+    // Codes 1 to 16 and the built-in names resolve to the configured category folders. Version 2 files keep
+    // their own resolver below and never see a rename.
+    private static DestinationRules BuildVersionThreeRules(MappingParseResult mapping, Layouts.CategoryPlacement? placement) => new(
         TokensEnabled: true,
-        CodeFolder: code => code is >= 1 and <= 16 ? WorkbookCatalog.FolderFor(code) : mapping.FolderFor(code),
-        NameFolder: name => WorkbookCatalog.TryGetByName(name, out var category) ? category.Folder : null);
+        CodeFolder: code => code is >= 1 and <= 16 ? WorkbookCatalog.FolderFor(code, placement) : mapping.FolderFor(code),
+        NameFolder: name => WorkbookCatalog.TryGetByName(name, out var category)
+            ? WorkbookCatalog.FolderFor(category.Code, placement)
+            : null);
+
+    private const string CategoryFoldersKey = "categoryFolders";
+
+    // "code=length:folder;..." for the built-in codes this export shows differently from the catalog, in code
+    // order. Length-prefixed, so no character inside a folder name can be misread. Null when none differ.
+    private static string? ExportedFolderText(Layouts.CategoryPlacement? placement)
+    {
+        if (placement is null)
+            return null;
+
+        var parts = WorkbookCatalog.BuiltIn
+            .Select(category => (category.Code, Folder: WorkbookCatalog.FolderFor(category.Code, placement)))
+            .Where(pair => !string.Equals(pair.Folder, WorkbookCatalog.FolderFor(pair.Code), StringComparison.Ordinal))
+            .Select(pair => string.Create(CultureInfo.InvariantCulture, $"{pair.Code}={pair.Folder.Length}:{pair.Folder}"))
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(';', parts);
+    }
+
+    // The built-in folders the file was exported with, by code: the catalog's, overlaid with what the metadata
+    // recorded. A missing or damaged entry reads as the catalog's (the file then warns as an edit, as before).
+    private static IReadOnlyDictionary<int, string> ExportedFolders(Dictionary<string, string> meta)
+    {
+        var folders = WorkbookCatalog.BuiltIn.ToDictionary(category => category.Code, category => category.Folder);
+        if (!meta.TryGetValue(CategoryFoldersKey, out var text) || text.Length == 0)
+            return folders;
+
+        var position = 0;
+        while (position < text.Length)
+        {
+            var equals = text.IndexOf('=', position);
+            var colon = equals < 0 ? -1 : text.IndexOf(':', equals);
+            if (equals < 0 || colon < 0
+                || !int.TryParse(text.AsSpan(position, equals - position), NumberStyles.None, CultureInfo.InvariantCulture, out var code)
+                || !int.TryParse(text.AsSpan(equals + 1, colon - equals - 1), NumberStyles.None, CultureInfo.InvariantCulture, out var length)
+                || colon + 1 + length > text.Length
+                || !folders.ContainsKey(code))
+                return WorkbookCatalog.BuiltIn.ToDictionary(category => category.Code, category => category.Folder);
+
+            folders[code] = text.Substring(colon + 1, length);
+            position = colon + 1 + length;
+            if (position < text.Length)
+            {
+                if (text[position] != ';')
+                    return WorkbookCatalog.BuiltIn.ToDictionary(category => category.Code, category => category.Folder);
+                position++;
+            }
+        }
+
+        return folders;
+    }
 
     private static DestinationRules BuildVersionTwoRules() => new(
         TokensEnabled: false,
@@ -533,7 +595,8 @@ public sealed class WorkbookService
     /// found by header, and a missing sheet, header, or a duplicated header is structural.
     /// </summary>
     private static MappingParseResult? ReadMappingSheet(
-        XLWorkbook workbook, List<string> errors, List<string> warnings, out bool structural)
+        XLWorkbook workbook, List<string> errors, List<string> warnings, Layouts.CategoryPlacement? placement,
+        IReadOnlyDictionary<int, string> exportedFolders, out bool structural)
     {
         structural = false;
         var sheet = workbook.Worksheets.FirstOrDefault(s => string.Equals(s.Name, CategorySheetName, StringComparison.Ordinal));
@@ -580,7 +643,7 @@ public sealed class WorkbookService
                 folderLetter));
         }
 
-        var parsed = MappingSheet.Parse(list);
+        var parsed = MappingSheet.Parse(list, placement, exportedFolders);
         errors.AddRange(parsed.Errors);
         warnings.AddRange(parsed.Warnings);
         return parsed;

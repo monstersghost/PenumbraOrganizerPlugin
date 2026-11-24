@@ -45,7 +45,18 @@ public static class MappingSheet
     private static bool IsBuiltInRow(int row) =>
         row >= FirstBuiltInRow && row < FirstBuiltInRow + WorkbookCatalog.BuiltIn.Count;
 
-    public static MappingParseResult Parse(IReadOnlyList<MappingSheetRow> rows)
+    /// <param name="placement">
+    /// The renamed category folders codes 1 to 16 now file under. A built-in row that shows them is not an edit.
+    /// Null means the catalog's folders.
+    /// </param>
+    /// <param name="exportedFolders">
+    /// The built-in folders the file was exported with, by code (null: the catalog's). A built-in row that still
+    /// shows its exported folder, while the categories were renamed since, is reported as "code N now files under
+    /// ..." rather than as an edit.
+    /// </param>
+    public static MappingParseResult Parse(
+        IReadOnlyList<MappingSheetRow> rows, Layouts.CategoryPlacement? placement = null,
+        IReadOnlyDictionary<int, string>? exportedFolders = null)
     {
         var errors = new List<string>();
         var warnings = new List<string>();
@@ -62,7 +73,7 @@ public static class MappingSheet
                 if (row.HasFormula)
                     errors.Add($"{SheetName}!{row.CodeColumn}{row.RowNumber}: this row contains a formula. Replace it with plain text before importing.");
                 else
-                    WarnIfBuiltInEdited(row, warnings);
+                    WarnIfBuiltInEdited(row, warnings, placement, exportedFolders);
                 continue;
             }
 
@@ -159,9 +170,14 @@ public static class MappingSheet
         return new MappingParseResult(custom, unusable, errors, warnings);
     }
 
-    private static void WarnIfBuiltInEdited(MappingSheetRow row, List<string> warnings)
+    private static void WarnIfBuiltInEdited(
+        MappingSheetRow row, List<string> warnings, Layouts.CategoryPlacement? placement,
+        IReadOnlyDictionary<int, string>? exportedFolders)
     {
-        var builtIn = WorkbookCatalog.BuiltIn[row.RowNumber - FirstBuiltInRow];
+        var catalog = WorkbookCatalog.BuiltIn[row.RowNumber - FirstBuiltInRow];
+        // What the code files under now (a renamed category's configured folder) is the built-in value.
+        var builtIn = catalog with { Folder = WorkbookCatalog.FolderFor(catalog.Code, placement) };
+        var exported = exportedFolders?.GetValueOrDefault(catalog.Code) ?? catalog.Folder;
         var changes = new List<string>();
 
         var codeText = (row.CodeText ?? string.Empty).Trim();
@@ -174,7 +190,14 @@ public static class MappingSheet
 
         var folder = DestinationResolver.NormalizePath(row.Folder ?? string.Empty);
         if (!folder.Equals(builtIn.Folder, StringComparison.OrdinalIgnoreCase))
-            changes.Add($"folder '{builtIn.Folder}' to '{folder}'");
+        {
+            // Untouched since the export, but the category was renamed (or un-renamed) since: not an edit.
+            if (folder.Equals(exported, StringComparison.OrdinalIgnoreCase))
+                warnings.Add(
+                    $"{SheetName} row {row.RowNumber}: code {builtIn.Code} now files under '{builtIn.Folder}' (exported as '{exported}').");
+            else
+                changes.Add($"folder '{builtIn.Folder}' to '{folder}'");
+        }
 
         if (changes.Count > 0)
             warnings.Add(

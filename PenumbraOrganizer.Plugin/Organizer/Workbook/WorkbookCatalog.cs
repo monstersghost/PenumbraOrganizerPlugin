@@ -1,3 +1,6 @@
+using PenumbraOrganizer.Core.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
+
 namespace PenumbraOrganizer.Plugin.Organizer.Workbook;
 
 public sealed record BuiltInCategory(int Code, string Name, string Description, string Folder);
@@ -32,6 +35,14 @@ public static class WorkbookCatalog
     ];
 
     public static string FolderFor(int code) => BuiltIn.First(c => c.Code == code).Folder;
+
+    /// <summary>
+    /// The folder a built-in code (1 to 16, the category's enum value) files under: the category's configured
+    /// folder when the user renamed it, otherwise the table's (so code 16 stays Review and code 13 stays
+    /// Animation and VFX/VFX until that category itself is renamed).
+    /// </summary>
+    public static string FolderFor(int code, CategoryPlacement? placement) =>
+        placement?.FolderFor((ModCategory)code) ?? FolderFor(code);
 
     public static bool TryGetByName(string name, out BuiltInCategory category)
     {

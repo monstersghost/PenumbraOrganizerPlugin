@@ -642,7 +642,8 @@ public sealed class OrganizerState
             if (rules.Match(values) is not { } match)
                 continue;
 
-            var tokens = WorkbookTokens.For(row, canonicalizeCreator, raceOptions);
+            // {type} in a rule's folder is the category's configured folder; the rule's type FIELD is not.
+            var tokens = WorkbookTokens.For(row, canonicalizeCreator, raceOptions, options?.Placement);
             var folder = DestinationResolver.ResolveRuleFolder(match.Rule.Rule!.FolderTemplate, tokens);
             if (folder.Destination is null)
             {

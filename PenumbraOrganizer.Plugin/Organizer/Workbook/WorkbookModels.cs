@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Core.Models;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Workbook;
 
@@ -41,9 +42,12 @@ public sealed record WorkbookImportCounts(int Ready, int Unchanged, int Stale, i
 /// <summary>
 /// Supplies what import needs to know about the plugin's own state, by stable id: the token values for a mod
 /// and its current leaf (so a leaf-only change counts as a move). Import never reads the plugin's state itself.
+/// <paramref name="Placement"/> is the renamed category folders codes 1 to 16 and built-in names resolve to in a
+/// version 3 file; null means the catalog's. A version 2 file ignores it (its legacy resolver is unchanged).
 /// </summary>
 public sealed record WorkbookImportContext(
-    Func<string, DestinationTokens> TokensFor, Func<string, string>? CurrentLeafFor = null)
+    Func<string, DestinationTokens> TokensFor, Func<string, string>? CurrentLeafFor = null,
+    CategoryPlacement? Placement = null)
 {
     public static readonly WorkbookImportContext Empty = new(_ => DestinationTokens.None);
 }
@@ -75,7 +79,9 @@ public enum WorkbookExportMode
 /// <summary>
 /// Everything one export needs. The service never reads the plugin's state itself. <paramref name="Leaves"/>
 /// is each mod's real last path segment (current in As is, staged in Sort mode), so an unedited import keeps
-/// it, including a duplicate install's "Name (2)".
+/// it, including a duplicate install's "Name (2)". <paramref name="Placement"/> is the renamed category folders
+/// the built-in rows show (and the hidden metadata records, so an import after another rename can say so); null
+/// means the catalog's.
 /// </summary>
 public sealed record WorkbookExportRequest(
     ScanInventory Inventory,
@@ -83,7 +89,8 @@ public sealed record WorkbookExportRequest(
     WorkbookExportMode Mode,
     string? SortFingerprint,
     IReadOnlyList<CustomCode> CustomCodes,
-    IReadOnlyDictionary<string, string> Leaves);
+    IReadOnlyDictionary<string, string> Leaves,
+    CategoryPlacement? Placement = null);
 
 public static class WorkbookCategoryCatalog
 {
