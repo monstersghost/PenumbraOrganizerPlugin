@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Core.Classification;
@@ -6,6 +7,7 @@ using PenumbraOrganizer.Plugin.Organizer.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Layouts;
 using PenumbraOrganizer.Plugin.Organizer.Operations;
 using PenumbraOrganizer.Plugin.Organizer.Rules;
+using PenumbraOrganizer.Plugin.Windows.Widgets;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
@@ -78,7 +80,7 @@ public readonly record struct SortSelection(
 /// <remarks>
 /// public, not internal: see <see cref="SortSelection"/>.
 /// </remarks>
-public sealed class SortPanel
+public sealed partial class SortPanel
 {
     /// <summary>Index into <see cref="Groupings"/> the panel starts on.</summary>
     /// <remarks>
@@ -419,7 +421,7 @@ public sealed class SortPanel
     private string? _collectionLabel;     // which collection was read, for the messages
 
     /// <summary>
-    /// The pinned top of the Sort tab: Group by, What to sort, the Sort button and its summary. MainWindow
+    /// The pinned top of the Sort tab: the Recommended | Advanced switch, the Sort button and its summary. MainWindow
     /// draws it OUTSIDE the scrolling region so it stays in view while the controls below scroll. It reads
     /// the other controls' values from the previous frame, which is invisible: a click on Sort cannot land
     /// in the same frame as a click on another control.
@@ -476,20 +478,17 @@ public sealed class SortPanel
             }
         }
 
-        // Group by is its own tiny section so the tab reads top to bottom with the same headings.
-        ImGui.TextColored(PluginTheme.ChangedGood, "Group by");
-        ImGui.BeginDisabled(!gates.CanStageProposals);
-        ImGui.SetNextItemWidth(220);
-        ImGui.Combo("##group-by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortGrouping, gates.CanStageProposals ? null : ActivityGateReason);
+        // The pinned bar (spec 2, section 2): mode switch, Sort, the scope summary and ?. Group by and What to sort
+        // moved into the screens below (DrawGroupingRow), so this reads them from the previous frame, as it already
+        // did for every other control.
+        if (!_modeChosen)
+        {
+            _modeChosen = true;
+            _mode = CategoryLayoutEditor.InitialMode(LayoutProfileCache.For(config));
+        }
 
+        DrawModeSwitch();
         ImGui.SameLine();
-        ImGui.BeginDisabled(!gates.CanStageProposals);
-        ImGui.SetNextItemWidth(220);
-        ImGui.Combo("What to sort##what-to-sort", ref _whatToSortIndex, WhatToSortLabels, WhatToSortLabels.Length);
-        ImGui.EndDisabled();
-        Help.Tooltip(HelpTopics.SortWhatToSort, gates.CanStageProposals ? null : ActivityGateReason);
         var rootOnly = _whatToSortIndex == 1;
 
         // The strategy is settled the moment the combo has been submitted. Every control below takes
@@ -531,7 +530,7 @@ public sealed class SortPanel
 
         // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.
         ImGui.SameLine();
-        if (ImGui.Button("?##sort-help"))
+        if (IconButton.Draw("sort-help", FontAwesomeIcon.QuestionCircle))
             onShowSortHelp?.Invoke();
         Help.Tooltip(HelpTopics.SortHelpButton);
 
@@ -562,6 +561,16 @@ public sealed class SortPanel
             : strategy == SortStrategy.CreatorOnly ? SplitsInapplicableReason
             : null;
 
+        if (_mode == SortTabMode.Recommended)
+        {
+            DrawRecommended(config, gates, strategy);
+            DrawRules(state, gates, config, saveConfig, canonicalizeCreator);
+            DrawAdvanced(config, saveConfig);
+            PersistSortChoices(config, saveConfig, strategy);
+            return;
+        }
+
+        DrawGroupingRow(gates);
         RefreshReadOnly(config);
         DrawSelectAll(states.SplitGear.Enabled, splitReason);
         if (_customNote is { } customNote)
