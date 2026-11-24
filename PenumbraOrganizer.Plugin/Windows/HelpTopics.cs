@@ -53,6 +53,14 @@ public static class HelpTopics
 
     // Sort
     public static readonly HelpTopic SortGrouping = new("sort.grouping");
+    public static readonly HelpTopic SortMode = new("sort.mode");
+    public static readonly HelpTopic SortCategoryList = new("sort.category-list");
+    public static readonly HelpTopic SortCategoryFolder = new("sort.category-folder");
+    public static readonly HelpTopic SortCreatorFolder = new("sort.creator-folder");
+    public static readonly HelpTopic SortSplits = new("sort.splits");
+    public static readonly HelpTopic SortExamplePath = new("sort.example-path");
+    public static readonly HelpTopic SortSelectAll = new("sort.select-all");
+    public static readonly HelpTopic SortResetLayout = new("sort.reset-layout");
     public static readonly HelpTopic SortSplitGear = new("sort.split-gear");
     public static readonly HelpTopic SortSplitNpc = new("sort.split-npc");
     public static readonly HelpTopic SortSplitHair = new("sort.split-hair");

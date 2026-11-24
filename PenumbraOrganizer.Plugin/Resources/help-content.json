@@ -18,7 +18,7 @@
     {
       "id": "firstrun.sort",
       "title": "Step 3: Choose a layout",
-      "step": "On the Sort tab, pick a grouping from Group by, tick whichever splits you want (gear, NPC, hair, body type), and press Sort.\n\nNothing moves yet. Sort only works out where each mod would go. Your choices are remembered for next time."
+      "step": "On the Sort tab, keep the Recommended layout or switch to Advanced to change any kind of mod, and press Sort.\n\nNothing moves yet. Sort only works out where each mod would go. Your choices are remembered for next time."
     },
     {
       "id": "firstrun.review",
@@ -68,7 +68,7 @@
     {
       "id": "help.tab-sort",
       "title": "Sort",
-      "body": "Proposes a folder layout for your mods. Pick a grouping and what to sort (the whole library, or only the loose mods in the root), choose which of the Gear, NPC and Hair groups get subfolders, and press Sort.\n\nThe groups are separated by rules on the tab. Each one has its own split option: a split puts that kind of mod into subfolders, and turning it off keeps those mods in one folder.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand instead of by rule. The ? beside the Sort button brings you back here."
+      "body": "Proposes a folder layout for your mods. The bar at the top stays in view while the rest scrolls: switch between Recommended and Advanced, press Sort, and see how many mods the sort covers.\n\nRecommended is one tidy layout for every kind of mod. Choose what to sort and how to group, and the example paths show where mods will go. Customise per category opens Advanced.\n\nAdvanced lists the 16 kinds of mod. Pick one to set its folder (nest with /, as Equipment/Gear), where its creator folder goes, and which splits it uses. Custom marks a category that differs from Recommended, and Reset to Recommended puts it back. The race, body priority and hair settings sit under the categories they affect.\n\nRules file particular mods yourself and win over everything above. Sort settings say what happens when new mods are installed.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand. The ? beside the Sort button brings you back here."
     },
     {
       "id": "help.tab-review",
@@ -163,22 +163,62 @@
     {
       "id": "sort.grouping",
       "title": "Group by",
-      "short": "Sets the folder structure for every unprotected mod. Creator: Creator/Mod. Mod type: Gear/Mod. Type then creator: Gear/Creator/Mod. Creator then type: Creator/Gear/Mod. Nothing moves until Apply."
+      "short": "Sets the folder structure. Creator: Creator/Mod. Mod type: Gear/Mod. Type then creator: Gear/Creator/Mod. Creator then type: Creator/Gear/Mod. A category's own Creator folder wins."
     },
     {
       "id": "sort.split-gear",
-      "title": "Split gear by equipment slot",
+      "title": "Gear: Equipment slot",
       "short": "Puts gear mods in Gear/Feet, Gear/Head and so on instead of a single Gear folder. Mods whose slot could not be identified stay in Gear."
     },
     {
       "id": "sort.shared-hands-feet",
-      "title": "Hands and feet in a shared folder",
+      "title": "Gear: Hands and feet in one shared folder",
       "short": "Gloves, boots and nails fit most bodies, so they go in Gear/03. Hands and Gear/05. Feet, not under each body. Tops, legs and sets stay under their body. Needs both gear splits, slot and body."
     },
     {
       "id": "sort.split-npc",
-      "title": "Split NPC mods by kind",
+      "title": "NPC: Kind",
       "short": "Puts NPC mods in NPC/NPCs, NPC/Bosses or NPC/Enemies. Turn it off to keep every NPC mod in one NPC folder."
+    },
+    {
+      "id": "sort.mode",
+      "title": "Recommended or Advanced",
+      "short": "Recommended is one tidy layout for every kind of mod. Advanced lets you change each category: its folder, creator folder and splits. Both sort the same library."
+    },
+    {
+      "id": "sort.category-list",
+      "title": "Categories",
+      "short": "Pick a kind of mod to edit its layout. Custom marks one that differs from Recommended; the rest follow Recommended, including later improvements."
+    },
+    {
+      "id": "sort.category-folder",
+      "title": "Folder",
+      "short": "The category's top folder. Nest with /, as Equipment/Gear. Relative, no empty part, . or .., at most 260 characters. Nothing moves until you Sort and Apply."
+    },
+    {
+      "id": "sort.creator-folder",
+      "title": "Creator folder",
+      "short": "Where this category's creator folder goes: none, before the type folders or after them. Picking what Group by already gives keeps following Group by."
+    },
+    {
+      "id": "sort.splits",
+      "title": "Splits",
+      "short": "Each split adds a folder level, numbered by depth. The order is fixed. A greyed split keeps its tick and says why it does not apply right now."
+    },
+    {
+      "id": "sort.example-path",
+      "title": "Example",
+      "short": "Where a typical mod of this kind would go with these settings, with the creator, folder and splits in their own colours. It updates as you change anything."
+    },
+    {
+      "id": "sort.select-all",
+      "title": "Select all splits",
+      "short": "Turns on every split in every category and Split by race, and turns off the shared hands and feet folder. Folders, creator levels and priorities stay. Nothing moves until Apply."
+    },
+    {
+      "id": "sort.reset-layout",
+      "title": "Reset to Recommended",
+      "short": "Puts this category, or with Reset all every category, back on Recommended: folder, creator folder and splits. Nothing moves until you Sort and Apply."
     },
     {
       "id": "sort.help-button",
@@ -192,13 +232,13 @@
     },
     {
       "id": "sort.split-hair",
-      "title": "Split hair by hair number",
+      "title": "Hair: Hair number",
       "short": "Files a hair mod under the vanilla hair number it replaces, as Hair/115, padded to three digits (Hair/002) so Penumbra lists them in order. Several numbers or unreadable files: stays in Hair."
     },
     {
       "id": "sort.split-hair-by-race",
-      "title": "Split hair by race (now the Hair row)",
-      "short": "Hair splits by race from the Race section: tick the master switch and leave Hair ticked. One race files under it (Hair/Viera/115); several races or none go under Hair/Multi-race."
+      "title": "Hair: Race",
+      "short": "Files a hair mod under its race, as Hair/Viera/115, while Split by race is on. Several races or none go under Hair/Multi-race."
     },
     {
       "id": "sort.rules",
@@ -208,13 +248,13 @@
     },
     {
       "id": "sort.race-split",
-      "title": "Split supported categories by race",
-      "short": "Master switch for the race folders. Off leaves your folders as they are. It splits by race, not gender, so male-only and female-only mods of one race share a folder."
+      "title": "Split by race",
+      "short": "Master switch for every race split: Hair, Face, Eyes, Skin, tails and racial scaling. Off leaves your folders as they are. It splits by race, not gender."
     },
     {
       "id": "sort.race-rows",
-      "title": "Race rows",
-      "short": "Hair, Face, Eyes, Skin, Tails/ears/horns and Racial scaling get a race folder. The last two need Split body mods. Gear, bodies and face paint are never split. Scan again after updating."
+      "title": "Race splits",
+      "short": "Face, Eyes, Skin, Tails, ears and horns, and Racial scaling get a race folder while Split by race is on. The Body ones need Part and body type. Scan again after updating."
     },
     {
       "id": "sort.multi-race",
@@ -228,17 +268,17 @@
     },
     {
       "id": "sort.split-emotes",
-      "title": "Split emotes by emote",
+      "title": "Animation: Emote",
       "short": "Emote mods go in Animation and VFX/Emotes/<emote name>. Mods with several emotes go in Multiple, face-only ones in Expressions, and ones with no emote name in Undetermined."
     },
     {
       "id": "sort.split-gear-body",
-      "title": "Split gear by body type",
-      "short": "Files gear under the body it was made for, as Gear/Bibo+/... With the slot split also on: 00. Sets, 01.-09. slots, then numbered bodies from 10, in Body priority order. No body found: no body folder."
+      "title": "Gear: Body type",
+      "short": "Files gear under the body it was made for, as Gear/Bibo+/... With Equipment slot also on: 00. Sets, 01.-09. slots, then numbered bodies from 10, in Body priority order."
     },
     {
       "id": "sort.split-body-mods",
-      "title": "Split body mods by body type",
+      "title": "Body: Part and body type",
       "short": "Body mods are body replacers (Rue+, YAB...) and SFW variants filed under Body. This groups them under Body/<body>/. Leave it off if you keep one mod per body.",
       "body": "With it on, the Body folder is numbered: 00 Skeleton, 01 Physics, 02 Tails, Ears and Horns, then your bodies from 10 by priority, each with Replacer, SFW and Hands and Feet. A mod that is not clearly a part stays in Replacer."
     },
