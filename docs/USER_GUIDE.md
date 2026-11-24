@@ -592,19 +592,15 @@ replaces it, which is how you remove a spelling that turns out to be wrong inste
 it. The file is read only if it is there, and the plugin says so in the log if it cannot use part of
 it: an entry it had to ignore, or a name you reused that a different body already answers to.
 
-#### Sort rules
+#### The Rules card
 
-Rules let you file particular mods yourself. Open **Rules** on the Sort tab's Advanced screen and press **Add rule**. A rule is one line: a condition, an arrow and a folder.
-
-    name contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}
-
-- **Fields:** `name`, `author`, `folder` (where the mod sits now), `type`, `subtype`, `race` and `body`. `type` is the category folder: Gear, Weapon, Face, Hair, Body, Skin, NPC, Minion, Mount, Pet, Ornament, Furniture, Sound, Animation and VFX, or Review.
-- **Operators:** `=`, `!=`, `contains`, `starts with`, `ends with`, `in ('a', 'b')`, and `not` before an operator. Combine with `and`, `or` and brackets (`not` binds first, then `and`, then `or`). Text goes in straight single quotes and ignores capitals; write two quotes for a quote inside the text.
-- **Folder:** may use `{type}`, `{creator}` and `{race}`. It replaces the whole path the Sort would have chosen, so the mod is not split by body or race underneath it.
-- **Order:** the first matching rule wins. Use Up and Dn to reorder, the tick box to switch a rule off, and X to delete it. Up to 100 rules, 300 characters each.
-- **Protected mods** are never touched. Rules apply to every Sort, including the automatic sort of new mods, but not to a template used as a fallback.
-
-Each rule shows what is wrong with it and where (a red message with a position and, for a typo, a suggestion), or how many mods it wins for a moment after you stop typing. An amber line warns when a rule's folder would no longer match its own `folder` condition, or sits inside a protected folder. Rules are saved when you leave the text box. After you change a rule, press Sort again; the workbook's "As suggested by Sort" stays unavailable until you do.
+In Advanced only, between the layout card and Auto sort, a collapsible **Rules (N)** card holds your
+sort rules: lines such as `author = 'Ann' -> Ann's mods` that file particular mods in a folder of your
+choice, ahead of everything above. **Add rule** adds an empty line. Each line has a tick box to switch it
+on or off, the text box, **Up** and **Dn** to change its place in the list, and **X** to delete it, with
+its status underneath. Rules still apply when you sort from Recommended, which says how many are active
+and has **Show rules** to come back here. The language, the order, the live help and every detail are in
+the [Sort rules](#sort-rules) chapter below.
 
 #### Auto sort and the new-mod popup
 
@@ -1039,6 +1035,303 @@ sorting again re-files mods without a rescan.
 
 To add bodies the plugin does not know, create `body-type-list.json` in the configuration folder;
 see [Where files live](#where-files-live). Read the caveat at the bottom of this page first.
+
+## Sort rules
+
+The layouts on the Sort tab decide where every kind of mod goes. Sort rules are for the exceptions: a
+creator whose mods you want together, a set of mods you always keep in one place, everything whose name
+says "recolor". You write them in the **Rules** card on the Sort tab's Advanced screen.
+
+### What a rule is
+
+A rule is one line of text: a condition, an arrow `->`, and a folder.
+
+    name contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}
+
+It reads: if a mod's name contains "hrothgar" and it is a Body mod, file it in
+`Body/Hrothgar/<its creator>`. The part before the arrow is the **condition**; the part after it is
+the **folder**. The mod's own name is always added at the end, so a body mod named "Strong Build" by Ann
+goes to `Body/Hrothgar/Ann/Strong Build`.
+
+To add one, open **Rules** in Advanced, press **Add rule** and type into the new line.
+
+### How rules are applied
+
+- **Top to bottom, first match wins.** For each mod, the rules are checked from the top of the list,
+  and the first rule that is switched on, has no mistake, and matches, files the mod. The rules below it
+  are not looked at for that mod. So **the order is the priority**: put the narrow rules above the broad
+  ones, and use **Up** and **Dn** to move them.
+- **A rule replaces the whole path.** The folder you write is the path, plus the mod's name. The Sort's
+  own layout (type folder, creator folder, numbered gear and body folders, body type, race, hair number,
+  emote folders) does not apply to a mod a rule has filed, and such a mod takes no number in the
+  numbered folders.
+- **Everything else sorts as usual.** A mod that no rule matches gets the normal layout.
+- **Protected mods are never touched**, by rules or anything else in a Sort. So is the Proteus managed
+  mod while **Place the Proteus managed mod at the root** is on.
+- **Rules apply to every Sort**: the Sort button on either screen (Recommended included), What to sort
+  set to loose mods only (rules then apply to those mods only), and the automatic sort of new mods from
+  the popup or Sort automatically. They do **not** apply to a template's fallback sort, nor to Manual
+  assignment or a workbook import.
+- **Off without deleting.** Untick a rule to switch it off. It stays in the list and files nothing.
+- **Saved when you leave the box.** Typed text is saved when the text box loses focus (or when you
+  switch to Recommended). Adding, removing, moving or ticking a rule saves at once. Rules are kept
+  between sessions.
+- **Limits:** 100 rules (at 100, Add rule is greyed and says "100 rules is the limit."), each at most 300
+  characters.
+- **Sort again after a change.** Editing a rule moves nothing by itself. Press Sort, then check Review
+  Changes and Apply as usual.
+
+### The condition: SQL-like, but not SQL
+
+If you have written a SQL query, the condition will look familiar: it follows the `WHERE` part of one.
+It is deliberately small, though, and you cannot paste a SQL query in.
+
+#### Fields
+
+Every field is text. A value the plugin does not know is empty text, never "nothing".
+
+| Field | What it holds |
+| --- | --- |
+| `name` | The mod's name, as Penumbra shows it. |
+| `author` | The creator, as the Sort tab names its creator folder. Empty when the mod has no author. |
+| `folder` | The folder the mod is in now, without the mod's own name, for example `Gear/10. Rue+/02. Top/Ann`. Empty for a mod loose in the root. |
+| `type` | The category's built-in folder name (see below). Renaming a category's folder in Advanced does not change it. |
+| `subtype` | The slot or kind inside a category (see below). Often empty. |
+| `race` | What `{race}` gives: one race, or `Multi-race`. Empty for mods that have no race (gear, weapons, body replacers, and so on). |
+| `body` | The body type, such as `Bibo+` or `Rue+`. For Gear with the Body type split on, and Body with Part and body type on, it is the body your Body priority picks; otherwise the one the scan found. Empty when there is none. |
+
+**Values of `type`:** `Gear`, `Weapon`, `Face`, `Hair`, `Body`, `Skin`, `NPC`, `Minion`, `Mount`, `Pet`,
+`Ornament`, `Furniture`, `Sound`, `Animation and VFX` (animation and VFX mods share it) and `Review`
+(the Others category and any mod that could not be classified). A weapon-only mod is `Weapon` only when
+it was scanned with Weapon's Job split on; otherwise it is `Gear`.
+
+**Values of `subtype`:**
+
+- Gear: the equipment slot when there is exactly one: `Head`, `Top`, `Hands`, `Legs`, `Feet`, `Ears`,
+  `Neck`, `Wrists` or `Rings`. Empty for a multi-piece outfit or when the slot is unknown.
+- NPC: `NPCs`, `Bosses` or `Enemies`.
+- Hair: the hair number when the mod uses exactly one, written without leading zeros (`115`, `2`, not
+  `002`).
+- Animation and VFX: `Emotes`, `Battle Animation`, `Animation` or `Other` for animation mods, and `VFX`
+  for VFX mods.
+- Everything else: empty.
+
+**Values of `race`:** `Midlander`, `Highlander`, `Elezen`, `Miqo'te`, `Roegadyn`, `Lalafell`, `Au Ra`,
+`Hrothgar`, `Viera` or `Multi-race`. Only hair, face (including eyes), skin, tails, ears and horns, and
+racial scaling mods have one. It follows the Race panel's **Send multi-race mods to Multi-race** box and
+**Race priority** (a mod for several races is `Multi-race` while the box is ticked, otherwise the
+highest-ranked race it covers), and a mod whose race could not be found is `Multi-race`. It does not
+depend on the **Split by race** switch or on the race splits being on.
+
+#### Operators
+
+| Operator | Matches when the field... | Example |
+| --- | --- | --- |
+| `=` | is exactly the text | `type = 'Hair'` |
+| `!=` | is not exactly the text | `author != 'Ann'` |
+| `contains` | contains the text anywhere | `name contains 'recolor'` |
+| `starts with` | begins with the text | `folder starts with 'Downloads'` |
+| `ends with` | ends with the text | `name ends with 'v2'` |
+| `in (...)` | is exactly one of the texts in the list | `subtype in ('Top', 'Legs')` |
+
+Every operator can be negated by writing `not` just before it: `name not contains 'nsfw'`,
+`type not in ('Gear', 'Hair')`, `folder not starts with 'Old'`, `author not = 'Ann'` (the same as `!=`).
+
+#### Combining tests
+
+Join tests with `and` and `or`, negate a whole test with `not` in front of it, and use brackets to group:
+
+    (author = 'Ann' or author = 'Bea') and not type = 'Gear' -> Friends/{type}
+
+Without brackets, `not` binds tightest, then `and`, then `or`, exactly as in SQL. So
+`author = 'Ann' or author = 'Bea' and type = 'Gear'` means "anything by Ann, or gear by Bea", and
+`not type = 'Gear' or name contains 'x'` means "(not gear) or (name contains x)". When in doubt, add
+brackets.
+
+#### Same as SQL
+
+- Text goes in **single quotes**: `'abc'`. To put a quote inside the text, write it twice:
+  `author = 'O''Brien'`, `race = 'Miqo''te'`.
+- Keywords and field names are not case sensitive: `NAME CONTAINS 'x'` and `name contains 'x'` are the
+  same rule.
+- `not` binds tightest, then `and`, then `or`, and brackets override that.
+
+#### Different from SQL
+
+- **Text comparison ignores capitals**: `'hrothgar'` matches `Hrothgar`. (Accents are not ignored.)
+- **No wildcards.** Use `contains`, `starts with` and `ends with` instead of `LIKE '%x%'`; `%` and `_`
+  are ordinary characters.
+- **No NULL.** A missing author, race, subtype or body is empty text, so write `race = ''`, not
+  `race IS NULL`.
+- **Only straight single quotes.** Double quotes and curly quotes are an error ("Use straight single
+  quotes: 'abc'."), which matters when you paste a rule from a chat or a document.
+- **Not there:** `<>` (write `!=`), `LIKE`, `BETWEEN`, `IS`, numbers, `<` and `>`, functions,
+  `ORDER BY`, subqueries and comments. Every value is quoted text, a hair number included
+  (`subtype = '115'`).
+
+#### Empty text
+
+`= ''`, `!= ''` and `in ('')` are allowed and are how you test for a missing value:
+`author = ''` matches mods with no author, `race != ''` matches mods that have a race.
+`contains ''`, `starts with ''` and `ends with ''` are rejected ("'contains' needs some text; an empty
+value would match everything."), because every text contains the empty text.
+
+### The folder
+
+Everything after the arrow is the folder, written as a Penumbra path with `/` between levels (a `\` is
+read as `/`, and spaces around each level are trimmed). Quotes are not needed here: `-> Ann's mods` is
+fine. The mod's name is added at the end.
+
+The folder may use three tokens, in any level, written in braces (their names are not case sensitive):
+
+| Token | Becomes |
+| --- | --- |
+| `{type}` | The category's folder as the Sort uses it: `Gear`, `Animation and VFX`, `Review` and so on, or your own folder when you renamed the category in Advanced (`Equipment/Gear`). Unlike the `type` field, it follows the rename. |
+| `{creator}` | The creator folder the Sort tab would use. Empty when the mod has no author. |
+| `{race}` | The same value as the `race` field. Empty for mods with no race. |
+
+**An empty token drops its level.** If a level consists only of tokens and they all come out empty,
+that level disappears: `Skins/{race}/{creator}` gives `Skins/Miqo'te` for a Miqo'te skin with no
+author. Text around a token stays, so `By-{creator}` gives `By-` for a mod with no author.
+
+**When the folder cannot be built**, the mod is left where it is, and the scope line in the pinned bar
+says so after the Sort, for example "1 left in place by rules: Rule 3 for "Glow Skin": Folder expands to
+nothing for this mod.". That happens when every level comes out empty, when the folder uses an unknown
+token such as `{author}` ("unknown token {author}"), has a stray `{` or `}` ("Folder has an unmatched {
+or }."), or is not a valid relative path (a drive letter or `:`, a `.` or `..` level, or more than 260
+characters). The rules list does not flag these while you type, because they depend on the mod, so
+check the scope line after sorting. The same messages appear in the Review tab's Diagnostics export
+(`RulesUnplaced:`), which also names the rule that filed each mod (`StagedRule:`).
+
+### Examples
+
+The mods in these examples: "Medieval Dress", a Bibo+ top by Ann; "Imeris - Solar", a Viera hair by
+Bizu; "Glow Skin", a Miqo'te skin with no author; "Akako 4.0a dt", a Miqo'te face by Akako Ai;
+"Gaelicat Minion", a minion loose in the root with no author. Group by is Type then creator on the
+Recommended layout, so without rules "Medieval Dress" would go to
+`Gear/10. Bibo+/02. Top/Ann/Medieval Dress`.
+
+1. **One creator in one folder.**
+
+        author = 'Ann' -> Ann's mods
+
+   "Medieval Dress" goes to `Ann's mods/Medieval Dress`, and so does every other mod by Ann, whatever
+   its type.
+
+2. **Two slots together, still by creator.**
+
+        type = 'Gear' and subtype in ('Top', 'Legs') -> Gear/Outfits/{creator}
+
+   "Medieval Dress" goes to `Gear/Outfits/Ann/Medieval Dress`, with no body or slot folder. A
+   multi-piece outfit has an empty subtype, so it is not matched and sorts as usual.
+
+3. **One race's hair, without hair numbers.**
+
+        type = 'Hair' and race = 'Viera' -> Hair/Viera/{creator}
+
+   "Imeris - Solar" goes to `Hair/Viera/Bizu/Imeris - Solar`. A hair made for Viera and Au Ra is
+   `Multi-race` while Send multi-race mods to Multi-race is ticked, so this rule does not take it.
+
+4. **Either word, kept by type.**
+
+        name contains 'recolor' or name contains 'retexture' -> Recolors/{type}
+
+   A gear mod named "Medieval Dress Recolor" goes to `Recolors/Gear/Medieval Dress Recolor`. If you
+   renamed Gear to `Equipment/Gear` in Advanced, it goes to `Recolors/Equipment/Gear/Medieval Dress
+   Recolor`, while the condition would still have to say `type = 'Gear'`.
+
+5. **An empty token collapses.**
+
+        type = 'Skin' -> Skins/{race}/{creator}
+
+   "Glow Skin" goes to `Skins/Miqo'te/Glow Skin`: it has no author, so the `{creator}` level drops out.
+   A Miqo'te skin by Ann would go to `Skins/Miqo'te/Ann/<name>`.
+
+6. **A quote inside the text, and brackets.**
+
+        race = 'Miqo''te' and (type = 'Face' or type = 'Hair') -> Miqo'te/{type}
+
+   "Akako 4.0a dt" goes to `Miqo'te/Face/Akako 4.0a dt`. The quote is doubled inside the condition's
+   text but written once in the folder. Without the brackets the rule would also take every hair mod of
+   any race, because `and` binds before `or`.
+
+7. **Mods with no author.**
+
+        author = '' -> No author/{type}
+
+   "Gaelicat Minion" goes to `No author/Minion/Gaelicat Minion`. Writing `-> {creator}` instead would
+   come out empty for every mod this rule matches, so they would all be left where they are.
+
+8. **Excluding with not.**
+
+        not type in ('Gear', 'Hair') and name starts with 'a' -> A/{type}
+
+   This reads "(type is not Gear or Hair) and (name starts with a)". "Akako 4.0a dt" goes to
+   `A/Face/Akako 4.0a dt`; a gear mod named "Apron" is not matched.
+
+9. **A folder test that stays true.**
+
+        folder = 'Downloads' -> Inbox
+
+   files every mod sitting directly in `Downloads` under `Inbox`, but shows the amber warning: once a
+   mod is in `Inbox`, its folder is no longer `Downloads`, so the next Sort no longer matches it and
+   sorts it as usual. Written as `folder in ('Downloads', 'Inbox') -> Inbox`, the rule keeps matching
+   the mods it has already filed, and the warning goes away.
+
+The order matters when rules overlap. With rule 1 above first and rule 2 second, "Medieval Dress" goes
+to `Ann's mods`; swap them with Up and Dn and it goes to `Gear/Outfits/Ann`.
+
+### What the rules list tells you
+
+Under each rule, a status line updates as you type:
+
+- **A red message** when the rule has a mistake, with the position of the problem in brackets, counted
+  in characters from 0 at the start of the line. For a misspelt field or operator it suggests the
+  closest one: "Unknown field 'nmae'. Did you mean 'name'? (at 0)", "Unknown operator 'contians'. Did
+  you mean 'contains'? (at 5)". Other messages include "Missing '->' and a folder.", "Expected a quoted
+  text like 'abc'.", "Text starting here is not closed; add a closing '.", "Expected 'with' after
+  'starts'." and, for a new empty line, "Rule is empty.". A rule with a mistake files nothing; when you
+  Sort with it switched on, the scope line says "Skipped Rule 2: ..." so it is not silently ignored.
+- **"Wins for N mods"**, a moment after you stop typing, for a good rule. It counts the mods this rule
+  would file: protected mods are left out, and so are mods an earlier rule already wins, so the numbers
+  of all the rules add up. It is recounted after a scan and when the race or body settings change.
+  "Counting..." shows while it waits, and "Off" for a rule you switched off (a switched-off rule with
+  a mistake still shows the red message).
+- **An amber warning** when the rule tests `folder`, its folder has no tokens, and that folder would
+  not pass the rule's own condition ("This rule's folder no longer matches its own folder condition, so
+  the next Sort may file the mod somewhere else."), as in example 9. The check tries the folder with
+  every other field empty, so a rule that also tests, say, `type` can warn even though it would keep
+  matching; read it as a prompt to check the rule.
+- **A second amber warning** when the rule's folder is inside a protected folder ("This rule's folder
+  is inside a protected folder, so mods filed there will be treated as protected."). Mods it files
+  there can then not be moved by a later Sort until you unprotect the folder.
+
+### Rules and the rest of the plugin
+
+**Recommended.** Rules are edited only in Advanced, but they apply whichever screen you sort from.
+While at least one rule is switched on and free of mistakes, the Recommended card says "N rules active,
+edit them in Advanced", and **Show rules** opens Advanced with the Rules card open and scrolled into
+view. The example paths on Recommended do not show rules.
+
+**The workbook's "As suggested by Sort".** That export mode on Review Changes writes the folders the
+last Sort staged, rule results included. Editing a rule's text, reordering, switching a rule on or off,
+adding or deleting one (even a switched-off or broken one) greys it out until you press Sort again, so
+the workbook never describes rules that are not the ones you have now. For a rule that uses `race` or
+`{race}`, changing the race settings does the same.
+
+**Sort inside folders, and Heliosphere and Proteus in Sort inside mode.** A mod kept under such a folder
+stays under it when a rule files it: the rule's folder is placed beneath that folder. If the rule's
+folder already starts with it, it is not added twice. With `.Chars/Alice` as a sort-inside folder and a
+mod "Alice Nails" in it:
+
+- `name contains 'nails' -> Nails` gives `.Chars/Alice/Nails/Alice Nails`;
+- `name contains 'nails' -> .Chars/Alice/Nails` gives the same path, not
+  `.Chars/Alice/.Chars/Alice/Nails/...`.
+
+The mods in that folder no rule matches are sorted beneath it as usual. To leave everything in the folder
+exactly where it is, rules included, protect the folder on the Protect tab instead.
+
+**Protection.** A protected mod is never matched or counted. A rule cannot unprotect anything.
 
 ## Typical workflows
 
