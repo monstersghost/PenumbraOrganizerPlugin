@@ -35,16 +35,24 @@ public sealed partial class SortPanel
     private void DrawGroupingRow(ActivityGates gates)
     {
         var reason = gates.CanStageProposals ? null : ActivityGateReason;
+        // ImGui draws a combo's label to its RIGHT, so each label is drawn first as plain text and the combo
+        // gets a hidden (##) label; that way the label reads before its dropdown.
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("Group by");
+        ImGui.SameLine();
         ImGui.BeginDisabled(!gates.CanStageProposals);
         ImGui.SetNextItemWidth(220);
-        ImGui.Combo("Group by##group-by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
+        ImGui.Combo("##group-by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortGrouping, reason);
 
         ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("What to sort");
+        ImGui.SameLine();
         ImGui.BeginDisabled(!gates.CanStageProposals);
         ImGui.SetNextItemWidth(220);
-        ImGui.Combo("What to sort##what-to-sort", ref _whatToSortIndex, WhatToSortLabels, WhatToSortLabels.Length);
+        ImGui.Combo("##what-to-sort", ref _whatToSortIndex, WhatToSortLabels, WhatToSortLabels.Length);
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortWhatToSort, reason);
     }

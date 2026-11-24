@@ -37,7 +37,8 @@ This is a testing build. The Sort tab was rebuilt and none of it has been tried 
 
 ## Not in this release
 
-- Not verified in game. The looks of the new widgets (cards, switches, badges, icons) are untested, and a card's height may catch up one frame late.
+- Only the main flows have been tried in game so far; the checklists in the repo (`docs/testing/`) list the rest. The new widgets (cards, switches, badges, icons) may still have rough edges, and a card's height may catch up one frame late.
+- Known issue, to be looked at next: no popup appears when a Heliosphere mod is added.
 - Splits cannot be reordered yet; each type has one fixed depth order. New splits (weapons by job, grouped accessories) are planned.
 - The help wording for "Sort > Advanced" in the new-mod popup still points at the old section name, which is now "Sort settings".
 - The guide PDF behind the Help tab's button has not been rebuilt, so it is out of date. The guide in the repo (`docs/USER_GUIDE.md`) and the Help tab text are current.
