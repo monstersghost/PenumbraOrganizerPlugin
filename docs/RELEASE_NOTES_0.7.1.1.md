@@ -1,4 +1,4 @@
-# 0.8.0.0 - a rebuilt Sort tab, race folders, a reworked workbook and keyword rules
+# 0.7.1.1 - a rebuilt Sort tab, race folders, a reworked workbook and keyword rules
 
 This is the first stable release since 0.6.6.0, on both the stable and the testing channel. It brings together
 everything from the two testing builds (0.7.0.0 and 0.7.1.0) and a good deal that was built after them. Where
@@ -9,7 +9,7 @@ builds (for example the Rules card now lives in Advanced only, and the "Sort set
 Nothing moves until you press Sort, look at the plan on Review Changes and press Apply. Please read
 **Upgrading** below before your first Sort.
 
-## New in 0.8.0.0 at a glance
+## New in 0.7.1.1 at a glance
 
 - A rebuilt Sort tab with two screens, **Recommended** and **Advanced**, and a bar at the top that stays in view.
 - Per-category settings: rename or nest any category's folder, choose its creator folder, and switch its splits.

@@ -9,4 +9,4 @@ The first stable release since 0.6.6.0, on both channels.
 
 Upgrading is safe: your current layout carries over, and nothing moves until you Sort, review and Apply.
 
-Full notes: https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.8.0.0/docs/RELEASE_NOTES_0.8.0.0.md
+Full notes: https://github.com/monstersghost/PenumbraOrganizerPlugin/blob/0.7.1.1/docs/RELEASE_NOTES_0.7.1.1.md
