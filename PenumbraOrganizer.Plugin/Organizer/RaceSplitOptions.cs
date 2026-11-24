@@ -82,16 +82,16 @@ public sealed record RaceSplitOptions(
             : this;
 
     /// <summary>
-    /// The options the saved configuration describes. Reads the legacy hair checkbox when the config has
-    /// not been migrated yet, so a headless caller that skipped migration still sees the user's hair setting.
+    /// The options the saved configuration describes. The master switch, the multi-race toggle and the priority
+    /// are global; the ticked rows are the race splits of the category layouts (each row belongs to one
+    /// category). Reads the legacy hair checkbox when the config has not been migrated yet, so a headless caller
+    /// that skipped migration still sees the user's hair setting (the profile cache reads the legacy fields for
+    /// such a config).
     /// </summary>
     public static RaceSplitOptions FromConfig(Configuration config)
     {
-        var migrated = config.RaceSplitEnabled is not null;
         var enabled = config.RaceSplitEnabled ?? config.SortSplitHairByRace;
-        var rows = migrated
-            ? RaceRowNames.Parse(config.RaceSplitRows)
-            : config.SortSplitHairByRace ? RaceRows.Hair : RaceRows.All;
+        var rows = Layouts.LayoutProfileCache.For(config).ToLegacy().RaceRows;
         return new RaceSplitOptions(
             enabled, rows, config.SendMultiRaceToMultiRace, RacePriority.Normalize(config.RacePriority));
     }

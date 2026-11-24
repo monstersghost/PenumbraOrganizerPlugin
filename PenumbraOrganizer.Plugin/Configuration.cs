@@ -359,7 +359,14 @@ public sealed class Configuration : IPluginConfiguration
         foreach (var folder in ProtectedFolderPaths)
             FolderProtectionRules.TryAdd(folder, true);
 
+        // Read before migrating: a list that already existed came from a build with layouts, and its legacy
+        // fields are only a mirror (possibly stale after a hand edit), so they are rewritten from it. On the first
+        // migration the legacy fields are the source and are left exactly as they are.
+        var hadLayouts = CategoryLayouts is not null;
         MigrateRaceSplit();
+        MigrateCategoryLayouts();
+        if (hadLayouts)
+            SyncLegacyLayoutFields();
 
         Version = CurrentVersion;
     }

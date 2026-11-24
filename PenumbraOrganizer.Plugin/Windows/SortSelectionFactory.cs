@@ -1,5 +1,6 @@
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
 using PenumbraOrganizer.Plugin.Organizer.Rules;
 
 namespace PenumbraOrganizer.Plugin.Windows;
@@ -32,15 +33,17 @@ public static class SortSelectionFactory
             ? BodyPriority.Default([])
             : BodyPriority.Repair(config.BodyPriority, bodyLabels, out _);
 
+        // The splits come from the category layouts (the legacy fields are only their rollback mirror).
+        var layout = LayoutProfileCache.For(config).ToLegacy();
         var race = RaceSplitOptions.FromConfig(config);
         return new SortSelection(
-            strategy, config.SortSplitGear, config.SortSplitNpc, config.SortSplitHair,
+            strategy, layout.SplitGear, layout.SplitNpc, layout.SplitHair,
             SortPanel.HairRaceCodeAt(SortPanel.HairRaceIndexFor(config.HairRaceCode)),
-            config.MidlanderFallback, config.SortSplitGearBody, config.SortSplitBodyMods,
+            config.MidlanderFallback, layout.SplitGearBody, layout.SplitBodyMods,
             priority,
             new LayoutOptions(
-                config.SortSharedHandsFeet, race.InEffect(RaceRows.Hair, config.SortSplitBodyMods),
-                config.SortSplitEmotes, race.NullIfNoEffect(),
+                layout.SharedHandsFeet, race.InEffect(RaceRows.Hair, layout.SplitBodyMods),
+                layout.SplitEmotes, race.NullIfNoEffect(),
                 Rules: RulesFor(config)),
             RootOnly: false);
     }

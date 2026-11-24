@@ -76,7 +76,11 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
-        Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        // No saved config is a first install: it starts on the Recommended layout. A saved one is migrated below,
+        // so an existing user's folders do not move on update. Caveat: GetPluginConfig() also returns null after
+        // a config wipe, a reinstall that removed the file, or a file that failed to deserialize; that user gets
+        // Recommended too, and the next Sort proposes moving most of the library (see Configuration.CreateFresh).
+        Config = PluginInterface.GetPluginConfig() as Configuration ?? Configuration.CreateFresh();
         BundledBodyLabels =
             [.. Organizer.BodyTypes.BodyTypeListStore.LoadForMatching(PluginInterface.ConfigDirectory.FullName)
                 .Document.Bodies.Select(b => b.Label)];

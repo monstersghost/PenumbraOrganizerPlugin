@@ -1,7 +1,9 @@
 using Dalamud.Bindings.ImGui;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
+using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
 using PenumbraOrganizer.Plugin.Organizer.Operations;
 using PenumbraOrganizer.Plugin.Organizer.Rules;
 
@@ -213,38 +215,40 @@ public sealed class SortPanel
         }
     }
 
+    // The checkboxes are an adapter over the category layouts: a change writes the matching split of its
+    // category and, through the config, the legacy fields as a rollback mirror. The decision is the pure
+    // SortPanelLayoutAdapter.Persist (tested); it compares against the cached profile, so a frame with no change
+    // writes and allocates nothing. A read-only category's boxes are put back to what is saved.
     private void PersistSortChoices(Configuration config, Action saveConfig, SortStrategy strategy)
     {
-        var name = strategy.ToString();
-        if (config.SortGrouping == name
-            && config.SortSplitGear == _splitGear && config.SortSplitNpc == _splitNpc
-            && config.SortSplitHair == _splitHair && config.SortSplitGearBody == _splitGearBody
-            && config.SortSplitBodyMods == _splitBodyMods
-            && config.SortSharedHandsFeet == _sharedHandsFeet && RaceMatchesConfig(config)
-            && config.SortSplitEmotes == _splitEmotes)
-            return;
-
-        config.SortGrouping = name;
-        config.SortSplitGear = _splitGear;
-        config.SortSplitNpc = _splitNpc;
-        config.SortSplitHair = _splitHair;
-        config.SortSplitGearBody = _splitGearBody;
-        config.SortSplitBodyMods = _splitBodyMods;
-        config.SortSharedHandsFeet = _sharedHandsFeet;
-        config.RaceSplitEnabled = _raceEnabled;
-        config.RaceSplitRows = RaceRowNames.ToNames(_raceRows);
-        config.SendMultiRaceToMultiRace = _multiRaceToMultiRace;
-        config.RacePriority = [.. _racePriority.Ranked];
-        config.SyncLegacyRaceFields();
-        config.SortSplitEmotes = _splitEmotes;
-        saveConfig();
+        var (save, shown) = SortPanelLayoutAdapter.Persist(
+            config, CurrentToggles(), strategy.ToString(), _raceEnabled, _multiRaceToMultiRace, _racePriority);
+        ApplyToggles(shown);
+        if (save)
+            saveConfig();
     }
 
-    private bool RaceMatchesConfig(Configuration config) =>
-        config.RaceSplitEnabled == _raceEnabled
-        && RaceRowNames.Parse(config.RaceSplitRows) == _raceRows
-        && config.SendMultiRaceToMultiRace == _multiRaceToMultiRace
-        && RacePriority.Normalize(config.RacePriority) == _racePriority;
+    // Categories customised beyond what the checkboxes can show, and the note naming them. Recomputed only when
+    // the cache hands out a different profile, so not per frame.
+    private LayoutProfile? _profileSeen;
+    private IReadOnlySet<ModCategory> _readOnly = new HashSet<ModCategory>();
+    private string? _customNote;
+
+    private void RefreshReadOnly(Configuration config)
+    {
+        var profile = LayoutProfileCache.For(config);
+        if (ReferenceEquals(profile, _profileSeen))
+            return;
+        _profileSeen = profile;
+        _readOnly = SortPanelLayoutAdapter.ReadOnlyCategories(profile);
+        _customNote = SortPanelLayoutAdapter.CustomNote(_readOnly);
+    }
+
+    private ControlState Gate(ControlState state, ModCategory category) =>
+        _readOnly.Contains(category) ? state with { Enabled = false } : state;
+
+    private string? ReasonFor(ModCategory category, string? reason) =>
+        _readOnly.Contains(category) ? SortPanelLayoutAdapter.ReadOnlyReason : reason;
     private bool _splitGear;
     private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
     private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
@@ -551,15 +555,21 @@ public sealed class SortPanel
             : strategy == SortStrategy.CreatorOnly ? SplitsInapplicableReason
             : null;
 
+        RefreshReadOnly(config);
         DrawSelectAll(states.SplitGear.Enabled, splitReason);
+        if (_customNote is { } customNote)
+            ImGui.TextDisabled(customNote);
 
         GroupHeading("Gear");
-        DrawCheckbox("Split gear by equipment slot", ref _splitGear, states.SplitGear, HelpTopics.SortSplitGear, splitReason);
+        DrawCheckbox("Split gear by equipment slot", ref _splitGear, Gate(states.SplitGear, ModCategory.Gear),
+            HelpTopics.SortSplitGear, ReasonFor(ModCategory.Gear, splitReason));
         if (states.SharedHandsFeet.Visible)
-            DrawCheckbox("Hands and feet in a shared folder", ref _sharedHandsFeet, states.SharedHandsFeet, HelpTopics.SortSharedHandsFeet, splitReason);
+            DrawCheckbox("Hands and feet in a shared folder", ref _sharedHandsFeet, Gate(states.SharedHandsFeet, ModCategory.Gear),
+                HelpTopics.SortSharedHandsFeet, ReasonFor(ModCategory.Gear, splitReason));
 
         GroupHeading("NPC");
-        DrawCheckbox("Split NPC mods by kind", ref _splitNpc, states.SplitNpc, HelpTopics.SortSplitNpc, splitReason);
+        DrawCheckbox("Split NPC mods by kind", ref _splitNpc, Gate(states.SplitNpc, ModCategory.NPC),
+            HelpTopics.SortSplitNpc, ReasonFor(ModCategory.NPC, splitReason));
 
         // The scraped-list opt-in and its refresh button are hidden while the feature is switched
         // off at compile time (Configuration.ScrapedNpcListFeatureEnabled): they did nothing but
@@ -578,7 +588,8 @@ public sealed class SortPanel
         }
 
         GroupHeading("Hair");
-        DrawCheckbox("Split hair by hair number", ref _splitHair, states.SplitHair, HelpTopics.SortSplitHair, splitReason);
+        DrawCheckbox("Split hair by hair number", ref _splitHair, Gate(states.SplitHair, ModCategory.Hair),
+            HelpTopics.SortSplitHair, ReasonFor(ModCategory.Hair, splitReason));
         if (states.PriorityRace.Visible)
         {
             ImGui.BeginDisabled(!states.PriorityRace.Enabled);
@@ -600,15 +611,15 @@ public sealed class SortPanel
         }
 
         GroupHeading("Body type");
-        DrawCheckbox("Split gear by body type", ref _splitGearBody, states.SplitGearBody,
-            HelpTopics.SortSplitGearBody, splitReason);
-        DrawCheckbox("Split body mods by body type", ref _splitBodyMods, states.SplitBodyMods,
-            HelpTopics.SortSplitBodyMods, splitReason);
+        DrawCheckbox("Split gear by body type", ref _splitGearBody, Gate(states.SplitGearBody, ModCategory.Gear),
+            HelpTopics.SortSplitGearBody, ReasonFor(ModCategory.Gear, splitReason));
+        DrawCheckbox("Split body mods by body type", ref _splitBodyMods, Gate(states.SplitBodyMods, ModCategory.Body),
+            HelpTopics.SortSplitBodyMods, ReasonFor(ModCategory.Body, splitReason));
         DrawBodyModsHelpMarker();
 
         GroupHeading("Animation");
-        DrawCheckbox("Split emotes by emote", ref _splitEmotes, states.SplitEmotes,
-            HelpTopics.SortSplitEmotes, splitReason);
+        DrawCheckbox("Split emotes by emote", ref _splitEmotes, Gate(states.SplitEmotes, ModCategory.Animation),
+            HelpTopics.SortSplitEmotes, ReasonFor(ModCategory.Animation, splitReason));
 
         GroupHeading("Race");
         DrawRaceSplit(state, states.RaceSplit, splitReason);
@@ -683,7 +694,8 @@ public sealed class SortPanel
         {
             var ticked = _raceRows.HasFlag(row);
             var needsBody = RaceSplitOptions.NeedsBodySplit(row);
-            var enabled = section.Enabled && (!needsBody || _splitBodyMods);
+            var readOnly = _readOnly.Contains(SortPanelLayoutAdapter.CategoryOf(row));
+            var enabled = section.Enabled && (!needsBody || _splitBodyMods) && !readOnly;
 
             ImGui.Indent();
             ImGui.BeginDisabled(!enabled);
@@ -692,7 +704,9 @@ public sealed class SortPanel
             ImGui.EndDisabled();
             Help.Tooltip(
                 row == RaceRows.Hair ? HelpTopics.SortSplitHairByRace : HelpTopics.SortRaceRows,
-                enabled ? null : needsBody && section.Enabled ? RaceNeedsBodySplitReason : reason);
+                enabled ? null
+                : readOnly ? SortPanelLayoutAdapter.ReadOnlyReason
+                : needsBody && section.Enabled ? RaceNeedsBodySplitReason : reason);
             ImGui.Unindent();
         }
 
