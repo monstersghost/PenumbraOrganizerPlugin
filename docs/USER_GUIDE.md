@@ -1211,75 +1211,75 @@ Bizu; "Glow Skin", a Miqo'te skin with no author; "Akako 4.0a dt", a Miqo'te fac
 Recommended layout, so without rules "Medieval Dress" would go to
 `Gear/10. Bibo+/02. Top/Ann/Medieval Dress`.
 
-1. **One creator in one folder.**
+**Example 1: one creator in one folder.**
 
-        author = 'Ann' -> Ann's mods
+    author = 'Ann' -> Ann's mods
 
-   "Medieval Dress" goes to `Ann's mods/Medieval Dress`, and so does every other mod by Ann, whatever
-   its type.
+"Medieval Dress" goes to `Ann's mods/Medieval Dress`, and so does every other mod by Ann, whatever its
+type.
 
-2. **Two slots together, still by creator.**
+**Example 2: two slots together, still by creator.**
 
-        type = 'Gear' and subtype in ('Top', 'Legs') -> Gear/Outfits/{creator}
+    type = 'Gear' and subtype in ('Top', 'Legs') -> Gear/Outfits/{creator}
 
-   "Medieval Dress" goes to `Gear/Outfits/Ann/Medieval Dress`, with no body or slot folder. A
-   multi-piece outfit has an empty subtype, so it is not matched and sorts as usual.
+"Medieval Dress" goes to `Gear/Outfits/Ann/Medieval Dress`, with no body or slot folder. A multi-piece
+outfit has an empty subtype, so it is not matched and sorts as usual.
 
-3. **One race's hair, without hair numbers.**
+**Example 3: one race's hair, without hair numbers.**
 
-        type = 'Hair' and race = 'Viera' -> Hair/Viera/{creator}
+    type = 'Hair' and race = 'Viera' -> Hair/Viera/{creator}
 
-   "Imeris - Solar" goes to `Hair/Viera/Bizu/Imeris - Solar`. A hair made for Viera and Au Ra is
-   `Multi-race` while Send multi-race mods to Multi-race is ticked, so this rule does not take it.
+"Imeris - Solar" goes to `Hair/Viera/Bizu/Imeris - Solar`. A hair made for Viera and Au Ra is
+`Multi-race` while Send multi-race mods to Multi-race is ticked, so this rule does not take it.
 
-4. **Either word, kept by type.**
+**Example 4: either word, kept by type.**
 
-        name contains 'recolor' or name contains 'retexture' -> Recolors/{type}
+    name contains 'recolor' or name contains 'retexture' -> Recolors/{type}
 
-   A gear mod named "Medieval Dress Recolor" goes to `Recolors/Gear/Medieval Dress Recolor`. If you
-   renamed Gear to `Equipment/Gear` in Advanced, it goes to `Recolors/Equipment/Gear/Medieval Dress
-   Recolor`, while the condition would still have to say `type = 'Gear'`.
+A gear mod named "Medieval Dress Recolor" goes to `Recolors/Gear/Medieval Dress Recolor`. If you
+renamed Gear to `Equipment/Gear` in Advanced, it goes to `Recolors/Equipment/Gear/Medieval Dress
+Recolor`, while a condition would still have to say `type = 'Gear'`.
 
-5. **An empty token collapses.**
+**Example 5: an empty token collapses.**
 
-        type = 'Skin' -> Skins/{race}/{creator}
+    type = 'Skin' -> Skins/{race}/{creator}
 
-   "Glow Skin" goes to `Skins/Miqo'te/Glow Skin`: it has no author, so the `{creator}` level drops out.
-   A Miqo'te skin by Ann would go to `Skins/Miqo'te/Ann/<name>`.
+"Glow Skin" goes to `Skins/Miqo'te/Glow Skin`: it has no author, so the `{creator}` level drops out. A
+Miqo'te skin by Ann would go to `Skins/Miqo'te/Ann/<name>`.
 
-6. **A quote inside the text, and brackets.**
+**Example 6: a quote inside the text, and brackets.**
 
-        race = 'Miqo''te' and (type = 'Face' or type = 'Hair') -> Miqo'te/{type}
+    race = 'Miqo''te' and (type = 'Face' or type = 'Hair') -> Miqo'te/{type}
 
-   "Akako 4.0a dt" goes to `Miqo'te/Face/Akako 4.0a dt`. The quote is doubled inside the condition's
-   text but written once in the folder. Without the brackets the rule would also take every hair mod of
-   any race, because `and` binds before `or`.
+"Akako 4.0a dt" goes to `Miqo'te/Face/Akako 4.0a dt`. The quote is doubled inside the condition's text
+but written once in the folder. Without the brackets the rule would also take every hair mod of any
+race, because `and` binds before `or`.
 
-7. **Mods with no author.**
+**Example 7: mods with no author.**
 
-        author = '' -> No author/{type}
+    author = '' -> No author/{type}
 
-   "Gaelicat Minion" goes to `No author/Minion/Gaelicat Minion`. Writing `-> {creator}` instead would
-   come out empty for every mod this rule matches, so they would all be left where they are.
+"Gaelicat Minion" goes to `No author/Minion/Gaelicat Minion`. Writing `-> {creator}` instead would come
+out empty for every mod this rule matches, so they would all be left where they are.
 
-8. **Excluding with not.**
+**Example 8: excluding with not.**
 
-        not type in ('Gear', 'Hair') and name starts with 'a' -> A/{type}
+    not type in ('Gear', 'Hair') and name starts with 'a' -> A/{type}
 
-   This reads "(type is not Gear or Hair) and (name starts with a)". "Akako 4.0a dt" goes to
-   `A/Face/Akako 4.0a dt`; a gear mod named "Apron" is not matched.
+This reads "(type is not Gear or Hair) and (name starts with a)". "Akako 4.0a dt" goes to
+`A/Face/Akako 4.0a dt`; a gear mod named "Apron" is not matched.
 
-9. **A folder test that stays true.**
+**Example 9: a folder test that stays true.**
 
-        folder = 'Downloads' -> Inbox
+    folder = 'Downloads' -> Inbox
 
-   files every mod sitting directly in `Downloads` under `Inbox`, but shows the amber warning: once a
-   mod is in `Inbox`, its folder is no longer `Downloads`, so the next Sort no longer matches it and
-   sorts it as usual. Written as `folder in ('Downloads', 'Inbox') -> Inbox`, the rule keeps matching
-   the mods it has already filed, and the warning goes away.
+This files every mod sitting directly in `Downloads` under `Inbox`, but shows the amber warning: once a
+mod is in `Inbox`, its folder is no longer `Downloads`, so the next Sort no longer matches it and sorts
+it as usual. Written as `folder in ('Downloads', 'Inbox') -> Inbox`, the rule keeps matching the mods it
+has already filed, and the warning goes away.
 
-The order matters when rules overlap. With rule 1 above first and rule 2 second, "Medieval Dress" goes
-to `Ann's mods`; swap them with Up and Dn and it goes to `Gear/Outfits/Ann`.
+**Order matters when rules overlap.** With example 1 first in the list and example 2 second, "Medieval
+Dress" goes to `Ann's mods`; swap them with Up and Dn and it goes to `Gear/Outfits/Ann`.
 
 ### What the rules list tells you
 
