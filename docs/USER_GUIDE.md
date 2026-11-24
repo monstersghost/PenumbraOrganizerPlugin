@@ -24,9 +24,11 @@ Hover over each one to see what it opens.
 
 ## About the pictures
 
-The screenshots below are rendered from a faithful mock of the plugin's window (`docs/ui-mock/`),
-using the plugin's own colours and the exact control labels from its code. They show the layout and
-wording you will see; your own numbers, mod names and folder names will differ.
+The Sort tab pictures and the Penumbra trees under [The result in Penumbra](#the-result-in-penumbra)
+are in-game screenshots of version 0.7.1.0. The other screenshots are rendered from a faithful mock of
+the plugin's window (`docs/ui-mock/`), using the plugin's own colours and the exact control labels from
+its code. They show the layout and wording you will see; your own numbers, mod names and folder names
+will differ.
 
 ## Requirements
 
@@ -247,7 +249,11 @@ recorded paths regardless of current protection. See History below.
 
 ### Sort
 
-![The Sort tab: the pinned bar with Recommended and Advanced, the Sort button and the scope line, then the Recommended layout card with its example paths](images/sort.png)
+![The Sort tab on Recommended: the pinned bar with the mode switch, Sort, the Heliosphere and Proteus status line and Open Protect tab; the Recommended layout card with Group by, What to sort, four example paths and "2 categories customised"; What Recommended does; Auto sort; Manual assignment](images/sort-recommended.jpg)
+
+*The Sort tab on Recommended. The pinned bar at the top holds the mode switch, Sort, the ? button and
+the Heliosphere and Proteus status line. Below it: the Recommended layout card with its example paths,
+What Recommended does, the Auto sort card and Manual assignment.*
 
 Choose a layout and press Sort. That computes a proposed folder path for every unprotected mod
 **without moving anything**. Only Apply, on the Review Changes tab, calls Penumbra.
@@ -279,6 +285,12 @@ how many and the examples show your layout, so the screen never describes a layo
 Rules are edited in Advanced only, but they still apply when you sort from Recommended; while any rule
 is active, Recommended says so ("2 rules active, edit them in Advanced") with **Show rules**, which opens
 Advanced with the Rules card open and scrolled into view.
+
+![Advanced with Gear selected: the category list with Custom badges on Gear and Weapon, the Gear folder, Creator folder set to After type folders, the Body type and Equipment slot splits numbered 1 and 2, Hands and feet in one shared folder, the example path and the Body types card](images/sort-advanced-gear.png)
+
+*Advanced with Gear selected. The list on the left marks customised categories with a Custom badge.
+On the right: the folder, the creator folder, the splits with their depth numbers, the live example
+and the Body types card. The Rules and Auto sort cards follow below.*
 
 **Advanced** has the 16 kinds of mod on the left and the selected one's settings on the right. A
 **Custom** badge marks a category that differs from Recommended, and the header counts them. Group by
@@ -361,6 +373,11 @@ more numbers, or whose files could not be read, stays directly in `Hair`, as doe
 while this is off. The numbers come from the mod's own configuration, not its name. It is on in
 the Recommended layout. Folder numbers are padded to three digits (`Hair/002`, `Hair/053`, `Hair/185`) so Penumbra,
 which sorts folders as text, lists them in numeric order. Numbers of 1000 or more are not padded.
+
+![Advanced with Hair selected: the Race and Hair number splits numbered 1 and 2, the example path Hair / Viera / 115 / Bizu / Imeris - Solar, Priority race set to a Miqo'te option, Midlander fallback ticked, and the Race panel with Split by race, Send multi-race mods to Multi-race and a Race priority of Miqo'te then Au Ra](images/sort-advanced-hair.png)
+
+*Advanced with Hair selected: the Race split (depth 1) and Hair number split (depth 2), the example
+path, Priority race and Midlander fallback, then the Race panel shared with Face, Skin and Body.*
 
 Two controls appear under it, and both apply only while Split hair is on:
 
@@ -491,6 +508,37 @@ Each rule shows what is wrong with it and where (a red message with a position a
 If you change the grouping, a category's layout or a rule after sorting, a line appears in the bar
 reminding you that the selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
 Sorting again always recomputes from scratch, so it is safe to press repeatedly.
+
+#### The result in Penumbra
+
+These are Penumbra's own Mods tab after a Sort and Apply with Group by on Type then creator, the
+numbered gear and body folders, the race split and the hair number split on.
+
+![Penumbra's Mods tab: Gear/07. Neck, 08. Wrists and 09. Rings with creator folders, then Gear/10. Rue+/00. Sets with one folder per creator; on the right the mod Variant Miqotes v2 with the Mod Path Body/03. Racial Scaling/Miqo'te/Sel/Variant Miqotes v2](images/result-racial-scaling.png)
+
+*Numbered gear folders: the shared slot folders (`07. Neck`, `08. Wrists`, `09. Rings`), then the
+first body, `10. Rue+`, with its own `00. Sets` and a folder per creator. On the right, a racial
+scaling mod filed at `Body/03. Racial Scaling/Miqo'te/Sel/Variant Miqotes v2`: race, then creator.*
+
+![Penumbra's Mods tab: Gear/15. Rox+ and 16. TBSE with 00. Sets, 02. Top and 04. Legs, then Hair/Miqo'te/002 and 115, and Hair/Multi-race with 108, 115, 137 and 169](images/result-gear-hair.png)
+
+*Further down: more bodies (`15. Rox+`, `16. TBSE`) with only the slot folders they have mods for.
+Hair is split by race and then by hair number (`Hair/Miqo'te/115/...`), and hair made for several
+races sits under `Hair/Multi-race/<number>`.*
+
+![Penumbra's Mods tab: NPC/Bosses and NPC/NPCs with creator folders, a Proteus Upscales folder holding Gear/10. Rue+/02. Top, 03. Hands, 04. Legs and 05. Feet, then Skin/Miqo'te, The Dollhouse, and the Proteus mod at the root](images/result-npc-proteus.png)
+
+*NPC mods split by kind (`NPC/Bosses`, `NPC/NPCs`). With Proteus on **Sort inside their folder**, its
+mods stay under `Proteus Upscales` and are sorted beneath it (`Proteus Upscales/Gear/10. Rue+/02. Top/...`).
+The Proteus managed mod, `Proteus`, is at the root, where **Place the Proteus managed mod at the root**
+puts it.*
+
+![Penumbra's Mods tab: an Akako folder holding Body/02. Tails, Ears and Horns/Miqo'te, Face/Eyes/Miqo'te, Face/Miqo'te, Gear/06. Ears, Gear/10. Rue+/03. Hands and Skin/Midlander, followed by the Animation and VFX folder with Animation, Battle Animation and Emotes](images/result-akako-folder.png)
+
+*A folder kept as the top level with Protect > Sort inside folders: the mods in `Akako` are sorted
+beneath it with the same layout as everything else (`Akako/Face/Eyes/Miqo'te/...`,
+`Akako/Gear/10. Rue+/03. Hands/...`). Below it, `Animation and VFX` with `Animation`,
+`Battle Animation` and `Emotes`.*
 
 #### Manual assignment
 
@@ -838,7 +886,11 @@ In the Body types panel under Gear and Body (Sort tab, Advanced) is a collapsed 
 supports more than one body, it is filed under the highest-ranked one. Use the up and down arrows to
 reorder, or **Reset to default**. A **First-choice body** dropdown moves one body straight to rank 1.
 
-![The full priority order, with up and down arrows and Reset to default](images/sort-body-priority.png)
+![Advanced with Body selected: the Part and body type, Tails, ears and horns by race and Racial scaling by race splits numbered 1 to 3, the example path, the Race panel, and the Body types card with First-choice body, Check my collection and the full priority order](images/sort-advanced-body.png)
+
+*Advanced with Body selected: three splits with their depth numbers, the example path, the Race panel,
+and the Body types card with First-choice body, Check my collection and the full priority order
+(Rue+, Bibo+, Neolithe, YAB, ...).*
 
 The order is saved between sessions, and so are the hair priority race, the Midlander fallback,
 Group by and the category layouts. The order is applied when you press Sort, so reordering and
