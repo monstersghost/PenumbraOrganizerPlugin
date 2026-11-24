@@ -25,7 +25,7 @@ Hover over each one to see what it opens.
 ## About the pictures
 
 The Sort tab pictures and the Penumbra trees under [The result in Penumbra](#the-result-in-penumbra)
-are in-game screenshots of version 0.7.1.0. The other screenshots are rendered from a faithful mock of
+are in-game screenshots. The other screenshots are rendered from a faithful mock of
 the plugin's window (`docs/ui-mock/`), using the plugin's own colours and the exact control labels from
 its code. They show the layout and wording you will see; your own numbers, mod names and folder names
 will differ.
@@ -81,6 +81,21 @@ alone.
 At the bottom, **Live events (ModAdded / ModDeleted / ModMoved)** reports those events as Penumbra
 raises them. It is informational only — it does not trigger a re-scan, which is why the rule above
 is to scan again yourself after installing mods.
+
+#### Unused mods
+
+A collapsed **Unused mods** section at the bottom of the tab finds mods that no collection enables.
+Press **Check unused mods**; tick **Only my active collection** first to check that one collection
+instead of all of them. A line names the collections it read (temporary settings from other plugins
+are ignored), and the list shows each unused mod with its current path and its size on disk. Checking
+only reads; nothing changes.
+
+Tick the mods you want to set aside (**Select all** and **Select none** help) and press **Move N
+selected to Unused**. That stages them under an `Unused` folder, keeping their folder structure
+(`Unused/Gear/02. Top/...`), and moves nothing until you apply on Review Changes. Protected mods are
+listed as "protected - will not move" and cannot be ticked. Tick **Protect the Unused folder** before
+moving to add a protect rule for that folder, so a later whole-library sort does not pull those mods
+back out; the rule shows on the Protect tab.
 
 #### If Penumbra is not available
 
@@ -210,15 +225,12 @@ An explicit protection you set yourself (a ticked mod, or a protected folder) st
 mode.
 
 **New Heliosphere and Proteus mods.** Heliosphere puts a newly installed mod at the top level of the
-library. In Protected mode (the default) the new-mod popup has nothing to sort, so instead it tells
-you, for example: "1 new Heliosphere mod added. Heliosphere mods are Protected, so it stays where it
-is. You can change this on the Protect tab." It has an **Open Protect tab** button and **OK**, and no
-Sort now, since nothing would move. When the same batch also holds ordinary new mods, the usual
-question appears with one extra line about the protected tool mods instead of a second popup. In
-**Sort inside their folder** or **Treat as normal** mode the new tool mods are offered like any other,
-and the confirm window marks them `(Heliosphere)` or `(Proteus)`. Turning the popup off (**Don't show
-this popup**, or **Show a popup when new mods are found** in Sort > Auto sort) or choosing Do nothing
-also silences this notice.
+library. The new-mod popup follows these modes: in Protected mode (the default) it has nothing to sort,
+so it shows a notice instead ("1 new Heliosphere mod added. Heliosphere mods are Protected, so it stays
+where it is. You can change this on the Protect tab.") with **Open Protect tab** and **OK**; in the other
+two modes the new tool mods are offered like any other. See
+[Auto sort and the new-mod popup](#auto-sort-and-the-new-mod-popup) under Sort. The Sort tab's bar also
+repeats both modes in its status line.
 
 #### Sort inside folders
 
@@ -258,33 +270,70 @@ What Recommended does, the Auto sort card and Manual assignment.*
 Choose a layout and press Sort. That computes a proposed folder path for every unprotected mod
 **without moving anything**. Only Apply, on the Review Changes tab, calls Penumbra.
 
-The bar at the top stays in view while the rest of the tab scrolls. It holds the **Recommended** and
-**Advanced** switch, the **Sort** button, the line saying how many mods the sort covers, and the **?**
-button, which opens the Help tab at its Sort section. Below it are the screen you picked, then (in
-Advanced only) the **Rules** card, the **Auto sort** card (what happens when new mods are
-installed) and manual assignment.
+The tab has two screens, **Recommended** and **Advanced**. Both sort the same library with the same
+saved settings; Advanced only shows more of them. Opening the tab shows Recommended when no category
+is customised, otherwise Advanced.
 
-**Heliosphere and Proteus status line.** In the bar at the top, so it stays in view while you scroll,
-on both Recommended and Advanced, one line repeats the Protect tab's tool modes, for example "22 Heliosphere mods: Protected
-(not sorted). 13 Proteus mods: Protected (not sorted). Change this on the Protect tab.", with an
-**Open Protect tab** button. It is yellow when a tool is Protected and has mods (those mods will not
-be sorted) and grey otherwise. A tool is named when it has mods or its mode is not Protected; the line
-is hidden when you have no Heliosphere or Proteus mods and both modes are Protected. The modes are
-changed only on the Protect tab.
+#### The pinned bar
+
+The bar at the top stays in view while the rest of the tab scrolls. From left to right:
+
+- **Recommended | Advanced**, the switch between the two screens. It works even while a scan runs.
+- **Sort**, the plugin's purple button. It is greyed while another operation (a scan, an Apply) runs.
+- **The scope line**, after a Sort: how many mods it covers, such as "Will sort 1450 of 1723 mods:
+  whole library.". With What to sort on loose mods only it also says how many protected root mods stay
+  put. When rules ran it adds how many mods they filed ("12 filed by rules."), any rule that was
+  skipped because it has a mistake, and any mod a rule left in place because its folder could not be
+  built (see [Sort rules](#sort-rules)).
+- **?** at the right end, which opens the Help tab at its Sort section.
+
+Under it, "Selection changed since the last sort." appears when you change a split, a folder, a creator
+folder, Group by, the race settings or a rule after sorting. Press Sort again to bring the proposals up
+to date; sorting always recomputes from scratch, so it is safe to press repeatedly.
+
+**Heliosphere and Proteus status line.** Also in the bar, on both screens, one line repeats the Protect
+tab's tool modes, for example "22 Heliosphere mods: Protected (not sorted). 13 Proteus mods: Protected
+(not sorted). Change this on the Protect tab.", with an **Open Protect tab** button. It is yellow when
+a tool is Protected and has mods (those mods will not be sorted) and grey otherwise, as in "22
+Heliosphere mods: Sort inside their folder." A tool is named when it has mods or its mode is not
+Protected; the line is hidden when you have no Heliosphere or Proteus mods and both modes are Protected.
+The modes are changed only on the Protect tab.
+
+Below the bar come the screen you picked, then (in Advanced only) the **Rules** card, the **Auto sort**
+card and **Manual assignment**.
 
 **Everything on this tab is remembered** between sessions: Group by, every category's layout, the race
-settings, the hair race, the Midlander fallback and the body priority. Only the proposals themselves
-reset (on a rescan), and What to sort, which is for this session only.
+settings, the hair race, the Midlander fallback, the body priority, the rules and the Auto sort choices.
+Only the proposals themselves reset (on a rescan), and What to sort, which is for this session only.
 
-#### Recommended and Advanced
+#### Group by and What to sort
 
-**Recommended** is one card: What to sort, Group by, and four example paths (Gear, Hair, Body and NPC)
-that show where such a mod would go. A second card lists what Recommended does for each kind of mod,
-with **Customise per category**, which opens Advanced. If you have customised a category, a line says
-how many and the examples show your layout, so the screen never describes a layout the Sort will not use.
-Rules are edited in Advanced only, but they still apply when you sort from Recommended; while any rule
-is active, Recommended says so ("2 rules active, edit them in Advanced") with **Show rules**, which opens
-Advanced with the Rules card open and scrolled into view.
+Both screens start with the same row. **Group by** picks the shape of the path (see
+[Group by](#group-by) below). **What to sort** is either **Whole library**, every unprotected mod, or
+**Only loose mods in the root**, which leaves anything already in a folder where it is. What to sort is
+not saved.
+
+#### Recommended
+
+**Recommended** is one card: Group by, What to sort, and four live example paths (Gear, Hair, Body and
+NPC) that show where such a mod would go, with the type folders, the creator and the split folders in
+their own colours. They change as soon as you change Group by or anything in Advanced.
+
+If you have customised a category, a yellow line says how many ("2 categories customised") with **Show
+in Advanced**, and the examples show your layout, so the screen never describes a layout the Sort will
+not use.
+
+Rules are edited in Advanced only, but they still apply when you sort from Recommended. While any rule
+is active (switched on and free of mistakes), Recommended says so ("2 rules active, edit them in
+Advanced") with **Show rules**, which opens Advanced with the Rules card open and scrolled into view.
+
+A second card, **What Recommended does**, lists the layout one line per kind of mod: gear by body type,
+then slot, with accessories kept out of body folders and hands and feet sharing a folder; hair by hair
+number, three digits; body by body type, then part (`Body/10. Bibo+/00. Replacer`); NPC by kind (NPCs,
+Bosses, Enemies); emotes by the emote they replace; and one folder per type for everything else, with a
+note saying whether Split by race is on. **Customise per category** opens Advanced.
+
+#### Advanced
 
 ![Advanced with Gear selected: the category list with Custom badges on Gear and Weapon, the Gear folder, Creator folder set to After type folders, the Body type and Equipment slot splits numbered 1 and 2, Hands and feet in one shared folder, the example path and the Body types card](images/sort-advanced-gear.png)
 
@@ -292,36 +341,77 @@ Advanced with the Rules card open and scrolled into view.
 On the right: the folder, the creator folder, the splits with their depth numbers, the live example
 and the Body types card. The Rules and Auto sort cards follow below.*
 
-**Advanced** has the 16 kinds of mod on the left and the selected one's settings on the right. A
-**Custom** badge marks a category that differs from Recommended, and the header counts them. Group by
-and What to sort are on this screen too. For each category you set:
+**Advanced** starts with a header: "N of 16 categories customised. Everything else follows
+Recommended.", **Select all splits**, **Reset all to Recommended**, then Group by and What to sort.
 
-- **Folder**: its top folder, which can be nested, such as `Equipment/Gear`. It is checked as you type
-  (relative, no empty part, `.` or `..`, at most 260 characters) and an invalid name is never saved.
-  A note warns when another category uses the same folder, or the folder is inside a protected or
-  sort-inside folder. Renaming moves nothing until you Sort and Apply.
-- **Creator folder**: none, before the type folders or after them. Picking what Group by already gives
-  keeps the category following Group by.
-- **Splits**: each one adds a folder level, numbered by its depth. The order is fixed. A split that
-  cannot apply right now is greyed with the reason and keeps its setting.
-- **Example**: one live path for the category.
+Below that, the 16 kinds of mod are listed on the left: Gear, Weapon, Face, Hair, Body, Skin, NPC,
+Minion, Mount, Pet, Ornament, Furniture, VFX, Sound, Animation and Others. A **Custom** badge marks a
+category that differs from Recommended. A category without one follows Recommended, including any later
+improvement to it. Pick one and its settings appear on the right, under its name and either **Custom**
+with a **Reset to Recommended** button or "Using Recommended":
 
-**Reset to Recommended** puts one category back; **Reset all to Recommended** puts every category back,
-straight away, without asking. Nothing moves until you Sort and Apply.
+- **Folder** ("nest with /, for example Equipment/Gear"): the category's top folder, which can be
+  nested. It is checked as you type: it must be relative, with no empty part, no `.` or `..`, and at
+  most 260 characters. An invalid name shows a red message and is never saved; a valid one is saved
+  when you leave the box. A yellow note warns, without stopping the save, when another category uses the
+  same folder ("Hair also uses this folder, so those mods share it."), when the folder is inside a
+  protected folder (mods filed there would be treated as protected), or when it is inside a sort-inside
+  folder. Renaming moves nothing until you Sort and Apply.
+- **Creator folder**: **None**, **Before type folders** or **After type folders**. "Follows Group by"
+  appears while the category takes its creator folder from Group by. Picking the level Group by already
+  gives keeps it following Group by (and does not make the category Custom). Greyed under Group by
+  Creator.
+- **Splits** ("numbers are the folder depth; the order is fixed"): each split is a switch with a short
+  description, and a split that is on shows its folder depth (1, 2, 3) beside it. The order cannot be
+  changed. A split that cannot apply right now is greyed, keeps its setting, and its tooltip says why
+  (for example under Group by Creator, or a Body race split while Part and body type is off). **Hands and
+  feet in one shared folder** is a checkbox under Gear's Equipment slot with no number, because it adds
+  no folder of its own. Categories with no split say so.
+- **Example**: one live path for the category with your settings, in the same colours as on
+  Recommended.
 
-**Select all splits**, in the Advanced header, asks first. Its confirmation lists what it does: it
-turns on every split in every category that has one (gear, NPC, hair, body and emote splits, and the
-race split of every category that has one) and **Split by race**, and turns off the shared hands and
-feet folder so hands and feet get their own folders. Folder names, creator levels, Group by and the
-priorities stay as they are, and it does not sort. **Cancel** or **Escape** closes it without a change.
+The splits each category has:
 
-Opening the tab shows Recommended when nothing is customised, otherwise Advanced.
+| Category | Splits |
+| --- | --- |
+| Gear | Body type; Equipment slot (with Hands and feet in one shared folder) |
+| Weapon | Job |
+| Face | Race; Eyes by race |
+| Hair | Race; Hair number |
+| Body | Part and body type; Tails, ears and horns by race; Racial scaling by race |
+| Skin | Race |
+| NPC | Kind |
+| Animation | Emote |
 
-Some settings sit under the categories they affect: **Priority race** and **Midlander fallback** under
-Hair, the **Race** panel (Split by race, Send multi-race mods to Multi-race, Race priority) under Hair,
-Face, Skin and Body, and **Body types** (Body priority and Check my collection) under Gear and Body.
+Some settings sit under the categories they affect:
 
-The splits described below are these category splits. The old checkbox names map to them like this:
+- **Hair**: **Priority race** and **Midlander fallback**, shown while Hair number is on.
+- **Hair, Face, Skin and Body**: the **Race** panel, with **Split by race** (the master switch for every
+  race split), **Send multi-race mods to Multi-race** and the collapsed **Race priority** list (arrows to
+  reorder, Remove, and **Add a race**). With Split by race on, a line asks you to scan again when some
+  face, skin or body mods were scanned before race reading existed.
+- **Weapon**: "Scan again so weapon-only mods move between Gear and Weapon." while your mods were
+  scanned with the Job split the other way.
+- **Gear and Body**: the **Body types** card, holding the collapsed **Body priority** section:
+  **First-choice body**, **Check my collection** and the collapsed **Full priority order** with its
+  arrows and **Reset to default**.
+
+**Reset to Recommended** puts one category back: folder, creator folder and splits. **Reset all to
+Recommended** puts every category back, straight away, without asking; it is greyed while nothing is
+customised. Nothing moves until you Sort and Apply.
+
+**Select all splits** asks first, in a window titled "Select all splits?". It lists what it does: every
+gear, NPC, hair, body and emote split; weapons by job (scan again to take weapon-only mods out of Gear);
+the race split on every category that has one, and **Split by race**; and hands and feet get their own
+folders (the shared folder is turned off). Folder names, creator levels, Group by and the priorities stay
+as they are, and nothing moves until you press Sort, review the plan and Apply. **Select all** confirms;
+**Cancel** or **Escape** closes it without a change.
+
+While a scan or an Apply runs, every control on the screen is greyed with the reason; the mode switch
+and ? still work.
+
+Versions before 0.7.1.0 had one checkbox per split instead of the category editor. Your ticks carried
+over when you updated. The old checkbox names map to the category splits like this:
 
 | Old checkbox | Category split |
 | --- | --- |
@@ -345,6 +435,11 @@ This picks the shape of the path:
 | Type then creator | `{Category}[/{SubCategory}]/{Creator}/{ModName}` |
 | Creator then type | `{Creator}/{Category}[/{SubCategory}]/{ModName}` |
 
+`{Category}` is the category's folder from Advanced (`Gear`, or your own name such as
+`Equipment/Gear`), and the split folders go where `[/{SubCategory}]` is. In Advanced each category can
+move its creator folder before or after the type folders, or drop it, so one category can differ from
+the shape above.
+
 A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it is
 easy to find and sort by hand instead of landing somewhere unexpected.
 
@@ -354,20 +449,20 @@ restores it untouched.
 
 #### The splits
 
-A new install starts on the **Recommended** layout: gear by body type and then slot, with hands and feet in one shared folder; NPC mods by kind; hair by hair number; body mods by body type; emotes by emote. Race stays off until you turn on its master switch. Updating from an earlier version keeps the boxes you had ticked, so nothing moves.
+A new install starts on the **Recommended** layout: gear by body type and then slot, with hands and feet in one shared folder; NPC mods by kind; hair by hair number; body mods by body type; emotes by emote. Race stays off until you turn on its master switch. Weapons by job is off. Updating from an earlier version keeps the boxes you had ticked, so nothing moves.
 
-**Split gear by equipment slot** puts gear mods in `Gear/Feet`, `Gear/Head` and so on, wherever the
+Each split below is named as it appears in Advanced, with its category.
+
+**Gear: Equipment slot** puts gear mods in `Gear/Feet`, `Gear/Head` and so on, wherever the
 slot can be determined from a single unambiguous match. Anything ambiguous — a real multi-piece
 outfit — or unidentifiable falls back to the plain `Gear` folder. The Export on Review Changes
 breaks down how many resolved, how many were ambiguous, and how many had no equipment evidence at
 all, which is the fastest way to find out why a mod did not land where you expected.
 
-**Split NPC mods by kind** puts NPC mods in `NPC/NPCs`, `NPC/Bosses` or `NPC/Enemies`. Turning it
-**off puts every NPC mod straight into `NPC`** with no subfolder. That combination did not exist in
-earlier versions, where NPC mods were always subdivided; if you preferred the old behaviour, leave
-it ticked, as it is by default.
+**NPC: Kind** puts NPC mods in `NPC/NPCs`, `NPC/Bosses` or `NPC/Enemies`. Turning it
+**off puts every NPC mod straight into `NPC`** with no subfolder. It is on by default.
 
-**Split hair by hair number** puts a hair mod in a folder named after the vanilla hair number it
+**Hair: Hair number** puts a hair mod in a folder named after the vanilla hair number it
 replaces, such as `Hair/115`, when the mod targets exactly one number. A mod that targets two or
 more numbers, or whose files could not be read, stays directly in `Hair`, as does every hair mod
 while this is off. The numbers come from the mod's own configuration, not its name. It is on in
@@ -379,7 +474,7 @@ which sorts folders as text, lists them in numeric order. Numbers of 1000 or mor
 *Advanced with Hair selected: the Race split (depth 1) and Hair number split (depth 2), the example
 path, Priority race and Midlander fallback, then the Race panel shared with Face, Skin and Body.*
 
-Two controls appear under it, and both apply only while Split hair is on:
+Two controls appear under it, and both apply only while Hair number is on:
 
 - **Priority race.** Pick a race and gender. A hair mod that uses exactly one hair number for that
   race is filed under that number, whatever the other races use — a mod using 169 for most races
@@ -390,7 +485,7 @@ Two controls appear under it, and both apply only while Split hair is on:
 A mod that still does not resolve to one number stays in the plain `Hair`
 folder; a race with two hair numbers in the same mod never picks one.
 
-**Split gear by body type** puts a gear mod in a folder named after the body it was made for, such
+**Gear: Body type** puts a gear mod in a folder named after the body it was made for, such
 as `Gear/Bibo+/Top`. The body comes before the equipment slot, so everything made for one body sits
 together instead of being spread across the nine slot folders. It is on in the Recommended layout. The slot split
 is separate: turn that off and you get `Gear/Bibo+` with nothing below it.
@@ -403,7 +498,7 @@ and each holds the same numbered slot folders (`10. Rue+/02. Top`). Reordering B
 body gaining or losing gear, renumbers the body folders. With only one of the two splits on, the
 layout is as before, without numbers.
 
-**Hands and feet in a shared folder** (on in the Recommended layout; it needs Split gear by equipment slot and only does anything with Split gear by body type on)
+**Gear: Hands and feet in one shared folder** (on in the Recommended layout; it needs Equipment slot and only does anything with Body type on)
 files gloves, gauntlets, boots and nails under `Gear/03. Hands` and `Gear/05. Feet` instead of under
 each body, since they fit most bodies. Tops, legs and sets still go under their body. A body that
 only had hands or feet mods no longer gets a folder.
@@ -421,45 +516,53 @@ Au Ra, Hrothgar and Viera, such as `Face/Viera` or `Skin/Miqo'te`. A mod made fo
 it. A mod made for several races goes to `Multi-race` while **Send multi-race mods to Multi-race** is
 ticked. Untick it and the mod goes under the highest-ranked race it covers in **Race priority**; a race
 you do not rank never wins. A mod with no race found, or one that could not be read, always goes to
-`Multi-race`. With Split hair by hair number also on, the hair number is added below, as in
+`Multi-race`. With Hair number also on, the hair number is added below, as in
 `Hair/Viera/115`.
 
 Eyes files iris-only face mods under `Face/Eyes/<race>`. Face paint is never split, because its files
-carry no race. Tails, ears and horns and Racial scaling need Split body mods by body type. A mod made only
+carry no race. Tails, ears and horns and Racial scaling need Body's Part and body type split. A mod made only
 of racial scaling is filed under Gear today; with Racial scaling ticked it goes to
 `Body/03. Racial Scaling/<race>` instead. Face, Eyes, Skin and tails read their race when the library is
 scanned, so scan again after updating. Race priority is separate from Priority race under Hair, which only
 picks the hair number.
 
-**Split emotes by emote** (the Animation category's Emote split; on in the Recommended layout; greyed out under Creator grouping) breaks
+**Animation: Emote** (on in the Recommended layout; greyed out under Creator grouping) breaks
 up `Animation and VFX/Emotes`. A mod with one emote goes to `Emotes/<emote name>`, a mod with several
 goes to `Emotes/Multiple`, a mod with only facial expressions (Endure, Ponder, Reflect, Big Grin) goes
 to `Emotes/Expressions`, and a mod with no emote name goes to `Emotes/Undetermined`. Expressions are
 ignored when the mod also has another emote. Templates and the workbook export do not follow this
 option yet.
 
-**Weapons by job** (the Weapon category's Job split; off in the Recommended layout, on in Select all splits;
-there was never a checkbox for it) does two things, so scan again after changing it. A scan made with it on
+**Weapon: Job** (off in the Recommended layout, on in Select all splits; there was never a checkbox
+for it) does two things, so scan again after changing it; the Weapon editor reminds you while your
+scan does not match the switch. A scan made with it on
 files a weapon-only mod (its files replace a weapon model and no gear or accessory) under Weapon instead of
 Gear; a weapon that comes with a bracelet or a set stays in Gear. Sort then puts each weapon in
-`Weapon/<job>`, such as `Weapon/SAM`. The job comes from the game's item data for the items the mod changes;
+`Weapon/<job>`, such as `Weapon/SAM`. The job comes from the game's item data for the items the mod changes, in your client language;
 a class files with its job (a Gladiator sword is `PLD`), and an Arcanist book, an item several jobs share, or
 items that disagree go in `Weapon/Multiclass`. A weapon whose items match no job stays directly in `Weapon`.
 Turn it off and scan again to put weapons back in Gear. It is kept only in the category layouts, so an older
 plugin version that you go back to forgets it.
 
-What moves and what stops matching after you update:
+What moved and what stopped matching when the numbered gear folders and three-digit hair folders
+arrived:
 
 - a) The first sort after updating moves gear and hair folders once. History restores the old layout.
 - b) Template `folderLabels` keyed to the old subfolders (`Gear/Legs`, `Gear/Bibo+`, `Hair/2`) stop matching. A key on `Gear` itself still renames the root.
 - c) A hair mod protected at `Hair/2` stays there, beside the new `Hair/002`.
 - d) Folder protection rules naming the old gear folders no longer match the renamed ones.
 
-**Split body mods by body type** does the same for the body replacers themselves, filing each under
-its own body name, such as `Body/Rue+`. It is a separate split so you can split one kind and not
-the other: with only the gear split on, body mods stay as `Body/<mod>`, and the reverse. With it on, the Body folder is numbered so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and Horns` are shared and sit on top, then your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding `00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod with no body stays directly in `Body`. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
+**Body: Part and body type** does the same for the body replacers themselves, filing each under
+its own body. It is a separate split so you can split one kind and not the other: with only Gear's
+Body type on, body mods stay as `Body/<mod>`, and the reverse. With it on, the Body folder is numbered
+so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and
+Horns` are shared and sit on top (with `03. Racial Scaling` when Racial scaling by race is on), then
+your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding
+`00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for
+example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod
+with no body stays directly in `Body`.
 
-**Check my collection** sits in Body priority, in the Body types panel under Gear and Body in Advanced. It reads the mods enabled in
+**Check my collection** sits in Body priority, in the Body types card under Gear and Body in Advanced. It reads the mods enabled in
 your active collection (the one that affects your character, or Penumbra's selected collection when
 that is unavailable) and counts only body replacer mods. If exactly one body is enabled it names it
 and offers **Make first choice**; with none or several it says so and changes nothing. It says which
@@ -503,11 +606,43 @@ Rules let you file particular mods yourself. Open **Rules** on the Sort tab's Ad
 
 Each rule shows what is wrong with it and where (a red message with a position and, for a typo, a suggestion), or how many mods it wins for a moment after you stop typing. An amber line warns when a rule's folder would no longer match its own `folder` condition, or sits inside a protected folder. Rules are saved when you leave the text box. After you change a rule, press Sort again; the workbook's "As suggested by Sort" stays unavailable until you do.
 
-#### After sorting
+#### Auto sort and the new-mod popup
 
-If you change the grouping, a category's layout or a rule after sorting, a line appears in the bar
-reminding you that the selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
-Sorting again always recomputes from scratch, so it is safe to press repeatedly.
+The **Auto sort** card (called Sort settings in 0.7.1.0) is on both screens, collapsed by default,
+and says what happens when mods are installed while the game runs:
+
+- **When new mods are installed**: **Ask** (the default) shows the new-mod popup. **Sort automatically**
+  sorts and applies new mods that are loose in the root without asking; more than 20 at once falls back
+  to the popup. **Do nothing** ignores them.
+- **Show a popup when new mods are found**: untick it and a chat line replaces the popup ("... Turn the
+  popup back on in Sort > Auto sort to sort it."). It has no effect under Do nothing. It is the same
+  setting as the popup's own **Don't show this popup** box.
+
+**The new-mod popup.** Penumbra puts a new mod loose at the top level of the library. The popup asks,
+for example, "2 new mods are loose in the root. Sort them?", with a warning when sorting would throw
+away an unapplied sort (sorting rescans first) or this session's unprotect choices for Heliosphere and
+Proteus mods. Its buttons:
+
+- **Sort now** rescans the library, sorts only the new root mods with your saved Sort settings
+  (rules included) and opens **Confirm sort**, which lists each mod and the folder it would move to.
+  There, **Apply** moves them (undo from History), **Review first** opens Review Changes instead, and
+  **Cancel** discards this sort and moves nothing.
+- **Review first** opens the Review Changes tab.
+- **Not now** keeps them pending.
+
+**Heliosphere and Proteus mods in the popup follow the Protect tab.** What the popup does with a new
+tool-managed mod depends on that tool's mode on the Protect tab, never on a setting of its own:
+
+- **Protected** (the default): there is nothing to sort, so instead of the question a notice titled
+  "New tool-managed mods" says, for example, "1 new Heliosphere mod added. Heliosphere mods are
+  Protected, so it stays where it is. You can change this on the Protect tab.", with **Open Protect
+  tab** and **OK**. When the same batch also has ordinary new mods, the usual question appears with one
+  extra line ("Also added: 1 Heliosphere mod. It is Protected, so it stays where it is. ...") and an
+  extra **Open Protect tab** button, instead of a second popup.
+- **Sort inside their folder** or **Treat as normal**: the new tool mods are offered like any other, and
+  Confirm sort marks them `(Heliosphere)` or `(Proteus)`.
+
+Turning the popup off, or choosing Do nothing, also silences this notice.
 
 #### The result in Penumbra
 
@@ -542,10 +677,12 @@ beneath it with the same layout as everything else (`Akako/Face/Eyes/Miqo'te/...
 
 #### Manual assignment
 
-A collapsed section at the bottom of the tab, closed by default, assigns a folder to specific mods. Its own **Search mods** box filters the
-list below it, the same way the Protect tab's does. Check the mods you want — protected mods never
-appear here — type a destination folder, and click **Assign N selected mods**. Each checked mod's
-proposed path becomes `{destination}/{ModName}`.
+A collapsed section at the bottom of the tab, on both screens, assigns a folder to specific mods. Its
+own **Search mods** box filters the list below it, the same way the Protect tab's does. Each row shows
+the mod's name and current path. Check the mods you want (protected mods never appear here), type a
+**Destination folder**, and click **Assign N selected mods**. Each checked mod's proposed path becomes
+`{destination}/{ModName}`. Unlike Sort, this does not renumber name clashes: two mods with the same name
+in the same folder show as a path collision on Review Changes.
 
 A summary line reports how many were assigned and how many were skipped, for example because a mod
 stopped being eligible after you checked it, or because you left the folder box empty. Your checked
@@ -620,7 +757,8 @@ an import with a clean mapping table the plugin remembers your rows and writes t
 export, so a re-export does not lose them.
 
 A destination (or a mapping folder) may use three tokens, in any segment: `{type}` is the mod's
-category folder (`Hair`, `Animation and VFX`, or `Review` for an unclassified mod), `{creator}` is the
+category folder (`Hair`, `Animation and VFX`, or `Review` for an unclassified mod; your own folder if
+you renamed the category in the Sort tab), `{creator}` is the
 creator folder the Sort tab uses, and `{race}` is the race folder (`Viera`, `Multi-race`, and so on)
 for a mod that has one. For example `Mine/{type}/{creator}/test` becomes `Mine/Hair/Thor/test`. A
 token with nothing to fill in drops its folder level: a mod with no creator gets `Mine/Hair/test`.
@@ -628,8 +766,11 @@ Text around a token stays, so `By-{creator}` becomes `By-` for a mod with no cre
 new-format workbooks only.
 
 In the new format the built-in folders follow the Sort tab: code 13 is `Animation and VFX/VFX`, 15 is
-`Animation and VFX` and 16 is `Review`. Older workbooks still import, with their old meaning for those
-three and no tokens. The standalone app cannot read the new format.
+`Animation and VFX` and 16 is `Review`. If you renamed a category's folder in the Sort tab's Advanced
+screen (Gear as `Equipment/Gear`, say), its code and `{type}` use your folder instead. A workbook
+exported before such a rename says so on import ("code N now files under X (exported as Y)") rather
+than calling the code edited. Older workbooks still import, with their old meaning for codes 13, 15
+and 16 and no tokens. The standalone app cannot read the new format.
 
 **Apply** sits below the group, in the plugin's purple, set apart from the rest.
 
@@ -901,11 +1042,21 @@ see [Where files live](#where-files-live). Read the caveat at the bottom of this
 
 ## Typical workflows
 
-First-time sort: Scan, choose a grouping on the Sort tab and press Sort, review the proposed paths
-on Review Changes, then Apply.
+First-time sort: Scan, choose a grouping on the Sort tab (Recommended is a good start) and press
+Sort, review the proposed paths on Review Changes, then Apply.
 
-New mods installed since the last sort: Scan again (this picks up the new mods; previously-set
-protection carries over), press Sort again, review, then Apply.
+New mods installed while the game runs: answer the new-mod popup with Sort now, check the list in
+Confirm sort, then Apply. Or set Sort > Auto sort to Sort automatically.
+
+New mods installed since the last sort, outside the game: Scan again (this picks up the new mods;
+previously-set protection carries over), set What to sort to Only loose mods in the root if you only
+want the new ones filed, press Sort again, review, then Apply.
+
+Changing one kind of mod's layout: on the Sort tab, switch to Advanced, pick the category, change its
+folder, creator folder or splits, watch the Example, then Sort, review and Apply.
+
+Filing particular mods yourself: in Advanced, open Rules, Add rule, write `condition -> folder`, wait
+for "Wins for N mods", then Sort, review and Apply. See [Sort rules](#sort-rules).
 
 Hand-tuning through Excel: on Review Changes, Export Workbook, edit destinations in Excel, then on
 the same tab Import Workbook, review again, then Apply.
@@ -938,8 +1089,9 @@ folder holding one record per Apply or Restore (the Failed mods window reads the
 `npc-name-list.json` for the NPC/enemy/boss name list, which is seeded on first run and updated in
 place by Refresh. The plugin also READS `body-type-list.json` from the same directory if you
 create one, to add bodies the shipped list does not know or correct one it does; it is never created
-or written by the plugin, and is simply ignored when absent. Your protected mods and protected folders live in the plugin's own Dalamud
-settings file (reachable via Show Config File on the Review Changes tab), not in this directory.
+or written by the plugin, and is simply ignored when absent. Your protected mods and protected folders,
+the Sort tab's settings (category layouts, race and body priority, rules, Auto sort) and the Protect
+tab's tool modes live in the plugin's own Dalamud settings file (reachable via Show Config File on the Review Changes tab), not in this directory.
 The plugin never writes inside Penumbra's own mod storage, with one exception covered in
 [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md): Folder Cleanup's edits to `organization.json`.
 
@@ -952,7 +1104,7 @@ Sort or Restore. See the Review Changes section above for why, and for how to fo
 
 Hair numbers are read from the mod's files, and also from the EST entries in its metadata. The EST
 value has not yet been confirmed in game to be the hair number. If a mod is filed under a number that
-is not the hair it replaces, turn Split hair off and report the mod name and both numbers on Discord.
+is not the hair it replaces, turn Hair's Hair number split off and report the mod name and both numbers on Discord.
 
 Body types are read from the mod's options and files first, then its name, then its library
 folder. A mod titled for one body whose options offer only other bodies now files by its options, so
