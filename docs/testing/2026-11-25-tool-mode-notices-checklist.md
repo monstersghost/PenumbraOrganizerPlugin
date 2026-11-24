@@ -26,8 +26,9 @@ Silenced
 - [ ] Automatic sorting on, one ordinary + one Heliosphere mod: the ordinary one is sorted (chat line), then the notice about the Heliosphere one appears.
 
 Sort tab status line
-- [ ] With Heliosphere mods in the library and both modes Protected: at the top of the Sort tab's scrolling area, on Recommended AND Advanced, a yellow line "N Heliosphere mods: Protected (not sorted). M Proteus mods: Protected (not sorted). Change this on the Protect tab." with an **Open Protect tab** button (Proteus part only if you have Proteus mods). The counts match the Protect tab dropdown labels.
+- [ ] With Heliosphere mods in the library and both modes Protected: in the Sort tab's pinned bar, above its separator line (since fix/ui-round3; it used to be the first line of the scrolling area), on Recommended AND Advanced, a yellow line "N Heliosphere mods: Protected (not sorted). M Proteus mods: Protected (not sorted). Change this on the Protect tab." with an **Open Protect tab** button (Proteus part only if you have Proteus mods). The counts match the Protect tab dropdown labels.
 - [ ] **Open Protect tab** switches to the Protect tab.
 - [ ] Set Heliosphere to Treat as normal (and Proteus too, or have none): the line turns grey and reads "N Heliosphere mods: Treat as normal. ..."
 - [ ] A library with no Heliosphere or Proteus mods and both modes Protected: no line at all.
 - [ ] Narrow the window to its minimum width: the line wraps and the button stays visible.
+- [ ] Scroll the Sort tab to the bottom (open Manual assignment on Advanced): the line and its button stay in view in the bar; the scrolling area below starts under the bar's separator and its bottom edge still reaches the window's bottom (nothing cut off, no extra outer scrollbar), with the line on one or two rows.

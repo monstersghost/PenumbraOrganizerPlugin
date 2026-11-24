@@ -17,7 +17,8 @@ public sealed partial class MainWindow
 
     // The Heliosphere and Proteus modes in one line (ToolModeStatusText), with a way to the Protect tab where
     // they are changed. Warning colour when a tool's mods will not be sorted, muted otherwise; hidden when
-    // there is nothing to say.
+    // there is nothing to say. Drawn in the pinned bar (SortPanel.DrawHeader), above its separator, so it stays in
+    // view while the page scrolls.
     private void DrawToolModeStatus()
     {
         var (heliosphere, proteus) = ToolModeStatusText.Count(_plugin.OrganizerState.Mods);
@@ -25,17 +26,24 @@ public sealed partial class MainWindow
         if (ToolModeStatusText.Build(heliosphere, config.HeliosphereMode, proteus, config.ProteusMode) is not { } status)
             return;
 
-        // Wraps short of the button's room so a narrow window never pushes it off the line.
-        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + Math.Max(200f, ImGui.GetContentRegionAvail().X - 140f));
+        // Wraps short of the button (its label plus SmallButton's horizontal padding), so a narrow window never
+        // pushes it off the line; with too little room for the text the button goes on the next line instead.
+        const string buttonLabel = ToolModeStatusText.OpenProtectTabLabel + "##sort-tool-modes-protect";
+        var style = ImGui.GetStyle();
+        var buttonWidth = ImGui.CalcTextSize(ToolModeStatusText.OpenProtectTabLabel).X + style.FramePadding.X * 2f;
+        var line = WidgetLayout.TextThenButton(
+            ImGui.GetCursorPosX(), ImGui.GetContentRegionAvail().X, buttonWidth, style.ItemSpacing.X);
+
+        ImGui.PushTextWrapPos(line.WrapX);
         if (status.Warn)
             ImGui.TextColored(PluginTheme.Warning, status.Text);
         else
             ImGui.TextColored(PluginTheme.TextMuted, status.Text);
         ImGui.PopTextWrapPos();
-        ImGui.SameLine();
-        if (ImGui.SmallButton(ToolModeStatusText.OpenProtectTabLabel + "##sort-tool-modes-protect"))
+        if (line.ButtonOnSameLine)
+            ImGui.SameLine();
+        if (ImGui.SmallButton(buttonLabel))
             RequestTab(HighlightTarget.ProtectTab);
-        ImGui.Spacing();
     }
 
     private void DrawSortTab()
@@ -54,16 +62,16 @@ public sealed partial class MainWindow
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
             _creatorCanonicalizer.Canonicalize, bodyLabels,
             () => _sortHelpRequested = true,
-            () => OutlineLastItem(HighlightTarget.SortButton));
+            () => OutlineLastItem(HighlightTarget.SortButton),
+            // In the pinned bar, on both screens, for someone who opens Sort without visiting Protect.
+            DrawToolModeStatus);
 
-        // Fills the rest of the tab. ImRaii.Child ends the child when this method returns, early returns
-        // below included.
+        // Fills the rest of the tab: a zero size is "all the space left", read here, after the pinned bar (status
+        // line included, however many lines it wrapped to) has been drawn. ImRaii.Child ends the child when this
+        // method returns, early returns below included.
         using var scroll = ImRaii.Child("##sort-scroll", Vector2.Zero, false);
         if (!scroll)
             return;
-
-        // Above both screens (Recommended and Advanced), for someone who opens Sort without visiting Protect.
-        DrawToolModeStatus();
 
         _sortPanel.DrawBody(
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,

@@ -24,6 +24,9 @@ public sealed record PathSegment(string Text, PathRole Role);
 /// <summary>Where a switch-style toggle draws its track and knob.</summary>
 public readonly record struct ToggleGeometry(Vector2 TrackMin, Vector2 TrackMax, Vector2 KnobCenter, float KnobRadius);
 
+/// <summary>Where wrapped text ends (a local x for ImGui.PushTextWrapPos) and whether the button after it fits beside it.</summary>
+public readonly record struct TextThenButtonLine(float WrapX, bool ButtonOnSameLine);
+
 /// <summary>How the Advanced card splits its width between the category list and the editor.</summary>
 public readonly record struct ColumnLayout(bool Stacked, float ListWidth, float EditorWidth);
 
@@ -105,6 +108,24 @@ public static class WidgetLayout
     /// </summary>
     public static float TrailingItemX(float contentMaxX, float itemWidth, float cursorX) =>
         MathF.Max(cursorX, contentMaxX - itemWidth);
+
+    /// <summary>The narrowest column <see cref="TextThenButton"/> wraps text into before it moves the button below.</summary>
+    public const float MinWrappedTextWidth = 200f;
+
+    /// <summary>
+    /// Wrapped text followed by a button on the same line: the text wraps short of the button's width plus the item
+    /// spacing, so the button is never pushed off the window. When that would leave the text less than
+    /// <see cref="MinWrappedTextWidth"/>, the text takes the full width and the button goes on the next line instead.
+    /// The wrap x is always right of <paramref name="cursorX"/>.
+    /// </summary>
+    public static TextThenButtonLine TextThenButton(
+        float cursorX, float available, float buttonWidth, float spacing, float minTextWidth = MinWrappedTextWidth)
+    {
+        var textRoom = available - buttonWidth - spacing;
+        return textRoom >= minTextWidth
+            ? new TextThenButtonLine(cursorX + textRoom, true)
+            : new TextThenButtonLine(cursorX + MathF.Max(1f, available), false);
+    }
 
     /// <summary>
     /// The list beside the editor when both fit (the list at its fixed width, the editor taking the rest), otherwise

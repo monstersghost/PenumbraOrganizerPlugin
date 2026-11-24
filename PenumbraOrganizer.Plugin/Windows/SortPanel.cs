@@ -389,7 +389,8 @@ public sealed partial class SortPanel
     private string? _collectionLabel;     // which collection was read, for the messages
 
     /// <summary>
-    /// The pinned top of the Sort tab: the Recommended | Advanced switch, the Sort button and its summary. MainWindow
+    /// The pinned top of the Sort tab: the Recommended | Advanced switch, the Sort button and its summary, then the
+    /// "Selection changed" line and whatever <paramref name="drawPinnedStatus"/> draws, above the bar's separator. MainWindow
     /// draws it OUTSIDE the scrolling region so it stays in view while the controls below scroll. It reads
     /// the other controls' values from the previous frame, which is invisible: a click on Sort cannot land
     /// in the same frame as a click on another control.
@@ -402,7 +403,8 @@ public sealed partial class SortPanel
         Func<string, string> canonicalizeCreator,
         Func<IReadOnlyList<string>> getBodyLabels,
         Action? onShowSortHelp = null,
-        Action? onSortButtonDrawn = null)
+        Action? onSortButtonDrawn = null,
+        Action? drawPinnedStatus = null)
     {
         var bodyLabels = getBodyLabels();
 
@@ -509,6 +511,10 @@ public sealed partial class SortPanel
 
         if (_lastSorted is { } last && last != selection)
             ImGui.TextDisabled("Selection changed since the last sort.");
+
+        // The host's own status lines (the Heliosphere/Proteus modes), inside the bar and above its separator, so
+        // they stay in view while the page scrolls and read as part of the bar.
+        drawPinnedStatus?.Invoke();
 
         ImGui.Separator();
     }

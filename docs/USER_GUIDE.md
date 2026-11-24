@@ -258,8 +258,8 @@ button, which opens the Help tab at its Sort section. Below it are the screen yo
 Advanced only) the **Rules** card, the **Auto sort** card (what happens when new mods are
 installed) and manual assignment.
 
-**Heliosphere and Proteus status line.** At the top of the scrolling area, on both Recommended and
-Advanced, one line repeats the Protect tab's tool modes, for example "22 Heliosphere mods: Protected
+**Heliosphere and Proteus status line.** In the bar at the top, so it stays in view while you scroll,
+on both Recommended and Advanced, one line repeats the Protect tab's tool modes, for example "22 Heliosphere mods: Protected
 (not sorted). 13 Proteus mods: Protected (not sorted). Change this on the Protect tab.", with an
 **Open Protect tab** button. It is yellow when a tool is Protected and has mods (those mods will not
 be sorted) and grey otherwise. A tool is named when it has mods or its mode is not Protected; the line
