@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <None Update="Fixtures\RaceSplit\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Organizer\Layouts\sort-equivalence.golden.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
