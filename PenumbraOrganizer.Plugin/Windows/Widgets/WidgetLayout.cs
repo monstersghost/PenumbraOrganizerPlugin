@@ -89,6 +89,23 @@ public static class WidgetLayout
     /// <summary>The x where an item of <paramref name="width"/> starts so its right edge sits <paramref name="padding"/> inside <paramref name="maxX"/>.</summary>
     public static float RightAlign(float maxX, float width, float padding) => maxX - padding - width;
 
+    /// <summary>The space a top-level card leaves between its right edge and the scrollbar or window edge.</summary>
+    public const float PageRightGutter = 8f;
+
+    /// <summary>
+    /// A card's BeginChild width: a top-level card (<paramref name="depth"/> 0) is the available width less
+    /// <see cref="PageRightGutter"/> (ImGui reads a negative width as "available minus this"), so nothing touches
+    /// the scrollbar; a card inside another card fills its parent, whose own padding already insets it.
+    /// </summary>
+    public static float CardWidth(int depth) => depth <= 0 ? -PageRightGutter : 0f;
+
+    /// <summary>
+    /// The x for an item pushed to the right end of a line (right edge on <paramref name="contentMaxX"/>), but never
+    /// left of <paramref name="cursorX"/>, where the line's earlier items end, so it can only move right.
+    /// </summary>
+    public static float TrailingItemX(float contentMaxX, float itemWidth, float cursorX) =>
+        MathF.Max(cursorX, contentMaxX - itemWidth);
+
     /// <summary>
     /// The list beside the editor when both fit (the list at its fixed width, the editor taking the rest), otherwise
     /// both full width, stacked.

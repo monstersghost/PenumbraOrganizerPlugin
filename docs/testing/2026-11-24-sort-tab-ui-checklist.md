@@ -32,6 +32,12 @@ Advanced
 - [ ] Hair: Priority race and Midlander fallback appear only while Hair number is on, and are saved (reload keeps them).
 - [ ] Body types panel under Gear and Body: First-choice body, Check my collection with Make first choice, the full order with arrows and Reset to default. Its hint says the priority applies only when a body split is on while Gear's Body type and Body's Part and body type are both off.
 - [ ] NPC: with the scraped-list feature compiled in, "Also use the NPC list scraped from the wiki" shows under the NPC editor and saves; with it compiled out (today's builds) nothing shows.
+- [ ] Labels before controls everywhere on the tab: Group by, What to sort, Priority race, First-choice body, Add a race, When new mods are installed, Search mods and Destination folder each read label first, the label text level with the text inside its box; tooltips still show over the control.
+- [ ] Split rows: the depth number sits level with the toggle's label, not a few pixels above it.
+- [ ] Right margin: every top-level card (Recommended, What Recommended does, Advanced layout, Rules, Sort settings) and the Manual assignment mod list stop a small gap short of the scrollbar (or the window edge when there is no scrollbar); the example-path strips end inside their card; no horizontal scrollbar appears at any width. The Body types and Race cards inside Advanced fill the editor column.
+- [ ] Pinned bar: the ? icon sits at the right end of the bar; a long scope line (several rule notes) wraps before it instead of running under it or off the window, at 900 px and wide.
+- [ ] Card spacing: the gap between consecutive cards is the same on both screens (Recommended no longer has a double gap above Sort settings).
+- [ ] Manual assignment: with 0 mods ticked, tick one and click Assign in the same motion; the click lands (stable ### id). At 900 px the Assign button fits on the Destination folder line.
 - [ ] Narrow window: at the 900 px minimum width the list and editor stay side by side (stacking needs a lower minimum, B14); nothing overlaps or clips badly.
 
 Select all splits (Task 8)

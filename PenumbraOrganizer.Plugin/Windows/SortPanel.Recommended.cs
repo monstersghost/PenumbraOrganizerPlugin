@@ -35,11 +35,9 @@ public sealed partial class SortPanel
     private void DrawGroupingRow(ActivityGates gates)
     {
         var reason = gates.CanStageProposals ? null : ActivityGateReason;
-        // ImGui draws a combo's label to its RIGHT, so each label is drawn first as plain text and the combo
-        // gets a hidden (##) label; that way the label reads before its dropdown.
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("Group by");
-        ImGui.SameLine();
+        // ImGui draws a combo's label to its RIGHT, so each label is drawn first (FieldLabel) and the combo gets a
+        // hidden (##) label; that way the label reads before its dropdown.
+        FieldLabel.Draw("Group by");
         ImGui.BeginDisabled(!gates.CanStageProposals);
         ImGui.SetNextItemWidth(220);
         ImGui.Combo("##group-by", ref _groupingIndex, GroupingLabels, GroupingLabels.Length);
@@ -47,9 +45,7 @@ public sealed partial class SortPanel
         Help.Tooltip(HelpTopics.SortGrouping, reason);
 
         ImGui.SameLine();
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("What to sort");
-        ImGui.SameLine();
+        FieldLabel.Draw("What to sort");
         ImGui.BeginDisabled(!gates.CanStageProposals);
         ImGui.SetNextItemWidth(220);
         ImGui.Combo("##what-to-sort", ref _whatToSortIndex, WhatToSortLabels, WhatToSortLabels.Length);
@@ -125,7 +121,5 @@ public sealed partial class SortPanel
                 ImGui.PopTextWrapPos();
             }
         }
-
-        ImGui.Spacing();
     }
 }

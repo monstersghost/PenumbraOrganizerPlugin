@@ -20,4 +20,11 @@ public static class IconButton
             ImGui.SetTooltip(tooltip);
         return clicked;
     }
+
+    /// <summary>The width <see cref="Draw"/> will take for <paramref name="icon"/>, for placing it before drawing.</summary>
+    public static float Width(FontAwesomeIcon icon)
+    {
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+            return ImGui.CalcTextSize(icon.ToIconString()).X + ImGui.GetStyle().FramePadding.X * 2f;
+    }
 }

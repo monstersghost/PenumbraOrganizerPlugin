@@ -112,6 +112,24 @@ public class WidgetLayoutTests
         Assert.Equal(200f, WidgetLayout.CardContentBottom(drawn: true, remembered: 480f, measured: 200f));
     }
 
+    // Right padding: a top-level card stops short of the scrollbar; a card inside a card fills its parent's padding.
+    [Fact]
+    public void CardWidth_LeavesTheRightGutter_OnlyForTopLevelCards()
+    {
+        Assert.Equal(-WidgetLayout.PageRightGutter, WidgetLayout.CardWidth(depth: 0));
+        Assert.Equal(0f, WidgetLayout.CardWidth(depth: 1));
+        Assert.Equal(0f, WidgetLayout.CardWidth(depth: 2));
+        Assert.True(WidgetLayout.PageRightGutter > 0f);
+    }
+
+    // The pinned bar's ? sits at the right edge, like the mock-up, but never left of where the line has reached.
+    [Fact]
+    public void TrailingItemX_RightAlignsTheItem_ButNeverOverlapsTheLine()
+    {
+        Assert.Equal(870f, WidgetLayout.TrailingItemX(contentMaxX: 900f, itemWidth: 30f, cursorX: 400f));
+        Assert.Equal(880f, WidgetLayout.TrailingItemX(contentMaxX: 900f, itemWidth: 30f, cursorX: 880f));
+    }
+
     [Fact]
     public void CardHeight_StaysTheSame_AcrossAClippedFrame()
     {

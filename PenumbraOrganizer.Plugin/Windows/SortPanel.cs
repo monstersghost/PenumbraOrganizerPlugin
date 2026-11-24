@@ -473,15 +473,26 @@ public sealed partial class SortPanel
             _lastSorted = selection;
         }
 
+        // The ? sits at the bar's right end, as in the mock-up. The summary wraps before it instead of running under
+        // it or off the window: with rule notes it can be far longer than the bar, even at the 900 px minimum.
+        ImGui.SameLine();
+        var lineX = ImGui.GetCursorPosX();
+        var helpX = WidgetLayout.TrailingItemX(
+            lineX + ImGui.GetContentRegionAvail().X, IconButton.Width(FontAwesomeIcon.QuestionCircle), lineX);
         if (state.LastSortSummary is { } summary)
         {
-            ImGui.SameLine();
+            ImGui.PushTextWrapPos(MathF.Max(lineX + 1f, helpX - ImGui.GetStyle().ItemSpacing.X));
             ImGui.TextDisabled(SortSummaryText.Describe(summary));
+            ImGui.PopTextWrapPos();
             Help.Tooltip(HelpTopics.SortScopeLine);
+            ImGui.SameLine(helpX);
+        }
+        else
+        {
+            ImGui.SetCursorPosX(helpX);
         }
 
         // Outside the activity gate on purpose: it only navigates to Help, so it works while a scan runs.
-        ImGui.SameLine();
         if (IconButton.Draw("sort-help", FontAwesomeIcon.QuestionCircle))
             onShowSortHelp?.Invoke();
         Help.Tooltip(HelpTopics.SortHelpButton);
@@ -543,8 +554,9 @@ public sealed partial class SortPanel
             return;
 
         var index = (int)config.NewModAction;
+        FieldLabel.Draw("When new mods are installed");
         ImGui.SetNextItemWidth(220);
-        if (ImGui.Combo("When new mods are installed##new-mod-action", ref index,
+        if (ImGui.Combo("##new-mod-action", ref index,
                 NewModActionLabels, NewModActionLabels.Length))
         {
             config.NewModAction = (Organizer.Collections.NewModAction)index;
@@ -619,8 +631,9 @@ public sealed partial class SortPanel
         var unranked = RaceNames.All.Where(r => _racePriority.RankOf(r) < 0).ToList();
         if (unranked.Count > 0)
         {
+            FieldLabel.Draw("Add a race");
             ImGui.SetNextItemWidth(220);
-            if (ImGui.BeginCombo("Add a race##race-priority-add", "Choose a race"))
+            if (ImGui.BeginCombo("##race-priority-add", "Choose a race"))
             {
                 foreach (var race in unranked)
                 {
@@ -656,8 +669,9 @@ public sealed partial class SortPanel
         var order = _bodyPriority.Labels; // immutable: safe to iterate while a click replaces the field
         if (FirstChoice(_bodyPriority) is { } first)
         {
+            FieldLabel.Draw("First-choice body");
             ImGui.SetNextItemWidth(220);
-            if (ImGui.BeginCombo("First-choice body##first-choice-body", first))
+            if (ImGui.BeginCombo("##first-choice-body", first))
             {
                 for (var i = 0; i < order.Count; i++)
                 {

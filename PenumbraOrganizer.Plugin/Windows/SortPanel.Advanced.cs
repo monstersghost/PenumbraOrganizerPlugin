@@ -192,6 +192,8 @@ public sealed partial class SortPanel
         {
             ImGui.PushID(row.Info.Split.ToString());
             var rowStart = ImGui.GetCursorPosX();
+            // Lined up with the toggle's label, which sits one frame padding down.
+            ImGui.AlignTextToFramePadding();
             ImGui.TextDisabled(row.Depth?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? " ");
             // SetCursorPosX, not SameLine(offset): SameLine's offset is from the group start, and this editor sits in
             // a group beside the category list, so the local X read above would count that offset twice.
@@ -262,9 +264,10 @@ public sealed partial class SortPanel
         if (states.PriorityRace.Visible)
         {
             ImGui.Spacing();
+            FieldLabel.Draw("Priority race");
             ImGui.BeginDisabled(!states.PriorityRace.Enabled);
             ImGui.SetNextItemWidth(220);
-            ImGui.Combo("Priority race", ref _hairRaceIndex, HairRaceLabels, HairRaceLabels.Length);
+            ImGui.Combo("##priority-race", ref _hairRaceIndex, HairRaceLabels, HairRaceLabels.Length);
             ImGui.EndDisabled();
             Help.Tooltip(HelpTopics.SortPriorityRace, splitReason);
         }

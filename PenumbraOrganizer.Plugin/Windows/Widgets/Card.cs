@@ -18,6 +18,10 @@ public static class Card
 {
     private static readonly Dictionary<string, float> Heights = new(StringComparer.Ordinal);
 
+    // How many cards are open around the one being begun: a top-level card keeps a right gutter, a nested one fills
+    // its parent (WidgetLayout.CardWidth). Draw-thread only, like every ImGui call.
+    private static int _depth;
+
     public static CardScope Begin(string id)
     {
         Heights.TryGetValue(id, out var remembered);
@@ -26,16 +30,18 @@ public static class Card
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, PluginTheme.CardRounding);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, PluginTheme.CardPadding);
         var visible = ImGui.BeginChild(
-            id, new Vector2(0f, WidgetLayout.CardHeight(remembered, PluginTheme.CardPadding.Y)), true,
+            id, new Vector2(WidgetLayout.CardWidth(_depth), WidgetLayout.CardHeight(remembered, PluginTheme.CardPadding.Y)), true,
             ImGuiWindowFlags.AlwaysUseWindowPadding | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         // Read by BeginChild itself, so they can go now; children inside the card keep the normal style.
         ImGui.PopStyleVar(2);
         ImGui.PopStyleColor(2);
+        _depth++;
         return new CardScope(id, visible);
     }
 
     internal static void Remember(string id, float contentBottom, bool drawn)
     {
+        _depth = Math.Max(0, _depth - 1);
         Heights.TryGetValue(id, out var remembered);
         Heights[id] = WidgetLayout.CardContentBottom(drawn, remembered, contentBottom);
     }
