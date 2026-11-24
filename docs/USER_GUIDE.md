@@ -207,6 +207,17 @@ inside the Proteus folder.
 An explicit protection you set yourself (a ticked mod, or a protected folder) still beats a tool's
 mode.
 
+**New Heliosphere and Proteus mods.** Heliosphere puts a newly installed mod at the top level of the
+library. In Protected mode (the default) the new-mod popup has nothing to sort, so instead it tells
+you, for example: "1 new Heliosphere mod added. Heliosphere mods are Protected, so it stays where it
+is. You can change this on the Protect tab." It has an **Open Protect tab** button and **OK**, and no
+Sort now, since nothing would move. When the same batch also holds ordinary new mods, the usual
+question appears with one extra line about the protected tool mods instead of a second popup. In
+**Sort inside their folder** or **Treat as normal** mode the new tool mods are offered like any other,
+and the confirm window marks them `(Heliosphere)` or `(Proteus)`. Turning the popup off (**Don't show
+this popup**, or **Show a popup when new mods are found** in Sort settings) or choosing Do nothing
+also silences this notice.
+
 #### Sort inside folders
 
 A collapsible list below the Heliosphere and Proteus mode dropdowns on the Protect tab. Pick a folder, at any depth, such as
@@ -246,6 +257,14 @@ The bar at the top stays in view while the rest of the tab scrolls. It holds the
 button, which opens the Help tab at its Sort section. Below it are the screen you picked, then (in
 Advanced only) the **Rules** card, the **Sort settings** card (what happens when new mods are
 installed) and manual assignment.
+
+**Heliosphere and Proteus status line.** At the top of the scrolling area, on both Recommended and
+Advanced, one line repeats the Protect tab's tool modes, for example "22 Heliosphere mods: Protected
+(not sorted). 13 Proteus mods: Protected (not sorted). Change this on the Protect tab.", with an
+**Open Protect tab** button. It is yellow when a tool is Protected and has mods (those mods will not
+be sorted) and grey otherwise. A tool is named when it has mods or its mode is not Protected; the line
+is hidden when you have no Heliosphere or Proteus mods and both modes are Protected. The modes are
+changed only on the Protect tab.
 
 **Everything on this tab is remembered** between sessions: Group by, every category's layout, the race
 settings, the hair race, the Midlander fallback and the body priority. Only the proposals themselves
