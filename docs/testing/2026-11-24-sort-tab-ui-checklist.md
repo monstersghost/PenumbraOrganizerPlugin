@@ -9,6 +9,10 @@ Screens and the bar
 - [ ] Recommended: the four example paths change when Group by changes (Creator only shows `Ann / Medieval Dress`), and the Hair example gains `Viera` when Split by race is turned on in Advanced.
 - [ ] Recommended: "Customise per category" opens Advanced; after customising a category the "N categories customised" line and "Show in Advanced" appear, and the examples show the customised layout.
 - [ ] Recommended: the "Everything else" line says "Race split is off." with the master off and "Split by race is on (see Advanced)." with it on.
+- [ ] Rules only in Advanced: Recommended shows no Rules card (Sort settings and Manual assignment still show); Advanced shows the Rules card between the Advanced layout card and Sort settings.
+- [ ] Recommended with rules: with one enabled, valid rule the first card says "1 rule active, edit it in Advanced"; with two, "2 rules active, edit them in Advanced"; a switched-off rule or one with a red error is not counted; with none the line is gone. "Show rules" opens Advanced; its tooltip is the Rules help.
+- [ ] Rules still apply from Recommended: with an active rule, press Sort on Recommended and the matching mod gets the rule's folder on Review Changes.
+- [ ] Type into a rule in Advanced and switch to Recommended without leaving the box: the typed text is saved (the count on Recommended reflects it; reload keeps it).
 
 Advanced
 - [ ] Category list: hover highlight, accent marker on the selected row, Custom badges; the list scrolls on its own if the window is short; Tab/arrow keys reach the rows and Space or Enter selects; a focus ring is visible.
@@ -28,6 +32,12 @@ Advanced
 - [ ] Hair: Priority race and Midlander fallback appear only while Hair number is on, and are saved (reload keeps them).
 - [ ] Body types panel under Gear and Body: First-choice body, Check my collection with Make first choice, the full order with arrows and Reset to default. Its hint says the priority applies only when a body split is on while Gear's Body type and Body's Part and body type are both off.
 - [ ] NPC: with the scraped-list feature compiled in, "Also use the NPC list scraped from the wiki" shows under the NPC editor and saves; with it compiled out (today's builds) nothing shows.
+- [ ] Labels before controls everywhere on the tab: Group by, What to sort, Priority race, First-choice body, Add a race, When new mods are installed, Search mods and Destination folder each read label first, the label text level with the text inside its box; tooltips still show over the control.
+- [ ] Split rows: the depth number sits level with the toggle's label, not a few pixels above it.
+- [ ] Right margin: every top-level card (Recommended, What Recommended does, Advanced layout, Rules, Sort settings) and the Manual assignment mod list stop a small gap short of the scrollbar (or the window edge when there is no scrollbar); the example-path strips end inside their card; no horizontal scrollbar appears at any width. The Body types and Race cards inside Advanced fill the editor column.
+- [ ] Pinned bar: the ? icon sits at the right end of the bar; a long scope line (several rule notes) wraps before it instead of running under it or off the window, at 900 px and wide.
+- [ ] Card spacing: the gap between consecutive cards is the same on both screens (Recommended no longer has a double gap above Sort settings).
+- [ ] Manual assignment: with 0 mods ticked, tick one and click Assign in the same motion; the click lands (stable ### id). At 900 px the Assign button fits on the Destination folder line.
 - [ ] Narrow window: at the 900 px minimum width the list and editor stay side by side (stacking needs a lower minimum, B14); nothing overlaps or clips badly.
 
 Select all splits (Task 8)
@@ -43,11 +53,12 @@ Old controls gone, settings kept (Task 9)
 - [ ] Settings persist exactly as before. Change each of these, close and reopen the game (or reload the plugin), and check it is kept: Group by, a split in each of Gear, NPC, Hair, Body, Face, Skin and Animation, the race master, Send multi-race mods to Multi-race, Race priority, Priority race, Midlander fallback, body priority, When new mods are installed, Show a popup.
 - [ ] After those changes the legacy mirror in the config file still matches (`SortSplitGear`, `SortSplitNpc`, `SortSplitHair`, `SortSplitGearBody`, `SortSplitBodyMods`, `SortSharedHandsFeet`, `SortSplitEmotes`, `RaceSplitRows`, `SortSplitHairByRace`), so the previous release still reads the same splits (optional: load the saved config with a build from before category layouts and compare a Sort).
 - [ ] Turning only the race master on with Hair's race split off leaves `SortSplitHairByRace` false in the config.
-- [ ] Rules card: a rule using `body` shows the body label the current Gear Body type / Body Part and body type splits give (the rules editor now reads the saved splits).
+- [ ] Rules card (Advanced): a rule using `body` shows the body label the current Gear Body type / Body Part and body type splits give (the rules editor now reads the saved splits).
 
 Cards, help, staleness
 - [ ] Cards: the first frame of a card, opening Rules or Body priority inside a card, and adding a rule grow the card on the next frame without visible flicker or clipping; the page scrolls with the mouse wheel over a card.
-- [ ] Rules card: add a rule; the header label count changes and the header stays open (### id).
+- [ ] Scroll jump (fixed): on Advanced with Gear selected, open Body priority and Full priority order, then expand Manual assignment and wheel down to the bottom of the mod list and back up. The page scrolls smoothly and never jumps back up; the scrollbar thumb does not change size while scrolling. Repeat on Recommended with a short window.
+- [ ] Rules card (Advanced): add a rule; the header label count changes and the header stays open (### id).
 - [ ] Sort settings card: When new mods are installed and the popup option still save.
 - [ ] "Selection changed since the last sort" appears in the bar after changing a split, a folder, a creator level, Group by, the race master or a rule.
 - [ ] Tooltips: every new control shows its help text; the segmented controls show it over the last segment (known limit); the Help tab's Sort section lists Recommended or Advanced, Categories, Folder, Creator folder, Splits, Example, Select all splits and Reset to Recommended, and the renamed split topics.

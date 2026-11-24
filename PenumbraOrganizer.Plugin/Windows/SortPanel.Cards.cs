@@ -4,7 +4,7 @@ using PenumbraOrganizer.Plugin.Windows.Widgets;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
-// The two collapsible cards both screens end with (spec 2, section 2): Rules, then Sort settings.
+// The two collapsible cards under the screens: Rules (Advanced only), then Sort settings (both screens).
 public sealed partial class SortPanel
 {
     private void DrawRulesCard(

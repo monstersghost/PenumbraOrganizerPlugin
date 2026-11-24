@@ -81,6 +81,19 @@ public sealed class CategoryLayoutEditor
         var n => $"{n} categories customised",
     };
 
+    /// <summary>
+    /// The Recommended screen's rules note, or null when no rule runs. Rules are edited in Advanced only but still
+    /// apply in Recommended (they are saved settings), so this line keeps a hidden rule from silently changing the
+    /// paths. Counts the rules that run: a switched-off rule or one with a mistake never files a mod.
+    /// </summary>
+    public static string? RecommendedRulesNote(Organizer.Rules.RuleSet? rules) =>
+        (rules?.Rules.Count(r => r.Runs) ?? 0) switch
+        {
+            0 => null,
+            1 => "1 rule active, edit it in Advanced",
+            var n => $"{n} rules active, edit them in Advanced",
+        };
+
     /// <summary>Selects a category, saving a pending folder edit of the previous one first.</summary>
     public void Select(ModCategory category)
     {

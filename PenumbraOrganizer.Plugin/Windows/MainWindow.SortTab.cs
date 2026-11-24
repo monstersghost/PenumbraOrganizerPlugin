@@ -7,11 +7,14 @@ using Dalamud.Interface.Windowing;
 using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.LibrarySearch;
+using PenumbraOrganizer.Plugin.Windows.Widgets;
 
 namespace PenumbraOrganizer.Plugin.Windows;
 
 public sealed partial class MainWindow
 {
+    private const float ManualFieldWidth = 300f;
+
     private void DrawSortTab()
     {
         using var tab = ImRaii.TabItem("Sort", TutorialTabFlags(HighlightTarget.SortTab));
@@ -42,7 +45,7 @@ public sealed partial class MainWindow
             () => _plugin.ActiveCollectionReader.ReadEnabledModDirectories());
 
         ImGui.Spacing();
-        // Collapsed by default: most sorts never touch it. Same controls as before, unchanged.
+        // Collapsed by default: most sorts never touch it. Same controls as before, labels drawn first.
         if (!ImGui.CollapsingHeader("Manual assignment##manual-assign"))
             return;
 
@@ -50,12 +53,19 @@ public sealed partial class MainWindow
 
         ImGui.TextUnformatted("Start Manually: check mods below, type a folder, click Assign.");
 
-        ImGui.InputText("Search mods##manual-assign", ref _manualAssignFilter, 256);
-        ImGui.InputText("Destination folder", ref _manualFolderInput, 256);
+        // Labels first, like every other field on the Sort tab, at fixed widths so the Assign button still fits
+        // on the folder's line at the window's 900 px minimum.
+        FieldLabel.Draw("Search mods");
+        ImGui.SetNextItemWidth(ManualFieldWidth);
+        ImGui.InputText("##manual-assign-search", ref _manualAssignFilter, 256);
+        FieldLabel.Draw("Destination folder");
+        ImGui.SetNextItemWidth(ManualFieldWidth);
+        ImGui.InputText("##manual-assign-folder", ref _manualFolderInput, 256);
 
         ImGui.SameLine();
         ImGui.BeginDisabled(!gates.CanStageProposals);
-        var assignClicked = ImGui.Button($"Assign {_selectedManualModIdentifiers.Count} selected mods");
+        // ### keeps the id stable while the count in the label changes, so a click is never dropped.
+        var assignClicked = ImGui.Button($"Assign {_selectedManualModIdentifiers.Count} selected mods###manual-assign-button");
         ImGui.EndDisabled();
         Help.Tooltip(HelpTopics.SortManualAssign, gates.CanStageProposals ? null : ActivityGateReason);
         if (assignClicked && _manualFolderInput.Length > 0 && _selectedManualModIdentifiers.Count > 0)
@@ -79,7 +89,8 @@ public sealed partial class MainWindow
 
         ImGui.Spacing();
         var manualFilter = _manualAssignFilter.Trim();
-        using (var child = ImRaii.Child("ManualModList", new Vector2(0, 300), border: true))
+        // Stops short of the scrollbar like the cards above (WidgetLayout.CardWidth).
+        using (var child = ImRaii.Child("ManualModList", new Vector2(WidgetLayout.CardWidth(0), 300), border: true))
         {
             if (child)
             {

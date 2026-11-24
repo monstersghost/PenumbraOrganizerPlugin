@@ -243,9 +243,9 @@ Choose a layout and press Sort. That computes a proposed folder path for every u
 
 The bar at the top stays in view while the rest of the tab scrolls. It holds the **Recommended** and
 **Advanced** switch, the **Sort** button, the line saying how many mods the sort covers, and the **?**
-button, which opens the Help tab at its Sort section. Below it are the screen you picked, then the
-**Rules** card, the **Sort settings** card (what happens when new mods are installed) and manual
-assignment.
+button, which opens the Help tab at its Sort section. Below it are the screen you picked, then (in
+Advanced only) the **Rules** card, the **Sort settings** card (what happens when new mods are
+installed) and manual assignment.
 
 **Everything on this tab is remembered** between sessions: Group by, every category's layout, the race
 settings, the hair race, the Midlander fallback and the body priority. Only the proposals themselves
@@ -257,6 +257,9 @@ reset (on a rescan), and What to sort, which is for this session only.
 that show where such a mod would go. A second card lists what Recommended does for each kind of mod,
 with **Customise per category**, which opens Advanced. If you have customised a category, a line says
 how many and the examples show your layout, so the screen never describes a layout the Sort will not use.
+Rules are edited in Advanced only, but they still apply when you sort from Recommended; while any rule
+is active, Recommended says so ("2 rules active, edit them in Advanced") with **Show rules**, which opens
+Advanced.
 
 **Advanced** has the 16 kinds of mod on the left and the selected one's settings on the right. A
 **Custom** badge marks a category that differs from Recommended, and the header counts them. Group by
@@ -442,7 +445,7 @@ it: an entry it had to ignore, or a name you reused that a different body alread
 
 #### Sort rules
 
-Rules let you file particular mods yourself. Open **Rules** on the Sort tab and press **Add rule**. A rule is one line: a condition, an arrow and a folder.
+Rules let you file particular mods yourself. Open **Rules** on the Sort tab's Advanced screen and press **Add rule**. A rule is one line: a condition, an arrow and a folder.
 
     name contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}
 

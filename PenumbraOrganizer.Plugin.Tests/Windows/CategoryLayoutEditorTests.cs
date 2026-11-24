@@ -1,6 +1,7 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Layouts;
+using PenumbraOrganizer.Plugin.Organizer.Rules;
 using PenumbraOrganizer.Plugin.Windows;
 
 namespace PenumbraOrganizer.Plugin.Tests.Windows;
@@ -56,6 +57,35 @@ public class CategoryLayoutEditorTests
         Assert.Equal("3 categories customised", editor.RecommendedNote);
         Assert.Equal("3 of 16 categories customised", editor.AdvancedSummary);
         Assert.False(editor.IsCustom(ModCategory.Body));
+    }
+
+    // ---- the Recommended screen's rules note (Rules is edited in Advanced only)
+
+    private static RuleSet Rules(params (string Text, bool Enabled)[] rules) =>
+        RuleSet.Compile(
+            [.. rules.Select(r => new RuleEntry(r.Text, r.Enabled))], RaceSplitOptions.Off);
+
+    [Fact]
+    public void RecommendedRulesNote_IsNull_WhenNoRuleCanRun()
+    {
+        Assert.Null(CategoryLayoutEditor.RecommendedRulesNote(null));
+        Assert.Null(CategoryLayoutEditor.RecommendedRulesNote(RuleSet.Empty));
+        // A switched-off rule and a rule with a mistake never change a path, so they are not "active".
+        Assert.Null(CategoryLayoutEditor.RecommendedRulesNote(
+            Rules(("name contains 'a' -> A", false), ("nmae = 'x' -> B", true))));
+    }
+
+    [Fact]
+    public void RecommendedRulesNote_CountsTheRulesThatRun()
+    {
+        Assert.Equal("1 rule active, edit it in Advanced",
+            CategoryLayoutEditor.RecommendedRulesNote(Rules(("name contains 'a' -> A", true))));
+        Assert.Equal("2 rules active, edit them in Advanced",
+            CategoryLayoutEditor.RecommendedRulesNote(Rules(
+                ("name contains 'a' -> A", true),
+                ("name contains 'b' -> B", false),
+                ("nmae = 'x' -> C", true),
+                ("author = 'Ann' -> Ann", true))));
     }
 
     // ---- persist on change, never per frame
