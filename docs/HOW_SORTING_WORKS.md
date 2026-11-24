@@ -158,7 +158,7 @@ numbers of 1000 or more are written as is.
 
 ### Hands and feet in a shared folder
 
-The **Hands and feet in a shared folder** option (off by default) needs the slot split, and it only does anything while **Split gear by body type** is also on. Gear whose
+The **Hands and feet in a shared folder** option (on in the Recommended layout a new install starts with) needs the slot split, and it only does anything while **Split gear by body type** is also on. Gear whose
 single resolved slot is `Hands` or `Feet` (gloves, gauntlets, boots, nails) then skips the body
 folders and goes to `Gear/03. Hands` or `Gear/05. Feet`. Tops, legs, sets and every other slot keep
 their body folder. A body that only had hands or feet gear no longer gets a folder, and the body
@@ -192,7 +192,8 @@ The `Est` source rests on `SetId` naming the hair number. The repo's fixture and
 agree with that reading, but no real library has confirmed it yet. The manual checklist at
 `docs/testing/2026-11-01-hair-number-sorting-checklist.md` is where that happens.
 
-The **Split hair by hair number** checkbox defaults off and is disabled when Group by is Creator.
+The **Split hair by hair number** checkbox is on in the Recommended layout a new install starts with
+(an update keeps whatever was ticked before) and is disabled when Group by is Creator.
 
 ### Race split (hair and the other race rows)
 
@@ -238,7 +239,7 @@ The existing hair rules below still apply:
 
 ## Split emotes by emote
 
-The **Split emotes by emote** checkbox (Sort tab, Animation section; off by default, greyed out under
+The **Split emotes by emote** checkbox (Sort tab, Animation section; on in the Recommended layout, greyed out under
 Creator grouping) breaks the flat `Animation and VFX/Emotes` folder up by the emote a mod replaces. It
 reads the `Emote: <name>` entries Penumbra reports for the mod and uses the names exactly as Penumbra
 gives them (only characters Penumbra cannot store in a folder name are changed). Facial expressions
@@ -370,8 +371,9 @@ showed them mis-filing unrelated mods. The body is still in the list; only the r
 and `KnownNonBodies_AreNotAliases` fails if one is re-added. `artemis` is the single knowing
 exception, because it is the only name that body has.
 
-The **Split gear and body mods by body type** checkbox defaults off and is disabled when Group by is
-Creator.
+The **Split gear by body type** and **Split body mods by body type** checkboxes are on in the Recommended
+layout a new install starts with (an update keeps whatever was ticked before) and are disabled when Group
+by is Creator.
 
 **Check my collection** sits in the Sort tab's Body priority section. It reads the mods enabled in
 your active collection (the one that affects your character, or Penumbra's selected collection when

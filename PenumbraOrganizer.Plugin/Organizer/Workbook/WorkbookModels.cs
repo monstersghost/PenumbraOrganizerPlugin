@@ -95,7 +95,7 @@ public sealed record WorkbookExportRequest(
 public static class WorkbookCategoryCatalog
 {
     public const string BlankDestinationRule = "Blank destination leaves the mod in its current folder.";
-    public const string ReviewRule = "Use mod type Others or destination 16 when a row still needs manual attention (it files under Review).";
+    public const string ReviewRule = "Use mod type Others or destination 16 when a row still needs manual attention (it files under the folder shown for code 16 below, Review unless Others was renamed).";
 
     public static IReadOnlyList<WorkbookCategoryDefinition> Definitions { get; } =
     [

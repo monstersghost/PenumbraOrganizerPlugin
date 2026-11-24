@@ -6,6 +6,7 @@ using PenumbraOrganizer.Core.Services;
 using PenumbraOrganizer.Plugin.LibraryWork.Pure;
 using PenumbraOrganizer.Plugin.Organizer;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
 using PenumbraOrganizer.Plugin.Organizer.Rules;
 using PenumbraOrganizer.Plugin.Organizer.Workbook;
 using PenumbraOrganizer.Plugin.Windows;
@@ -175,6 +176,32 @@ public class RealLibraryHarnessTests
             flagged.All(x => scalingOn.First(p => p.Id == x.Identifier).Path.Contains("Racial Scaling", StringComparison.Ordinal)));
         Check("impure Rsp mods (tiramisu2 and similar) are never moved to Racial Scaling",
             impure.All(x => !scalingOn.First(p => p.Id == x.Identifier).Path.Contains("Racial Scaling", StringComparison.Ordinal)));
+
+        // ---- category layouts pass: migration keeps every path; Recommended is measured, not asserted
+        {
+            var migratedConfig = new Configuration { SortSplitBodyMods = true };
+            migratedConfig.MigrateToCurrentVersion();
+            var migrated = SortWith(migratedConfig);
+            Check("a migrated legacy config sorts exactly as before migration", Differences(baseline, migrated) == 0,
+                $"{Differences(baseline, migrated)} differences over {baseline.Count} mods");
+
+            // An existing user who never changed the Sort tab, against a new install on Recommended.
+            var today = SortWith(new Configuration());
+            var recommended = SortWith(Configuration.CreateFresh());
+            var moved = Differences(today, recommended);
+            r.AppendLine($"  Recommended vs today's default layout: {moved} of {today.Count} mods would move");
+            foreach (var (before, after) in today.Zip(recommended).Where(p => p.First.Path != p.Second.Path).Take(10))
+                r.AppendLine($"    {before.Path}  ->  {after.Path}");
+
+            var renamed = Configuration.CreateFresh();
+            renamed.SaveLayoutProfile(LayoutProfile.Recommended.With(
+                ModCategory.Gear, LayoutProfile.Recommended[ModCategory.Gear] with { Folder = "Equipment/Gear" }));
+            var renamedPaths = SortWith(renamed);
+            Check("renaming Gear to Equipment/Gear changes only the root of Gear paths",
+                recommended.Zip(renamedPaths).All(p => p.First.Path == p.Second.Path
+                    || (p.First.Path.StartsWith("Gear/", StringComparison.Ordinal)
+                        && p.Second.Path == "Equipment/" + p.First.Path)));
+        }
 
         // ---- keyword rules pass
         {

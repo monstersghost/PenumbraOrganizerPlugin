@@ -270,6 +270,8 @@ switching Group by back restores everything untouched.
 
 #### The splits
 
+A new install starts on the **Recommended** layout: gear by body type and then slot, with hands and feet in one shared folder; NPC mods by kind; hair by hair number; body mods by body type; emotes by emote. Race stays off until you turn on its master switch. Updating from an earlier version keeps the boxes you had ticked, so nothing moves.
+
 **Split gear by equipment slot** puts gear mods in `Gear/Feet`, `Gear/Head` and so on, wherever the
 slot can be determined from a single unambiguous match. Anything ambiguous — a real multi-piece
 outfit — or unidentifiable falls back to the plain `Gear` folder. The Export on Review Changes
@@ -284,8 +286,8 @@ it ticked, as it is by default.
 **Split hair by hair number** puts a hair mod in a folder named after the vanilla hair number it
 replaces, such as `Hair/115`, when the mod targets exactly one number. A mod that targets two or
 more numbers, or whose files could not be read, stays directly in `Hair`, as does every hair mod
-while this is off. The numbers come from the mod's own configuration, not its name. It is off by
-default. Folder numbers are padded to three digits (`Hair/002`, `Hair/053`, `Hair/185`) so Penumbra,
+while this is off. The numbers come from the mod's own configuration, not its name. It is on in
+the Recommended layout. Folder numbers are padded to three digits (`Hair/002`, `Hair/053`, `Hair/185`) so Penumbra,
 which sorts folders as text, lists them in numeric order. Numbers of 1000 or more are not padded.
 
 Two controls appear under it, and both apply only while Split hair is on:
@@ -301,7 +303,7 @@ folder; a race with two hair numbers in the same mod never picks one.
 
 **Split gear by body type** puts a gear mod in a folder named after the body it was made for, such
 as `Gear/Bibo+/Top`. The body comes before the equipment slot, so everything made for one body sits
-together instead of being spread across the nine slot folders. It is off by default. The slot split
+together instead of being spread across the nine slot folders. It is on in the Recommended layout. The slot split
 is separate: turn that off and you get `Gear/Bibo+` with nothing below it.
 
 **Numbered gear folders.** With both gear splits on, `Gear/` is numbered so nothing sits loose:
@@ -312,7 +314,7 @@ and each holds the same numbered slot folders (`10. Rue+/02. Top`). Reordering B
 body gaining or losing gear, renumbers the body folders. With only one of the two splits on, the
 layout is as before, without numbers.
 
-**Hands and feet in a shared folder** (off by default; it needs Split gear by equipment slot and only does anything with Split gear by body type on)
+**Hands and feet in a shared folder** (on in the Recommended layout; it needs Split gear by equipment slot and only does anything with Split gear by body type on)
 files gloves, gauntlets, boots and nails under `Gear/03. Hands` and `Gear/05. Feet` instead of under
 each body, since they fit most bodies. Tops, legs and sets still go under their body. A body that
 only had hands or feet mods no longer gets a folder.
@@ -338,7 +340,7 @@ of racial scaling is filed under Gear today; with Racial scaling ticked it goes 
 scanned, so scan again after updating. Race priority is separate from Priority race under Hair, which only
 picks the hair number.
 
-**Split emotes by emote** (Animation section; off by default; greyed out under Creator grouping) breaks
+**Split emotes by emote** (Animation section; on in the Recommended layout; greyed out under Creator grouping) breaks
 up `Animation and VFX/Emotes`. A mod with one emote goes to `Emotes/<emote name>`, a mod with several
 goes to `Emotes/Multiple`, a mod with only facial expressions (Endure, Ponder, Reflect, Big Grin) goes
 to `Emotes/Expressions`, and a mod with no emote name goes to `Emotes/Undetermined`. Expressions are
