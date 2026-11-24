@@ -1,9 +1,16 @@
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
+
 namespace PenumbraOrganizer.Plugin.Organizer;
 
 /// <summary>The folders (any depth) the Protect tab offers for "sort inside".</summary>
 public static class SortInsideFolderChoices
 {
-    public static IReadOnlyList<string> Candidates(IEnumerable<OrganizerModRow> rows, IEnumerable<string> chosen)
+    /// <param name="placement">
+    /// The category folders in use. A renamed category folder (and anything inside it) is one of the sorter's
+    /// own folders, so it is not offered; a folder above one (<c>Equipment</c> for <c>Equipment/Gear</c>) still is.
+    /// </param>
+    public static IReadOnlyList<string> Candidates(
+        IEnumerable<OrganizerModRow> rows, IEnumerable<string> chosen, CategoryPlacement? placement = null)
     {
         var taken = new HashSet<string>(
             chosen.Select(ToolFolders.NormalizeChosenFolder).OfType<string>(), StringComparer.OrdinalIgnoreCase);
@@ -18,6 +25,8 @@ public static class SortInsideFolderChoices
             for (var depth = 1; depth < segments.Length; depth++)
             {
                 var path = string.Join('/', segments.Take(depth));
+                if (placement is not null && placement.IsAtOrInsideRenamedFolder(path))
+                    break;
                 folders[path] = folders.GetValueOrDefault(path) || !row.IsToolManaged;
             }
         }

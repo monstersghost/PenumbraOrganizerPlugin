@@ -1,6 +1,7 @@
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 using PenumbraOrganizer.Plugin.Organizer.Rules;
@@ -676,8 +677,9 @@ public sealed class OrganizerState
         // One numbered layout per anchor root. A tool's mods kept under their own folder (Heliosphere,
         // sort-inside) are numbered among themselves, so they do not leave gaps in the plain folders.
         // Ruled and left-in-place rows are not numbered.
+        var placement = options?.Placement;
         var layouts = _mods.Values.Where(m => !m.Protected && !ruled.ContainsKey(m) && !stay.Contains(m))
-            .GroupBy(AnchorRootOf, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(m => AnchorRootOf(m, placement), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
                 g => (Gear: SortFolderSelectors.BuildGearLayout(g, splitGear, splitGearBody, bodyPriority, options),
@@ -689,13 +691,13 @@ public sealed class OrganizerState
             if (ruled.TryGetValue(row, out var ruleFolder))
                 return (ruleFolder, null);
 
-            var layout = layouts[AnchorRootOf(row)];
+            var layout = layouts[AnchorRootOf(row, placement)];
             return SortFolderSelectors.Select(strategy, splitGear, splitNpc, row, canonicalizeCreator,
                                               splitHair: splitHair, hairPriority: hairPriority,
                                               splitGearBody: splitGearBody, splitBodyMods: splitBodyMods,
                                               bodyPriority: bodyPriority, gearLayout: layout.Gear,
                                               bodyLayout: layout.Body, options: options);
-        }, scope, stay, reserveProtected: ruled.Count > 0 || stay.Count > 0);
+        }, scope, stay, reserveProtected: ruled.Count > 0 || stay.Count > 0, placement: placement);
 
         if (ruleSummary is not null && LastSortSummary is { } last)
             LastSortSummary = last with { Rules = ruleSummary.Build() };
@@ -708,27 +710,49 @@ public sealed class OrganizerState
         scope is not null && !row.Protected && !scope.Includes(row);
 
     // The folder a row's numbered layout belongs to: its anchor when it is kept under one,
-    // otherwise "" (the plain folders). Mirrors ToolAdjustedPath's decision.
-    private string AnchorRootOf(OrganizerModRow row) => AnchorFor(row) ?? "";
-
-    // The folder this row is kept under: a tool row's first segment, or an ordinary row's deepest
-    // user-chosen folder. Null when the row is sorted into the plain folders.
-    private string? AnchorFor(OrganizerModRow row)
+    // otherwise "" (the plain folders). Mirrors ToolAdjustedPath's decision. An anchor that sits above the
+    // row's renamed category folder (sort-inside "Equipment", Gear renamed "Equipment/Gear") files the row
+    // into the same tree as the plain folders, so it shares their numbers ("").
+    private string AnchorRootOf(OrganizerModRow row, CategoryPlacement? placement)
     {
-        if (row.ProteusRole == ProteusRole.Made || row.HeliosphereManaged)
-            return ToolModeOf(row) == ToolMode.SortInside ? ToolFolders.AnchorOf(row.CurrentPath) : null;
-        return UserAnchorOf(row);
+        var anchor = AnchorFor(row, placement);
+        if (anchor is null)
+            return "";
+        return placement?.FolderFor(row.Category) is { } root && CategoryPlacement.IsAtOrInside(root, anchor)
+            ? ""
+            : anchor;
     }
 
-    private string? UserAnchorOf(OrganizerModRow row) =>
-        _toolPolicy.SortInsideFolders is { Count: > 0 } folders
+    // The folder this row is kept under: a tool row's first segment, or an ordinary row's deepest
+    // user-chosen folder. Null when the row is sorted into the plain folders. A renamed category folder is
+    // one of the sorter's own folders, so a row already inside one has no anchor (else Kit/Kit/...).
+    private string? AnchorFor(OrganizerModRow row, CategoryPlacement? placement)
+    {
+        if (IsInsideRenamedFolder(row, placement))
+            return null;
+        if (row.ProteusRole == ProteusRole.Made || row.HeliosphereManaged)
+            return ToolModeOf(row, placement) == ToolMode.SortInside ? ToolFolders.AnchorOf(row.CurrentPath) : null;
+        return UserAnchorOf(row, placement);
+    }
+
+    private string? UserAnchorOf(OrganizerModRow row, CategoryPlacement? placement) =>
+        _toolPolicy.SortInsideFolders is { Count: > 0 } folders && !IsInsideRenamedFolder(row, placement)
             ? ToolFolders.DeepestAnchor(row.CurrentPath, folders)
             : null;
 
-    private ToolMode ToolModeOf(OrganizerModRow row) =>
+    // The mod's folder (its current path minus the leaf) is a renamed category folder or inside one.
+    private static bool IsInsideRenamedFolder(OrganizerModRow row, CategoryPlacement? placement)
+    {
+        if (placement is null)
+            return false;
+        var slash = row.CurrentPath.LastIndexOf('/');
+        return slash > 0 && placement.IsAtOrInsideRenamedFolder(row.CurrentPath[..slash]);
+    }
+
+    private ToolMode ToolModeOf(OrganizerModRow row, CategoryPlacement? placement) =>
         row.ProteusRole == ProteusRole.Made ? _toolPolicy.Proteus
         : row.HeliosphereManaged ? _toolPolicy.Heliosphere
-        : UserAnchorOf(row) is not null ? ToolMode.SortInside
+        : UserAnchorOf(row, placement) is not null ? ToolMode.SortInside
         : ToolMode.Normal;
 
     /// <summary>
@@ -750,7 +774,7 @@ public sealed class OrganizerState
 
             // The same tool placement a sort applies, so a template cannot move a Heliosphere or
             // Proteus mod out of the folder its mode says to keep it in.
-            row.ProposedPath = ToolAdjustedPath(row, BuildPath(folder, null, row.Name));
+            row.ProposedPath = ToolAdjustedPath(row, BuildPath(folder, null, row.Name), placement: null);
             row.StagedBodyResolution = null;
             row.StagedRace = null;
             row.StagedRule = null;
@@ -820,7 +844,8 @@ public sealed class OrganizerState
     // is the whole-library behaviour from before scopes.
     private int Sort(
         Func<OrganizerModRow, (string? Primary, string? Secondary)> folderSelector, SortScope? scope,
-        IReadOnlySet<OrganizerModRow>? stay = null, bool reserveProtected = false)
+        IReadOnlySet<OrganizerModRow>? stay = null, bool reserveProtected = false,
+        CategoryPlacement? placement = null)
     {
         var touched = new List<OrganizerModRow>();
         var untouchedPaths = new List<string>();
@@ -848,7 +873,7 @@ public sealed class OrganizerState
             }
 
             var (primary, secondary) = folderSelector(row);
-            row.ProposedPath = ToolAdjustedPath(row, BuildPath(primary, secondary, row.Name));
+            row.ProposedPath = ToolAdjustedPath(row, BuildPath(primary, secondary, row.Name), placement);
             touched.Add(row);
         }
 
@@ -868,12 +893,12 @@ public sealed class OrganizerState
 
     // The two tool-specific placements, applied AFTER the normal path is built and BEFORE collision
     // disambiguation, so the tail sees the final path. Only unprotected rows reach here.
-    private string ToolAdjustedPath(OrganizerModRow row, string builtPath)
+    private string ToolAdjustedPath(OrganizerModRow row, string builtPath, CategoryPlacement? placement)
     {
         if (row.ProteusRole == ProteusRole.Managed)
             return _toolPolicy.ProteusManagedAtRoot ? PenumbraPathSemantics.FixName(row.Name) : builtPath;
 
-        return AnchorFor(row) is { } anchor
+        return AnchorFor(row, placement) is { } anchor
             ? ToolFolders.ApplyAnchorTo(anchor, builtPath)
             : builtPath;
     }

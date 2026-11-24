@@ -34,7 +34,10 @@ public sealed class RuleSet : IEquatable<RuleSet>
     {
         Rules = rules;
         Race = race;
-        Digest = string.Concat(rules.Select(r => $"{(r.Enabled ? 1 : 0)}{r.Text.Length}:{r.Text}"));
+        Digest = string.Concat(rules.Select(r => string.Create(
+            System.Globalization.CultureInfo.InvariantCulture, $"{(r.Enabled ? 1 : 0)}{r.Text.Length}:{r.Text}")));
+        DigestHash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Digest)));
         UsesRace = rules.Any(r => r.Runs && (ReadsRace(r.Rule!.Condition) || RaceToken.IsMatch(r.Rule.FolderTemplate)));
         Broken = rules.Where(r => r.Enabled && r.Error is not null).ToList();
     }
@@ -42,6 +45,12 @@ public sealed class RuleSet : IEquatable<RuleSet>
     public IReadOnlyList<CompiledRule> Rules { get; }
     public RaceSplitOptions Race { get; }
     public string Digest { get; }
+
+    /// <summary>
+    /// The SHA-256 (hex) of <see cref="Digest"/>: what <c>SortSelection.Fingerprint</c> carries, so the
+    /// fingerprint stays short however many and however long the rules are. Computed once, here.
+    /// </summary>
+    public string DigestHash { get; }
     public bool UsesRace { get; }
     public IReadOnlyList<CompiledRule> Broken { get; }
     public bool HasRules => Rules.Count > 0;

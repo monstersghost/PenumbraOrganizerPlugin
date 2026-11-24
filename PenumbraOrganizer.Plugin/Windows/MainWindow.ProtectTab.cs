@@ -216,7 +216,8 @@ public sealed partial class MainWindow
         Help.Tooltip(HelpTopics.ProtectSortInsideFolders, gateOpen ? null : ActivityGateReason);
         if (!expanded)
             return;
-        var allCandidates = SortInsideFolderChoices.Candidates(mods, config.SortInsideFolders);
+        var allCandidates = SortInsideFolderChoices.Candidates(
+            mods, config.SortInsideFolders, SortSelectionFactory.PlacementFor(config));
 
         ImGui.BeginDisabled(!gateOpen);
         ImGui.SetNextItemWidth(260);

@@ -97,7 +97,19 @@ public sealed class LayoutProfile : IEquatable<LayoutProfile>
 {
     private readonly CategoryLayout[] _layouts;
 
-    private LayoutProfile(CategoryLayout[] layouts) => _layouts = layouts;
+    private LayoutProfile(CategoryLayout[] layouts)
+    {
+        _layouts = layouts;
+        // Built once, eagerly, so a shared profile is immutable from the moment it is published.
+        Placement = CategoryPlacement.From(this);
+    }
+
+    /// <summary>
+    /// The folders and creator levels the legacy fields cannot carry, built once per profile: the cache hands out
+    /// the same instance until the config changes, so the Review tab's per-frame selection rebuilds nothing. Null
+    /// when every category uses its default folder and follows Group by.
+    /// </summary>
+    public CategoryPlacement? Placement { get; }
 
     /// <summary>The built-in profile every category follows until the user customises it.</summary>
     public static LayoutProfile Recommended { get; } =

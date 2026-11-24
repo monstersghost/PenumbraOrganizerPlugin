@@ -22,6 +22,12 @@ public static class SortSelectionFactory
     }
 
     /// <summary>
+    /// The category folders and creator levels that differ from the defaults, or null when none do. Shared by the
+    /// headless path and the Sort panel so their fingerprints agree; cached with the profile, so free per frame.
+    /// </summary>
+    public static CategoryPlacement? PlacementFor(Configuration config) => LayoutProfileCache.For(config).Placement;
+
+    /// <summary>
     /// Never writes the configuration: a body priority that needed repair against the label list is
     /// repaired in the returned selection only (the panel saves its own repair). An empty label list
     /// leaves the priority at its default rather than dropping every saved entry.
@@ -44,7 +50,8 @@ public static class SortSelectionFactory
             new LayoutOptions(
                 layout.SharedHandsFeet, race.InEffect(RaceRows.Hair, layout.SplitBodyMods),
                 layout.SplitEmotes, race.NullIfNoEffect(),
-                Rules: RulesFor(config)),
+                Rules: RulesFor(config),
+                Placement: PlacementFor(config)),
             RootOnly: false);
     }
 }

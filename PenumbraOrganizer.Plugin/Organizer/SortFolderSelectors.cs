@@ -1,6 +1,7 @@
 using PenumbraOrganizer.Plugin.Organizer.BodyTypes;
 using PenumbraOrganizer.Core.Classification;
 using PenumbraOrganizer.Plugin.Organizer.Classification;
+using PenumbraOrganizer.Plugin.Organizer.Layouts;
 using PenumbraOrganizer.Plugin.Organizer.Templates;
 
 namespace PenumbraOrganizer.Plugin.Organizer;
@@ -29,7 +30,8 @@ public static class SortFolderSelectors
     /// </param>
     /// <param name="renameFolder">
     /// Applied by the template planner to map a type folder onto the template author's own label
-    /// for it. Null for ordinary sorts, which rename nothing.
+    /// for it. Null for ordinary sorts, which rename nothing. Never combined with
+    /// <see cref="LayoutOptions.Placement"/>: a template's fallback files under the default folders.
     /// </param>
     public static (string? Primary, string? Secondary) Select(
         SortStrategy strategy,
@@ -48,6 +50,14 @@ public static class SortFolderSelectors
         LayoutOptions? options = null)
     {
         var opts = options ?? default;
+        if (renameFolder is not null && opts.Placement is not null)
+            throw new ArgumentException("A template rename and category placement cannot be combined.", nameof(options));
+
+        // The category whose folder and creator level apply: a racial-scaling Gear row routed under Body is
+        // placed as Body. Computed once; Type() uses the same answer.
+        var routedToRacialScaling = RaceSplitRouting.IsRoutedToRacialScaling(row, opts.Race, splitBodyMods);
+        var placedAs = routedToRacialScaling ? ModCategory.Body : row.Category;
+
         string? Creator() =>
             canonicalizeCreator is null ? null : KnownSegment(canonicalizeCreator(row.Author));
 
@@ -122,7 +132,7 @@ public static class SortFolderSelectors
         string? Type()
         {
             string? path;
-            if (RaceSplitRouting.IsRoutedToRacialScaling(row, opts.Race, splitBodyMods))
+            if (routedToRacialScaling)
             {
                 var root = TypeFolder(ModCategory.Body, null, renameFolder);
                 path = root is null
@@ -138,10 +148,22 @@ public static class SortFolderSelectors
                 return null;
 
             var tail = RaceSplitRouting.Tail(row, opts.Race, splitBodyMods);
-            return tail is null ? path : $"{path}/{tail}";
+            var full = tail is null ? path : $"{path}/{tail}";
+
+            // A renamed category folder replaces the default root of the finished path, so every split, number
+            // and race tail below it is untouched.
+            return opts.Placement?.FolderFor(placedAs) is { } folder
+                ? LayoutCatalog.ReplaceRoot(full, placedAs!.Value, folder)
+                : full;
         }
 
-        return strategy switch
+        // A category with its own creator level uses it in place of Group by. Creator-only grouping never
+        // consults the category, so it ignores every level.
+        var effective = strategy != SortStrategy.CreatorOnly && opts.Placement?.CreatorFor(placedAs) is { } level
+            ? LayoutCatalog.StrategyFor(level)
+            : strategy;
+
+        return effective switch
         {
             SortStrategy.CreatorOnly => (Creator(), null),
             SortStrategy.TypeOnly => (Type(), null),

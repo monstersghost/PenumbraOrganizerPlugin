@@ -52,14 +52,20 @@ public readonly record struct SortSelection(
             SplitGearBody, SplitBodyMods, string.Join(',', bodyLabels),
             Layout.SharedHandsAndFeet, Layout.SplitHairByRace, Layout.SplitEmotes, raceText);
 
+        // Appended only when a category has its own folder or creator level, so every layout the split flags
+        // alone describe keeps its exact string from before category layouts. Before the rules, which go last.
+        if (Layout.Placement is { } placement)
+            core = $"{core}|cats={placement.Digest}";
+
         if (Layout.Rules is not { HasRules: true } rules)
             return core;
 
-        // The digest is length-prefixed and goes LAST, so no character inside a rule can blur two sets together.
+        // The digest is the SHA-256 of the length-prefixed rule text (so no character inside a rule can blur two
+        // sets together) and goes LAST. Hashed so a hundred long rules still fit the staged export's one cell.
         var rulesRace = rules.UsesRace
             ? $"{rules.Race.Enabled}:{(int)rules.Race.Rows}:{rules.Race.MultiRaceToMultiRace}:{string.Join(',', rules.Race.Priority.Ranked)}"
             : "-";
-        return $"{core}|rr={rulesRace}|rules={rules.Digest}";
+        return $"{core}|rr={rulesRace}|rules={rules.DigestHash}";
     }
 }
 
@@ -128,7 +134,8 @@ public sealed class SortPanel
                 race.InEffect(RaceRows.Hair, splitBodyMods),
                 splitEmotes,
                 race.NullIfNoEffect(),
-                Rules: SortSelectionFactory.RulesFor(config)),
+                Rules: SortSelectionFactory.RulesFor(config),
+                Placement: SortSelectionFactory.PlacementFor(config)),
             rootOnly);
 
     /// <summary>
