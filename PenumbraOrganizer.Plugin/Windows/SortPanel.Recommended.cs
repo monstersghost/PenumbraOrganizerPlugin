@@ -92,7 +92,11 @@ public sealed partial class SortPanel
                     ImGui.TextColored(PluginTheme.Warning, rulesNote);
                     ImGui.SameLine();
                     if (ImGui.SmallButton("Show rules##recommended-show-rules"))
+                    {
                         SetMode(SortTabMode.Advanced);
+                        // Advanced then opens the Rules card and scrolls to it (SortPanel.Cards.cs).
+                        _rulesReveal.Request();
+                    }
                     Help.Tooltip(HelpTopics.SortRules);
                 }
             }

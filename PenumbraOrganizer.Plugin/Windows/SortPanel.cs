@@ -156,6 +156,11 @@ public sealed partial class SortPanel
     {
         _rules ??= new RulesEditor(config.SortRules, () => Environment.TickCount64);
 
+        // Show rules on Recommended opens the header once; after that it is ImGui's stored state as usual. Only the
+        // header's open state changes: the edit-and-persist logic below is the same path as a click on the header.
+        if (_rulesReveal.TakeOpen())
+            ImGui.SetNextItemOpen(true);
+
         // ### keeps the id stable while the count in the label changes, so the header stays open or closed.
         var open = ImGui.CollapsingHeader($"Rules ({_rules.Rows.Count})###sort-rules");
         Help.Tooltip(HelpTopics.SortRules);
@@ -538,9 +543,16 @@ public sealed partial class SortPanel
         // Rules only in Advanced, so Recommended stays simple; they still apply in both (saved settings), and the
         // Recommended card says how many are active. Sort settings is not a layout choice, so both screens show it.
         if (_mode == SortTabMode.Advanced)
+        {
             DrawRulesCard(state, gates, config, saveConfig, canonicalizeCreator);
-        else if (_rulesTextUnsaved)
-            PersistRules(config, saveConfig);
+        }
+        else
+        {
+            // A frame without the Rules card still counts against a Show rules request, so it cannot fire later.
+            _rulesReveal.TryConsume(drawn: false, 0f);
+            if (_rulesTextUnsaved)
+                PersistRules(config, saveConfig);
+        }
         DrawSortSettingsCard(config, saveConfig);
         PersistHairChoices(config, saveConfig);
 
