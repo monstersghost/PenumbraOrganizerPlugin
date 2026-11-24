@@ -287,6 +287,24 @@ public sealed class WorkbookCustomCode
     public string Folder { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// One category whose layout differs from Recommended. A plain class of strings so any config serializer reads it:
+/// <see cref="Category"/> and <see cref="Creator"/> are enum member names, <see cref="Splits"/> the
+/// <c>LayoutSplits</c> member names in folder-depth order. <see cref="Creator"/> null follows Group by.
+/// <see cref="Splits"/> has no initializer on purpose: missing or null in a hand-edited file means "Recommended's
+/// splits for this category", while an empty list means "all off".
+/// </summary>
+public sealed class CategoryLayoutEntry
+{
+    public string Category { get; set; } = string.Empty;
+
+    public string Folder { get; set; } = string.Empty;
+
+    public string? Creator { get; set; }
+
+    public List<string>? Splits { get; set; }
+}
+
 /// <summary>One saved Sort keyword rule. A plain class so any config serializer can read it.</summary>
 public sealed class SortRuleEntry
 {
