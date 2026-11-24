@@ -1,8 +1,9 @@
+using System.Runtime.CompilerServices;
 using PenumbraOrganizer.Core.Classification;
 
 namespace PenumbraOrganizer.Plugin.Organizer.Layouts;
 
-/// <summary>Converts the saved <see cref="CategoryLayoutEntry"/> list into the model.</summary>
+/// <summary>Converts between the saved <see cref="CategoryLayoutEntry"/> list and the model.</summary>
 public static class LayoutOverrides
 {
     /// <summary>
@@ -67,5 +68,79 @@ public static class LayoutOverrides
         value = default;
         return text is not null && Enum.GetNames<T>().Contains(text, StringComparer.Ordinal)
                && Enum.TryParse(text, ignoreCase: false, out value);
+    }
+
+    /// <summary>
+    /// One entry per category that differs from Recommended, in category order, splits in folder-depth order.
+    /// Anything <see cref="Read"/> ignored (unknown or repeated categories, illegal splits) is not written back.
+    /// </summary>
+    public static List<CategoryLayoutEntry> Write(LayoutProfile profile) =>
+        profile.Overrides()
+            .OrderBy(pair => pair.Key)
+            .Select(pair => new CategoryLayoutEntry
+            {
+                Category = pair.Key.ToString(),
+                Folder = pair.Value.Folder,
+                Creator = pair.Value.Creator?.ToString(),
+                Splits = LayoutCatalog.SplitsFor(pair.Key)
+                    .Where(info => pair.Value.Has(info.Split))
+                    .Select(info => info.Split.ToString())
+                    .ToList(),
+            })
+            .ToList();
+}
+
+/// <summary>
+/// One resolved <see cref="LayoutProfile"/> per configuration, reused until the saved list is replaced or its
+/// version is bumped, so nothing parses the config per frame. Keyed per config object (xUnit runs test classes in
+/// parallel, and the plugin has one config). A config the layout migration has not run on yet is read from the
+/// legacy fields every call: they are plain properties a caller may change at any time, and this path never runs
+/// per frame in the plugin, which migrates at startup.
+/// </summary>
+/// <remarks>
+/// Thread safety: each config publishes ONE immutable snapshot (source list, version and profile together)
+/// through a single volatile reference, so a reader can never pair one version with another version's profile.
+/// A rebuild copies the saved list under the per-config lock before enumerating it, so the resolve never walks a
+/// list that is being replaced.
+/// </remarks>
+public static class LayoutProfileCache
+{
+    // Source is compared by reference only.
+    private sealed record Snapshot(object Source, int Version, LayoutProfile Profile);
+
+    private sealed class Slot
+    {
+        public readonly object Gate = new();
+        public volatile Snapshot? Current;
+    }
+
+    private static readonly ConditionalWeakTable<Configuration, Slot> Slots = new();
+
+    public static LayoutProfile For(Configuration config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        var saved = config.CategoryLayouts;
+        if (saved is null)
+            return LayoutProfile.FromLegacy(LegacyLayout.ReadFields(config));
+
+        var slot = Slots.GetValue(config, _ => new Slot());
+        var version = config.CategoryLayoutsVersion;
+        var snapshot = slot.Current;
+        if (snapshot is not null && ReferenceEquals(snapshot.Source, saved) && snapshot.Version == version)
+            return snapshot.Profile;
+
+        lock (slot.Gate)
+        {
+            snapshot = slot.Current;
+            if (snapshot is not null && ReferenceEquals(snapshot.Source, saved) && snapshot.Version == version)
+                return snapshot.Profile;
+
+            // Copied before enumerating: the resolve below never walks the live list. Writers replace the list
+            // (SaveLayoutProfile assigns a new one) rather than editing it in place.
+            CategoryLayoutEntry?[] copy = [.. saved];
+            var fresh = new Snapshot(saved, version, LayoutProfile.Resolve(LayoutOverrides.Read(copy)));
+            slot.Current = fresh;
+            return fresh.Profile;
+        }
     }
 }

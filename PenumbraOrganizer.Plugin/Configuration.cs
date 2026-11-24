@@ -187,6 +187,92 @@ public sealed class Configuration : IPluginConfiguration
     [System.Text.Json.Serialization.JsonIgnore]
     public int SortRulesVersion { get; set; }
 
+    /// <summary>
+    /// The categories whose layout the user changed from Recommended, one entry each; a category not listed
+    /// follows Recommended. Null means "not migrated yet": <see cref="MigrateCategoryLayouts"/> fills it from the
+    /// legacy Sort fields. Nullable and without an initializer for the same reason as <see cref="RaceSplitEnabled"/>:
+    /// an older build that re-saves the file drops it, and the next load must migrate again.
+    /// </summary>
+    /// <remarks>Replace the list (or bump <see cref="CategoryLayoutsVersion"/>) to change it: the profile cache keys on both.</remarks>
+    public List<CategoryLayoutEntry>? CategoryLayouts { get; set; }
+
+    /// <summary>
+    /// Bumped by whoever replaces or edits <see cref="CategoryLayouts"/>; the profile cache keys on it. Not saved.
+    /// </summary>
+    [Newtonsoft.Json.JsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int CategoryLayoutsVersion { get; set; }
+
+    /// <summary>
+    /// A first install: no layout overrides (every category follows Recommended) and the legacy fields written
+    /// from Recommended, so a downgrade to a build without layouts keeps the same splits. The Plugin uses this
+    /// only when Dalamud has no saved config; an existing config is migrated instead.
+    /// </summary>
+    /// <remarks>
+    /// Caveat: Dalamud's <c>GetPluginConfig()</c> also returns null after a config wipe, a reinstall that removed
+    /// the file, or a file that failed to deserialize. That user is treated as a first install and gets
+    /// Recommended, so the next Sort proposes moving most of an existing library. Nothing here can tell those
+    /// cases apart; the in-game checklist and the release notes say so whenever Recommended changes (categories
+    /// never stored as overrides follow the new Recommended).
+    /// </remarks>
+    public static Configuration CreateFresh()
+    {
+        var config = new Configuration { CategoryLayouts = [], RaceSplitEnabled = false };
+        config.SyncLegacyLayoutFields();
+        return config;
+    }
+
+    /// <summary>
+    /// Fills <see cref="CategoryLayouts"/> once, while it is null, with the overrides that reproduce the legacy
+    /// fields exactly (only categories that differ from Recommended are stored). Runs after
+    /// <see cref="MigrateRaceSplit"/>, whose result it reads. Never re-runs once the list exists; the legacy
+    /// fields are left as they are (they already describe the same layout).
+    /// </summary>
+    public void MigrateCategoryLayouts()
+    {
+        if (CategoryLayouts is not null)
+            return;
+
+        CategoryLayouts = Organizer.Layouts.LayoutOverrides.Write(
+            Organizer.Layouts.LayoutProfile.FromLegacy(Organizer.Layouts.LegacyLayout.ReadFields(this)));
+        CategoryLayoutsVersion++;
+    }
+
+    /// <summary>
+    /// Saves a whole profile: the overrides (categories that differ from Recommended) as a NEW list, a version
+    /// bump for the cache, and the legacy mirror. The caller saves the file.
+    /// </summary>
+    public void SaveLayoutProfile(Organizer.Layouts.LayoutProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        CategoryLayouts = Organizer.Layouts.LayoutOverrides.Write(profile);
+        CategoryLayoutsVersion++;
+        SyncLegacyLayoutFields();
+    }
+
+    /// <summary>
+    /// Rewrites the legacy Sort fields from the effective layout (the rollback mirror, as for
+    /// <see cref="ProtectedFolderPaths"/>), so a build without layouts sorts with the same splits, and ends with
+    /// <see cref="SyncLegacyRaceFields"/>. Folders and creator levels have no legacy field and are lost on such a
+    /// downgrade. Does nothing before migration.
+    /// </summary>
+    public void SyncLegacyLayoutFields()
+    {
+        if (CategoryLayouts is null)
+            return;
+
+        var legacy = Organizer.Layouts.LayoutProfileCache.For(this).ToLegacy();
+        SortSplitGear = legacy.SplitGear;
+        SortSplitNpc = legacy.SplitNpc;
+        SortSplitHair = legacy.SplitHair;
+        SortSplitGearBody = legacy.SplitGearBody;
+        SortSplitBodyMods = legacy.SplitBodyMods;
+        SortSharedHandsFeet = legacy.SharedHandsFeet;
+        SortSplitEmotes = legacy.SplitEmotes;
+        RaceSplitRows = Organizer.RaceRowNames.ToNames(legacy.RaceRows);
+        SyncLegacyRaceFields();
+    }
+
     /// <summary>What the sorter does with Heliosphere-managed mods. Protected until the user says otherwise.</summary>
     public Organizer.ToolMode HeliosphereMode { get; set; } = Organizer.ToolMode.Protected;
 
