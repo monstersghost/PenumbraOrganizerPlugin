@@ -74,7 +74,7 @@ public readonly record struct SortSelection(
 
 /// <summary>
 /// The Sort tab's host (spec 2): the pinned bar (Recommended | Advanced, Sort, the scope line, ?), then the
-/// Recommended or Advanced screen, then the Rules and Sort settings cards. The category splits are read from the
+/// Recommended or Advanced screen, then the Rules card (Advanced only) and the Sort settings card. The category splits are read from the
 /// saved layouts; the Advanced editor (<see cref="CategoryLayoutEditor"/>) is the only thing that writes them.
 /// </summary>
 /// <remarks>
@@ -177,7 +177,10 @@ public sealed partial class SortPanel
             // Buffer size is in bytes: four per UTF-16 unit leaves room for any text the 300-unit limit
             // allows; the parser reports anything longer.
             if (ImGui.InputText("##rule-text", ref text, RuleParser.MaxLength * 4))
+            {
                 _rules.SetText(i, text);
+                _rulesTextUnsaved = true;
+            }
             if (ImGui.IsItemDeactivatedAfterEdit())
                 persist = true;
             ImGui.SameLine();
@@ -218,11 +221,21 @@ public sealed partial class SortPanel
         ImGui.EndDisabled();
 
         if (persist)
-        {
-            config.SortRules = _rules.ToConfig();
-            config.SortRulesVersion++;
-            saveConfig();
-        }
+            PersistRules(config, saveConfig);
+    }
+
+    // Typed rule text is saved when its box is left, which ImGui reports on the next frame the box is drawn. The
+    // Rules card is only drawn in Advanced, so a switch to Recommended mid-edit saves the text here instead.
+    private bool _rulesTextUnsaved;
+
+    private void PersistRules(Configuration config, Action saveConfig)
+    {
+        if (_rules is null)
+            return;
+        _rulesTextUnsaved = false;
+        config.SortRules = _rules.ToConfig();
+        config.SortRulesVersion++;
+        saveConfig();
     }
 
     // Group by and the global race settings, every frame. The category layouts are saved by the layout editor the
@@ -480,8 +493,8 @@ public sealed partial class SortPanel
     }
 
     /// <summary>
-    /// Everything under the pinned header: the Recommended or Advanced screen, then the Rules and Sort settings
-    /// cards. Drawn inside MainWindow's scrolling region.
+    /// Everything under the pinned header: the Recommended or Advanced screen, then the Rules card (Advanced only)
+    /// and the Sort settings card. Drawn inside MainWindow's scrolling region.
     /// </summary>
     public void DrawBody(
         OrganizerState state,
@@ -506,7 +519,12 @@ public sealed partial class SortPanel
         else
             DrawAdvancedLayout(state, gates, config, saveConfig, strategy, states, splitReason, bodyLabels, readEnabledMods);
 
-        DrawRulesCard(state, gates, config, saveConfig, canonicalizeCreator);
+        // Rules only in Advanced, so Recommended stays simple; they still apply in both (saved settings), and the
+        // Recommended card says how many are active. Sort settings is not a layout choice, so both screens show it.
+        if (_mode == SortTabMode.Advanced)
+            DrawRulesCard(state, gates, config, saveConfig, canonicalizeCreator);
+        else if (_rulesTextUnsaved)
+            PersistRules(config, saveConfig);
         DrawSortSettingsCard(config, saveConfig);
         PersistHairChoices(config, saveConfig);
 

@@ -88,6 +88,17 @@ public sealed partial class SortPanel
                     if (ImGui.SmallButton("Show in Advanced##recommended-show-advanced"))
                         SetMode(SortTabMode.Advanced);
                 }
+
+                // Rules are edited in Advanced only but still apply here, so a rule the examples above do not show
+                // is never silent. The compiled set comes from the per-config cache: free per frame.
+                if (CategoryLayoutEditor.RecommendedRulesNote(SortSelectionFactory.RulesFor(config)) is { } rulesNote)
+                {
+                    ImGui.TextColored(PluginTheme.Warning, rulesNote);
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton("Show rules##recommended-show-rules"))
+                        SetMode(SortTabMode.Advanced);
+                    Help.Tooltip(HelpTopics.SortRules);
+                }
             }
         }
 
