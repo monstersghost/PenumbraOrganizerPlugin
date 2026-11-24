@@ -236,19 +236,69 @@ recorded paths regardless of current protection. See History below.
 
 ### Sort
 
-![The Sort tab: Group by, the Gear, NPC, Hair and Body type sections including the two optional split checkboxes, the Sort button, and the Body priority section](images/sort.png)
+![The Sort tab: the pinned bar with Recommended and Advanced, the Sort button and the scope line, then the Recommended layout card with its example paths](images/sort.png)
 
-Choose a grouping, tick whichever splits you want, and press Sort. That computes a proposed folder
-path for every unprotected mod **without moving anything**. Only Apply, on the Review Changes tab,
-calls Penumbra.
+Choose a layout and press Sort. That computes a proposed folder path for every unprotected mod
+**without moving anything**. Only Apply, on the Review Changes tab, calls Penumbra.
 
-The tab has three sections: **Group by** and the **Sort** button, which are always visible; then
-**Gear, NPC and Hair**; then **Body type**. The two lower sections are collapsed away until you want
-them. The **?** button beside Sort opens the Help tab at its Sort section, and the small **(?)**
-beside a checkbox explains it.
+The bar at the top stays in view while the rest of the tab scrolls. It holds the **Recommended** and
+**Advanced** switch, the **Sort** button, the line saying how many mods the sort covers, and the **?**
+button, which opens the Help tab at its Sort section. Below it are the screen you picked, then the
+**Rules** card, the **Sort settings** card (what happens when new mods are installed) and manual
+assignment.
 
-**Everything on this tab is remembered** between sessions: Group by, every checkbox, the hair race,
-the Midlander fallback and the body priority. Only the proposals themselves reset (on a rescan).
+**Everything on this tab is remembered** between sessions: Group by, every category's layout, the race
+settings, the hair race, the Midlander fallback and the body priority. Only the proposals themselves
+reset (on a rescan), and What to sort, which is for this session only.
+
+#### Recommended and Advanced
+
+**Recommended** is one card: What to sort, Group by, and four example paths (Gear, Hair, Body and NPC)
+that show where such a mod would go. A second card lists what Recommended does for each kind of mod,
+with **Customise per category**, which opens Advanced. If you have customised a category, a line says
+how many and the examples show your layout, so the screen never describes a layout the Sort will not use.
+
+**Advanced** has the 16 kinds of mod on the left and the selected one's settings on the right. A
+**Custom** badge marks a category that differs from Recommended, and the header counts them. Group by
+and What to sort are on this screen too. For each category you set:
+
+- **Folder**: its top folder, which can be nested, such as `Equipment/Gear`. It is checked as you type
+  (relative, no empty part, `.` or `..`, at most 260 characters) and an invalid name is never saved.
+  A note warns when another category uses the same folder, or the folder is inside a protected or
+  sort-inside folder. Renaming moves nothing until you Sort and Apply.
+- **Creator folder**: none, before the type folders or after them. Picking what Group by already gives
+  keeps the category following Group by.
+- **Splits**: each one adds a folder level, numbered by its depth. The order is fixed. A split that
+  cannot apply right now is greyed with the reason and keeps its setting.
+- **Example**: one live path for the category.
+
+**Reset to Recommended** puts one category back; **Reset all to Recommended** puts every category back,
+straight away, without asking. Nothing moves until you Sort and Apply.
+
+**Select all splits**, in the Advanced header, asks first. Its confirmation lists what it does: it
+turns on every split in every category that has one (gear, NPC, hair, body and emote splits, and the
+race split of every category that has one) and **Split by race**, and turns off the shared hands and
+feet folder so hands and feet get their own folders. Folder names, creator levels, Group by and the
+priorities stay as they are, and it does not sort. **Cancel** or **Escape** closes it without a change.
+
+Opening the tab shows Recommended when nothing is customised, otherwise Advanced.
+
+Some settings sit under the categories they affect: **Priority race** and **Midlander fallback** under
+Hair, the **Race** panel (Split by race, Send multi-race mods to Multi-race, Race priority) under Hair,
+Face, Skin and Body, and **Body types** (Body priority and Check my collection) under Gear and Body.
+
+The splits described below are these category splits. The old checkbox names map to them like this:
+
+| Old checkbox | Category split |
+| --- | --- |
+| Split gear by equipment slot | Gear: Equipment slot |
+| Split gear by body type | Gear: Body type |
+| Hands and feet in a shared folder | Gear: Hands and feet in one shared folder |
+| Split NPC mods by kind | NPC: Kind |
+| Split hair by hair number | Hair: Hair number |
+| Split body mods by body type | Body: Part and body type |
+| Split emotes by emote | Animation: Emote |
+| Race rows | Race in Hair, Face and Skin; Eyes by race in Face; Tails, ears and horns by race and Racial scaling by race in Body |
 
 #### Group by
 
@@ -264,9 +314,9 @@ This picks the shape of the path:
 A mod with no resolvable creator, category, or both, falls back to `Review/{ModName}`, so it is
 easy to find and sort by hand instead of landing somewhere unexpected.
 
-Every split checkbox is greyed out when Group by is Creator, because grouping by creator alone never
-looks at a mod's type. A ticked hair box keeps its two dependent controls visible but greyed, and
-switching Group by back restores everything untouched.
+Every split, and the creator folder, is greyed out when Group by is Creator, because grouping by
+creator alone never looks at a mod's type. Everything keeps its setting, and switching Group by back
+restores it untouched.
 
 #### The splits
 
@@ -319,11 +369,13 @@ files gloves, gauntlets, boots and nails under `Gear/03. Hands` and `Gear/05. Fe
 each body, since they fit most bodies. Tops, legs and sets still go under their body. A body that
 only had hands or feet mods no longer gets a folder.
 
-**Race** (its own section on the Sort tab) replaces the old Split hair by race box. **Split supported
-categories by race** is a master switch, off by default and greyed out under Creator grouping. Under it
-are six rows: Hair, Face, Eyes, Skin, Tails, ears and horns, and Racial scaling. A fresh install has every
-row ticked, so turning the master on splits all of them; untick a row to leave it as it is. If you used
-the old hair box, the update turns the master on with only Hair ticked, so nothing else moves.
+**Race** splits are splits of the Hair, Face, Skin and Body categories in Advanced, and their shared
+settings are in the **Race** panel under those categories. **Split by race** is a master switch, off by
+default and greyed out under Creator grouping. The race splits are Race in Hair, Face and Skin, Eyes by
+race in Face, and Tails, ears and horns by race and Racial scaling by race in Body. All of them are on in
+the Recommended layout, so turning the master on splits all of them; turn one off in its category to
+leave it as it is. If you used the old Split hair by race box, the update turns the master on with only
+Hair's race split on, so nothing else moves.
 
 Folders are by race, never by gender, using Midlander, Highlander, Elezen, Miqo'te, Roegadyn, Lalafell,
 Au Ra, Hrothgar and Viera, such as `Face/Viera` or `Skin/Miqo'te`. A mod made for one race files under
@@ -340,7 +392,7 @@ of racial scaling is filed under Gear today; with Racial scaling ticked it goes 
 scanned, so scan again after updating. Race priority is separate from Priority race under Hair, which only
 picks the hair number.
 
-**Split emotes by emote** (Animation section; on in the Recommended layout; greyed out under Creator grouping) breaks
+**Split emotes by emote** (the Animation category's Emote split; on in the Recommended layout; greyed out under Creator grouping) breaks
 up `Animation and VFX/Emotes`. A mod with one emote goes to `Emotes/<emote name>`, a mod with several
 goes to `Emotes/Multiple`, a mod with only facial expressions (Endure, Ponder, Reflect, Big Grin) goes
 to `Emotes/Expressions`, and a mod with no emote name goes to `Emotes/Undetermined`. Expressions are
@@ -355,10 +407,10 @@ What moves and what stops matching after you update:
 - d) Folder protection rules naming the old gear folders no longer match the renamed ones.
 
 **Split body mods by body type** does the same for the body replacers themselves, filing each under
-its own body name, such as `Body/Rue+`. It is a separate checkbox so you can split one kind and not
-the other: with only the gear box ticked, body mods stay as `Body/<mod>`, and the reverse. With it on, the Body folder is numbered so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and Horns` are shared and sit on top, then your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding `00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod with no body stays directly in `Body`. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
+its own body name, such as `Body/Rue+`. It is a separate split so you can split one kind and not
+the other: with only the gear split on, body mods stay as `Body/<mod>`, and the reverse. With it on, the Body folder is numbered so it sorts the same regardless of the alphabet: `00. Skeleton`, `01. Physics` and `02. Tails, Ears and Horns` are shared and sit on top, then your bodies from `10.` in your Body priority order (only bodies that have body mods), each holding `00. Replacer`, `01. SFW` (clothing that covers the body, like lingerie) and `02. Hands and Feet`, for example `Body/10. Rue+/01. SFW/<mod>`. A mod that is not clearly a part stays in Replacer, and a body mod with no body stays directly in `Body`. A mod that is not clearly a part stays in Replacer. For example `Body/Rue+/Skeleton/<mod>`.
 
-**Check my collection** sits in the Sort tab's Body priority section. It reads the mods enabled in
+**Check my collection** sits in Body priority, in the Body types panel under Gear and Body in Advanced. It reads the mods enabled in
 your active collection (the one that affects your character, or Penumbra's selected collection when
 that is unavailable) and counts only body replacer mods. If exactly one body is enabled it names it
 and offers **Make first choice**; with none or several it says so and changes nothing. It says which
@@ -404,8 +456,8 @@ Each rule shows what is wrong with it and where (a red message with a position a
 
 #### After sorting
 
-If you change the grouping or any checkbox after sorting, a line appears reminding you that the
-selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
+If you change the grouping, a category's layout or a rule after sorting, a line appears in the bar
+reminding you that the selection no longer matches what was sorted. Press Sort again to bring the proposals up to date.
 Sorting again always recomputes from scratch, so it is safe to press repeatedly.
 
 #### Manual assignment
@@ -731,9 +783,9 @@ Nothing on this tab changes anything - it reads no mods and writes no files.
 ## Hair
 
 Hair mods that ship one folder per race can be filed under the hair number most races use. All
-three controls — Split hair by hair number, Priority race, and Midlander fallback — are on the Sort
-tab and are described under [Sort](#sort) above. Both extra controls apply only while Split hair is
-on, and all three are remembered between sessions.
+three controls (the Hair number split, Priority race and Midlander fallback) are under Hair in the
+Sort tab's Advanced screen and are described under [Sort](#sort) above. Both extra controls show only
+while Hair number is on, and all three are remembered between sessions.
 
 Read the caveat at the bottom of this page before trusting the numbers on a library you care about.
 
@@ -741,8 +793,8 @@ Read the caveat at the bottom of this page before trusting the numbers on a libr
 
 Gear can be put in folders named after the body it was made for, so everything that fits one body
 sits together. That is worth having when you change body and need to know what still works. The
-controls are **Split gear by body type** and **Split body mods by body type** on the Sort tab,
-described under [Sort](#sort) above.
+controls are the **Body type** split of Gear and the **Part and body type** split of Body, in the
+Sort tab's Advanced screen, described under [Sort](#sort) above.
 
 The body comes from the mod's options and files first, then its name, then the library folders
 above it. Only gear in the Top, Hands, Legs and Feet slots is looked at, so weapons, hats and jewellery never
@@ -750,14 +802,14 @@ get a body folder.
 
 ### Body priority
 
-In the Body type section of the Sort tab is a collapsed **Body priority** section, always shown. When a mod
+In the Body types panel under Gear and Body (Sort tab, Advanced) is a collapsed **Body priority** section. When a mod
 supports more than one body, it is filed under the highest-ranked one. Use the up and down arrows to
 reorder, or **Reset to default**. A **First-choice body** dropdown moves one body straight to rank 1.
 
 ![The full priority order, with up and down arrows and Reset to default](images/sort-body-priority.png)
 
 The order is saved between sessions, and so are the hair priority race, the Midlander fallback,
-Group by and the split checkboxes. The order is applied when you press Sort, so reordering and
+Group by and the category layouts. The order is applied when you press Sort, so reordering and
 sorting again re-files mods without a rescan.
 
 To add bodies the plugin does not know, create `body-type-list.json` in the configuration folder;
