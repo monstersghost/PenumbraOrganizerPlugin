@@ -15,6 +15,29 @@ public sealed partial class MainWindow
 {
     private const float ManualFieldWidth = 300f;
 
+    // The Heliosphere and Proteus modes in one line (ToolModeStatusText), with a way to the Protect tab where
+    // they are changed. Warning colour when a tool's mods will not be sorted, muted otherwise; hidden when
+    // there is nothing to say.
+    private void DrawToolModeStatus()
+    {
+        var (heliosphere, proteus) = ToolModeStatusText.Count(_plugin.OrganizerState.Mods);
+        var config = _plugin.Config;
+        if (ToolModeStatusText.Build(heliosphere, config.HeliosphereMode, proteus, config.ProteusMode) is not { } status)
+            return;
+
+        // Wraps short of the button's room so a narrow window never pushes it off the line.
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + Math.Max(200f, ImGui.GetContentRegionAvail().X - 140f));
+        if (status.Warn)
+            ImGui.TextColored(PluginTheme.Warning, status.Text);
+        else
+            ImGui.TextColored(PluginTheme.TextMuted, status.Text);
+        ImGui.PopTextWrapPos();
+        ImGui.SameLine();
+        if (ImGui.SmallButton(ToolModeStatusText.OpenProtectTabLabel + "##sort-tool-modes-protect"))
+            RequestTab(HighlightTarget.ProtectTab);
+        ImGui.Spacing();
+    }
+
     private void DrawSortTab()
     {
         using var tab = ImRaii.TabItem("Sort", TutorialTabFlags(HighlightTarget.SortTab));
@@ -38,6 +61,9 @@ public sealed partial class MainWindow
         using var scroll = ImRaii.Child("##sort-scroll", Vector2.Zero, false);
         if (!scroll)
             return;
+
+        // Above both screens (Recommended and Advanced), for someone who opens Sort without visiting Protect.
+        DrawToolModeStatus();
 
         _sortPanel.DrawBody(
             _plugin.OrganizerState, gates, _plugin.Config, _plugin.SaveConfig,
