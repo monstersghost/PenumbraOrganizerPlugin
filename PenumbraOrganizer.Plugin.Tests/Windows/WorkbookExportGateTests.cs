@@ -46,7 +46,7 @@ public class WorkbookExportGateTests
         var changed = Current(new Configuration { SortSplitGear = true });
 
         Assert.Equal(
-            "Sort settings changed, press Sort again.",
+            "Sort choices changed since the last sort, press Sort again.",
             WorkbookExportGate.SuggestedUnavailableReason(state, changed));
     }
 
@@ -58,7 +58,7 @@ public class WorkbookExportGateTests
         state.AssignManual("a", "Somewhere/A");
 
         Assert.Equal(
-            "Staged paths changed since the last sort, press Sort again.",
+            "Staged paths changed since the last whole-library sort, press Sort again.",
             WorkbookExportGate.SuggestedUnavailableReason(state, Current()));
     }
 }

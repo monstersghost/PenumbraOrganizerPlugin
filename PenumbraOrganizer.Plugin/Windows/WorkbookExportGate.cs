@@ -13,10 +13,10 @@ public static class WorkbookExportGate
         if (state.SortFingerprint is null)
             return state.LastSortSummary is null
                 ? "Press Sort first."
-                : "Staged paths changed since the last sort, press Sort again.";
+                : "Staged paths changed since the last whole-library sort, press Sort again.";
 
         return string.Equals(state.SortFingerprint, current.Fingerprint(), StringComparison.Ordinal)
             ? null
-            : "Sort settings changed, press Sort again.";
+            : "Sort choices changed since the last sort, press Sort again.";
     }
 }

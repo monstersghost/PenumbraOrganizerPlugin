@@ -100,6 +100,9 @@ public static class HelpTab
         [
             HelpTopics.ScanRefreshModList,
             HelpTopics.ScanEventLog,
+            HelpTopics.UnusedCheck,
+            HelpTopics.UnusedMove,
+            HelpTopics.UnusedProtectFolder,
         ]),
         new(HelpTopics.HelpTabProtect,
         [
@@ -155,9 +158,6 @@ public static class HelpTab
             HelpTopics.NewModsConfirm,
             HelpTopics.SortNewModAction,
             HelpTopics.SortShowNewModPopup,
-            HelpTopics.UnusedCheck,
-            HelpTopics.UnusedMove,
-            HelpTopics.UnusedProtectFolder,
             HelpTopics.SortHelpButton,
             HelpTopics.SortScrapedNpcList,
             HelpTopics.SortRefreshNpcList,
@@ -177,6 +177,7 @@ public static class HelpTab
             HelpTopics.ReviewShowConfigFile,
             HelpTopics.ReviewDiagnosticDump,
             HelpTopics.ReviewDiagnostics,
+            HelpTopics.ReviewFailedMods,
         ]),
         new(HelpTopics.HelpTabHistory,
         [
