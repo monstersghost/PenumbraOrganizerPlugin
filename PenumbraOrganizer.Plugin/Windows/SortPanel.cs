@@ -151,7 +151,8 @@ public sealed partial class SortPanel
     {
         _rules ??= new RulesEditor(config.SortRules, () => Environment.TickCount64);
 
-        var open = ImGui.CollapsingHeader($"Rules ({_rules.Rows.Count})##sort-rules");
+        // ### keeps the id stable while the count in the label changes, so the header stays open or closed.
+        var open = ImGui.CollapsingHeader($"Rules ({_rules.Rows.Count})###sort-rules");
         Help.Tooltip(HelpTopics.SortRules);
         if (!open)
             return;
@@ -397,7 +398,8 @@ public sealed partial class SortPanel
 
         if (ImGui.Button("Select all##confirm-select-all"))
         {
-            ApplyToggles(SplitToggles.MostDetailed(CurrentToggles()));
+            // Through the layout editor, so the change is saved once; the race master switch is global.
+            _raceEnabled = _editor!.SelectAll();
             ImGui.CloseCurrentPopup();
         }
 
@@ -541,8 +543,8 @@ public sealed partial class SortPanel
     }
 
     /// <summary>
-    /// Everything under the pinned header: the split sections, race, rules, body priority and Advanced. Drawn
-    /// inside MainWindow's scrolling region.
+    /// Everything under the pinned header: the Recommended or Advanced screen, then the Rules and Sort settings
+    /// cards. Drawn inside MainWindow's scrolling region.
     /// </summary>
     public void DrawBody(
         OrganizerState state,
@@ -562,90 +564,13 @@ public sealed partial class SortPanel
             : null;
 
         if (_mode == SortTabMode.Recommended)
-        {
             DrawRecommended(config, gates, strategy);
-            DrawRules(state, gates, config, saveConfig, canonicalizeCreator);
-            DrawAdvanced(config, saveConfig);
-            PersistSortChoices(config, saveConfig, strategy);
-            return;
-        }
+        else
+            DrawAdvancedLayout(state, gates, config, saveConfig, strategy, states, splitReason, bodyLabels, readEnabledMods);
 
-        DrawGroupingRow(gates);
-        RefreshReadOnly(config);
-        DrawSelectAll(states.SplitGear.Enabled, splitReason);
-        if (_customNote is { } customNote)
-            ImGui.TextDisabled(customNote);
-
-        GroupHeading("Gear");
-        DrawCheckbox("Split gear by equipment slot", ref _splitGear, Gate(states.SplitGear, ModCategory.Gear),
-            HelpTopics.SortSplitGear, ReasonFor(ModCategory.Gear, splitReason));
-        if (states.SharedHandsFeet.Visible)
-            DrawCheckbox("Hands and feet in a shared folder", ref _sharedHandsFeet, Gate(states.SharedHandsFeet, ModCategory.Gear),
-                HelpTopics.SortSharedHandsFeet, ReasonFor(ModCategory.Gear, splitReason));
-
-        GroupHeading("NPC");
-        DrawCheckbox("Split NPC mods by kind", ref _splitNpc, Gate(states.SplitNpc, ModCategory.NPC),
-            HelpTopics.SortSplitNpc, ReasonFor(ModCategory.NPC, splitReason));
-
-        // The scraped-list opt-in and its refresh button are hidden while the feature is switched
-        // off at compile time (Configuration.ScrapedNpcListFeatureEnabled): they did nothing but
-        // explain, at length, why they were disabled. MainWindow draws no refresh controls either.
-        if (states.ScrapedNpcCheckbox.Visible)
-        {
-            ImGui.BeginDisabled(!states.ScrapedNpcCheckbox.Enabled);
-            var useScraped = config.UseScrapedNpcNameList;
-            if (ImGui.Checkbox("Also use the NPC list scraped from the wiki", ref useScraped))
-            {
-                config.UseScrapedNpcNameList = useScraped;
-                saveConfig();
-            }
-            ImGui.EndDisabled();
-            Help.Tooltip(HelpTopics.SortScrapedNpcList, states.ScrapedNpcCheckbox.Enabled ? null : ActivityGateReason);
-        }
-
-        GroupHeading("Hair");
-        DrawCheckbox("Split hair by hair number", ref _splitHair, Gate(states.SplitHair, ModCategory.Hair),
-            HelpTopics.SortSplitHair, ReasonFor(ModCategory.Hair, splitReason));
-        if (states.PriorityRace.Visible)
-        {
-            ImGui.BeginDisabled(!states.PriorityRace.Enabled);
-            ImGui.SetNextItemWidth(220);
-            ImGui.Combo("Priority race", ref _hairRaceIndex, HairRaceLabels, HairRaceLabels.Length);
-            ImGui.EndDisabled();
-            Help.Tooltip(HelpTopics.SortPriorityRace, splitReason);
-        }
-        if (states.MidlanderFallback.Visible)
-            DrawCheckbox("Midlander fallback", ref _midlanderFallback, states.MidlanderFallback,
-                HelpTopics.SortMidlanderFallback, splitReason);
-
-        var raceCode = HairRaceCodeAt(_hairRaceIndex);
-        if (config.HairRaceCode != raceCode || config.MidlanderFallback != _midlanderFallback)
-        {
-            config.HairRaceCode = raceCode;
-            config.MidlanderFallback = _midlanderFallback;
-            saveConfig();
-        }
-
-        GroupHeading("Body type");
-        DrawCheckbox("Split gear by body type", ref _splitGearBody, Gate(states.SplitGearBody, ModCategory.Gear),
-            HelpTopics.SortSplitGearBody, ReasonFor(ModCategory.Gear, splitReason));
-        DrawCheckbox("Split body mods by body type", ref _splitBodyMods, Gate(states.SplitBodyMods, ModCategory.Body),
-            HelpTopics.SortSplitBodyMods, ReasonFor(ModCategory.Body, splitReason));
-        DrawBodyModsHelpMarker();
-
-        GroupHeading("Animation");
-        DrawCheckbox("Split emotes by emote", ref _splitEmotes, Gate(states.SplitEmotes, ModCategory.Animation),
-            HelpTopics.SortSplitEmotes, ReasonFor(ModCategory.Animation, splitReason));
-
-        GroupHeading("Race");
-        DrawRaceSplit(state, states.RaceSplit, splitReason);
-
-        DrawRules(state, gates, config, saveConfig, canonicalizeCreator);
-
-        ImGui.Spacing();
-        DrawBodyPriority(config, saveConfig, bodyLabels, states, anyBodySplit: _splitGearBody || _splitBodyMods,
-            state, readEnabledMods);
-        DrawAdvanced(config, saveConfig);
+        DrawRulesCard(state, gates, config, saveConfig, canonicalizeCreator);
+        DrawSortSettingsCard(config, saveConfig);
+        PersistHairChoices(config, saveConfig);
 
         // The header persists at the start of the next frame; doing it here as well keeps a change made by
         // the last control of a frame from being lost if the window closes right after it.
@@ -654,10 +579,11 @@ public sealed partial class SortPanel
 
     private static readonly string[] NewModActionLabels = ["Ask", "Sort automatically", "Do nothing"];
 
-    // Collapsed by default. Saved the moment it changes, like the other Sort tab choices.
-    private static void DrawAdvanced(Configuration config, Action saveConfig)
+    // The Sort settings card (formerly the "Advanced" section; Advanced is now a mode). Collapsed by default. Saved
+    // the moment it changes, like the other Sort tab choices.
+    private static void DrawSortSettings(Configuration config, Action saveConfig)
     {
-        if (!ImGui.CollapsingHeader("Advanced##sort-advanced"))
+        if (!ImGui.CollapsingHeader("Sort settings###sort-settings"))
             return;
 
         var index = (int)config.NewModAction;

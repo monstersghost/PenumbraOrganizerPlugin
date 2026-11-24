@@ -24,7 +24,12 @@ public sealed partial class SortPanel
         Help.Tooltip(HelpTopics.SortMode);
     }
 
-    private void SetMode(SortTabMode mode) => _mode = mode;
+    // A folder still being typed is saved before the screen changes.
+    private void SetMode(SortTabMode mode)
+    {
+        _editor?.Commit();
+        _mode = mode;
+    }
 
     // Group by and What to sort, in one row. Group by is also the creator level every category inherits.
     private void DrawGroupingRow(ActivityGates gates)
