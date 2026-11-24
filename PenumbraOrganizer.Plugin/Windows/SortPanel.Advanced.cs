@@ -25,9 +25,6 @@ public sealed partial class SortPanel
         _editor ??= new CategoryLayoutEditor(LayoutProfileCache.For(config), profile =>
         {
             config.SaveLayoutProfile(profile);
-            // Until the old checkbox fields are removed, they mirror the editor, so PersistSortChoices and
-            // BuildSelection see the same splits and write nothing back.
-            ApplyToggles(SortPanelLayoutAdapter.TogglesFor(profile, _raceEnabled));
             saveConfig();
         });
 
@@ -251,7 +248,7 @@ public sealed partial class SortPanel
             {
                 ImGui.TextUnformatted("Body types");
                 DrawBodyPriority(config, saveConfig, bodyLabels, states,
-                    anyBodySplit: _splitGearBody || _splitBodyMods, state, readEnabledMods);
+                    anyBodySplit: SplitsOf(config).SplitGearBody || SplitsOf(config).SplitBodyMods, state, readEnabledMods);
             }
         }
 

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using PenumbraOrganizer.Plugin.Organizer;
@@ -72,10 +73,9 @@ public readonly record struct SortSelection(
 }
 
 /// <summary>
-/// The Sort tab's grouping control: a Group by dropdown, four split checkboxes, the scraped-list
-/// opt-in and the Sort button. Replaces the seven sort buttons, and exposes the six combinations
-/// they never offered - the whole splitNpc-off column - plus, since the hair split was added,
-/// everything in the splitHair-on half.
+/// The Sort tab's host (spec 2): the pinned bar (Recommended | Advanced, Sort, the scope line, ?), then the
+/// Recommended or Advanced screen, then the Rules and Sort settings cards. The category splits are read from the
+/// saved layouts; the Advanced editor (<see cref="CategoryLayoutEditor"/>) is the only thing that writes them.
 /// </summary>
 /// <remarks>
 /// public, not internal: see <see cref="SortSelection"/>.
@@ -158,7 +158,7 @@ public sealed partial class SortPanel
             return;
 
         _rules.Observe(state.Mods, state.ScanGeneration, canonicalizeCreator,
-            RaceSplitOptions.FromConfig(config), _bodyPriority, _splitGearBody, _splitBodyMods);
+            RaceSplitOptions.FromConfig(config), _bodyPriority, SplitsOf(config).SplitGearBody, SplitsOf(config).SplitBodyMods);
         _rules.Tick();
 
         var enabledEditing = gates.CanStageProposals;
@@ -225,57 +225,65 @@ public sealed partial class SortPanel
         }
     }
 
-    // The checkboxes are an adapter over the category layouts: a change writes the matching split of its
-    // category and, through the config, the legacy fields as a rollback mirror. The decision is the pure
-    // SortPanelLayoutAdapter.Persist (tested); it compares against the cached profile, so a frame with no change
-    // writes and allocates nothing. A read-only category's boxes are put back to what is saved.
+    // Group by and the global race settings, every frame. The category layouts are saved by the layout editor the
+    // moment they change, so this never writes them. The decision is the pure PersistGroupingAndRace (tested).
     private void PersistSortChoices(Configuration config, Action saveConfig, SortStrategy strategy)
     {
-        var (save, shown) = SortPanelLayoutAdapter.Persist(
-            config, CurrentToggles(), strategy.ToString(), _raceEnabled, _multiRaceToMultiRace, _racePriority);
-        ApplyToggles(shown);
-        if (save)
+        if (PersistGroupingAndRace(config, strategy.ToString(), _raceEnabled, _multiRaceToMultiRace, _racePriority))
             saveConfig();
     }
 
-    // Categories customised beyond what the checkboxes can show, and the note naming them. Recomputed only when
-    // the cache hands out a different profile, so not per frame.
-    private LayoutProfile? _profileSeen;
-    private IReadOnlySet<ModCategory> _readOnly = new HashSet<ModCategory>();
-    private string? _customNote;
-
-    private void RefreshReadOnly(Configuration config)
+    /// <summary>
+    /// The Sort tab's per-frame save decision for Group by and the global race settings (master switch, multi-race,
+    /// race priority): writes them into <paramref name="config"/> when any differs from what is saved and returns
+    /// true, so the caller saves the file. A frame with nothing changed writes nothing and allocates nothing.
+    /// </summary>
+    /// <remarks>
+    /// Once the layouts exist every write ends with <see cref="Configuration.SyncLegacyLayoutFields"/> (which ends with
+    /// the race sync), so the legacy fields stay a true rollback mirror even after a hand edit; a config the layout
+    /// migration has not run on (only a headless caller that skipped migration) gets the bare race sync.
+    /// </remarks>
+    public static bool PersistGroupingAndRace(
+        Configuration config, string groupingName, bool raceEnabled, bool multiRace, RacePriority priority)
     {
-        var profile = LayoutProfileCache.For(config);
-        if (ReferenceEquals(profile, _profileSeen))
-            return;
-        _profileSeen = profile;
-        _readOnly = SortPanelLayoutAdapter.ReadOnlyCategories(profile);
-        _customNote = SortPanelLayoutAdapter.CustomNote(_readOnly);
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(priority);
+
+        if (config.SortGrouping == groupingName
+            && config.RaceSplitEnabled == raceEnabled
+            && config.SendMultiRaceToMultiRace == multiRace
+            && NormalizedPriority(config.RacePriority) == priority)
+            return false;
+
+        config.SortGrouping = groupingName;
+        config.RaceSplitEnabled = raceEnabled;
+        config.SendMultiRaceToMultiRace = multiRace;
+        config.RacePriority = [.. priority.Ranked];
+        if (config.CategoryLayouts is not null)
+            config.SyncLegacyLayoutFields();
+        else
+            config.SyncLegacyRaceFields();
+        return true;
     }
 
-    private ControlState Gate(ControlState state, ModCategory category) =>
-        _readOnly.Contains(category) ? state with { Enabled = false } : state;
+    // The saved race priority, normalised once per list instance: the tab compares it every frame, and every
+    // write assigns a new list, so keying on the instance never serves a stale value.
+    private static readonly ConditionalWeakTable<List<string>, RacePriority> Priorities = new();
 
-    private string? ReasonFor(ModCategory category, string? reason) =>
-        _readOnly.Contains(category) ? SortPanelLayoutAdapter.ReadOnlyReason : reason;
-    private bool _splitGear;
-    private bool _splitNpc = true;        // matches the always-on NPC subdivision it replaces
-    private bool _splitHair;              // off, like gear: an unchanged install keeps flat Hair/
+    private static RacePriority NormalizedPriority(List<string>? saved) =>
+        saved is null ? RacePriority.Empty : Priorities.GetValue(saved, list => RacePriority.Normalize(list));
+
+    // The saved splits as the engine's flag set, through the per-config cache: no parse and no allocation per frame.
+    private static LegacyLayout SplitsOf(Configuration config) => LayoutProfileCache.For(config).ToLegacy();
+
     private int _hairRaceIndex;              // 0 is None; see HairRaceLabels
     private bool _midlanderFallback;         // off: an unchanged install keeps the 0.6.1.0 rule
-    private bool _splitGearBody;         // off: no body folders until asked, like gear and hair
-    private bool _splitBodyMods;
-    private bool _sharedHandsFeet;           // off: hands and feet stay under their body
-    private bool _splitEmotes;       // off: emotes stay in one Emotes folder
 
-    // The Race section. Master off and every row ticked is the fresh-install state; the master is a pure
-    // gate that never changes the ticks. Saved the moment any of them changes, like the other Sort choices.
+    // The Race panel's global settings. The master is a pure gate that never changes the per-category race
+    // splits. Saved the moment any of them changes, like the other Sort choices.
     private bool _raceEnabled;
-    private RaceRows _raceRows = RaceRows.All;
     private bool _multiRaceToMultiRace = true;
     private RacePriority _racePriority = RacePriority.Empty;
-    private const string BodyModsHelpPopup = "sort-body-mods-help";
     private SortSelection? _lastSorted;
     private bool _prefsLoaded;
     private int _whatToSortIndex;        // 0 whole library, 1 loose in root; session-only, never saved
@@ -353,32 +361,6 @@ public sealed partial class SortPanel
     public static string? FirstChoice(BodyPriority priority) =>
         priority.Labels.Count > 0 ? priority.Labels[0] : null;
 
-    private SplitToggles CurrentToggles() => new(
-        _splitGear, _splitNpc, _splitHair, _splitGearBody, _splitBodyMods, _sharedHandsFeet, _splitEmotes,
-        _raceEnabled, _raceRows);
-
-    private void ApplyToggles(SplitToggles t)
-    {
-        _splitGear = t.SplitGear;
-        _splitNpc = t.SplitNpc;
-        _splitHair = t.SplitHair;
-        _splitGearBody = t.SplitGearBody;
-        _splitBodyMods = t.SplitBodyMods;
-        _sharedHandsFeet = t.SharedHandsFeet;
-        _splitEmotes = t.SplitEmotes;
-        _raceEnabled = t.RaceEnabled;
-        _raceRows = t.RaceRows;
-    }
-
-    // A rule and a coloured heading above each mod-type group. The rule is ImGui's own separator,
-    // so the groups read as separate without a new widget.
-    private static void GroupHeading(string title)
-    {
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextColored(PluginTheme.ChangedGood, title);
-    }
-
     private string? _collectionBody;      // the single body the last check found
     private string? _collectionMessage;   // shown under the button after a check
     private string? _collectionLabel;     // which collection was read, for the messages
@@ -408,20 +390,13 @@ public sealed partial class SortPanel
             _hairRaceIndex = HairRaceIndexFor(loaded.HairRaceCode);
             _midlanderFallback = loaded.MidlanderFallback;
             _groupingIndex = Array.FindIndex(Groupings, g => g.Strategy == loaded.Strategy);
-            _splitGear = loaded.SplitGear;
-            _splitNpc = loaded.SplitNpc;
-            _splitHair = loaded.SplitHair;
-            _splitGearBody = loaded.SplitGearBody;
-            _splitBodyMods = loaded.SplitBodyMods;
-            _sharedHandsFeet = loaded.Layout.SharedHandsAndFeet;
             // Read from the config, not from loaded.Layout.Race: the selection carries null when the race
-            // split adds nothing beyond the legacy hair flag, which would lose the user's rows and priority.
+            // split adds nothing beyond the legacy hair flag, which would lose the user's priority. The splits
+            // themselves are not copied: they are read from the saved layouts every frame (SplitsOf).
             var race = RaceSplitOptions.FromConfig(config);
             _raceEnabled = race.Enabled;
-            _raceRows = race.Rows;
             _multiRaceToMultiRace = race.MultiRaceToMultiRace;
             _racePriority = race.Priority;
-            _splitEmotes = loaded.Layout.SplitEmotes;
             if (loaded.BodyPriority is { } loadedPriority)
                 _bodyPriority = loadedPriority;
         }
@@ -457,14 +432,15 @@ public sealed partial class SortPanel
         // The strategy is settled the moment the combo has been submitted. Every control below takes
         // its visible and enabled state from SortLayout, which is what the tests pin.
         var strategy = Groupings[_groupingIndex].Strategy;
+        var splits = SplitsOf(config);
         var states = SortLayout.Compute(
-            strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, _splitGear);
+            strategy, splits.SplitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, splits.SplitGear);
         PersistSortChoices(config, saveConfig, strategy);
 
-        var raceNow = new RaceSplitOptions(_raceEnabled, _raceRows, _multiRaceToMultiRace, _racePriority);
-        var selection = BuildSelection(config, strategy, _splitGear, _splitNpc, _splitHair,
-            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, _splitGearBody, _splitBodyMods, _bodyPriority,
-            _sharedHandsFeet, _splitEmotes, raceNow, rootOnly);
+        var raceNow = new RaceSplitOptions(_raceEnabled, splits.RaceRows, _multiRaceToMultiRace, _racePriority);
+        var selection = BuildSelection(config, strategy, splits.SplitGear, splits.SplitNpc, splits.SplitHair,
+            HairRaceCodeAt(_hairRaceIndex), _midlanderFallback, splits.SplitGearBody, splits.SplitBodyMods, _bodyPriority,
+            splits.SharedHandsFeet, splits.SplitEmotes, raceNow, rootOnly);
 
         // The primary action: the plugin's purple accent, like Scan's Refresh and Search's Build.
         // Stable id: a label varying with mod count would vary the widget id, so a background scan
@@ -518,8 +494,9 @@ public sealed partial class SortPanel
     {
         var bodyLabels = getBodyLabels();
         var strategy = Groupings[_groupingIndex].Strategy;
+        var splits = SplitsOf(config);
         var states = SortLayout.Compute(
-            strategy, _splitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, _splitGear);
+            strategy, splits.SplitHair, Configuration.ScrapedNpcListFeatureEnabled, gates.CanStageProposals, splits.SplitGear);
         var splitReason = !gates.CanStageProposals ? ActivityGateReason
             : strategy == SortStrategy.CreatorOnly ? SplitsInapplicableReason
             : null;
@@ -582,48 +559,7 @@ public sealed partial class SortPanel
         Help.Tooltip(topic, state.Enabled ? null : disabledReason);
     }
 
-    private const string RaceNeedsBodySplitReason = "This row's folder only exists while body mods are split by body type.";
     private const string RaceRescanHint = "Scan again to use race split for faces, skin, tails and ears.";
-
-    // The Race section: master switch, the six rows, the multi-race toggle and the ranked race list.
-    // Every row is always visible. A row that needs the body split stays ticked while that split is off
-    // and simply greys, so nothing the user chose is cleared. Under Creator grouping the whole section is
-    // readable but not editable, with the reason in each tooltip.
-    private void DrawRaceSplit(OrganizerState state, ControlState section, string? reason)
-    {
-        DrawCheckbox("Split supported categories by race", ref _raceEnabled, section, HelpTopics.SortRaceSplit, reason);
-
-        foreach (var (row, _, label) in RaceRowNames.All)
-        {
-            var ticked = _raceRows.HasFlag(row);
-            var needsBody = RaceSplitOptions.NeedsBodySplit(row);
-            var readOnly = _readOnly.Contains(SortPanelLayoutAdapter.CategoryOf(row));
-            var enabled = section.Enabled && (!needsBody || _splitBodyMods) && !readOnly;
-
-            ImGui.Indent();
-            ImGui.BeginDisabled(!enabled);
-            if (ImGui.Checkbox($"{label}##race-row-{row}", ref ticked))
-                _raceRows = ticked ? _raceRows | row : _raceRows & ~row;
-            ImGui.EndDisabled();
-            Help.Tooltip(
-                row == RaceRows.Hair ? HelpTopics.SortSplitHairByRace : HelpTopics.SortRaceRows,
-                enabled ? null
-                : readOnly ? SortPanelLayoutAdapter.ReadOnlyReason
-                : needsBody && section.Enabled ? RaceNeedsBodySplitReason : reason);
-            ImGui.Unindent();
-        }
-
-        ImGui.Indent();
-        DrawCheckbox("Send multi-race mods to Multi-race", ref _multiRaceToMultiRace, section, HelpTopics.SortMultiRace, reason);
-        ImGui.Unindent();
-
-        DrawRacePriority(section);
-
-        if (_raceEnabled && state.Mods.Any(m => m.KeyRaces is null
-                && m.Category is Core.Classification.ModCategory.Face or Core.Classification.ModCategory.Skin
-                    or Core.Classification.ModCategory.Body))
-            ImGui.TextDisabled(RaceRescanHint);
-    }
 
     // Collapsed by default, like Body priority. Ranked races win in order; an unranked race never wins.
     private void DrawRacePriority(ControlState section)
@@ -678,26 +614,6 @@ public sealed partial class SortPanel
         }
 
         ImGui.EndDisabled();
-    }
-
-    // The "(?)" beside "Split body mods by body type": a small CLICKABLE button that opens the
-    // explanation in a popup (a visible question mark is not itself an explanation), with the same
-    // text as a hover tooltip as an extra. SmallButton is a normal ImGui item, so it takes
-    // keyboard focus and Enter/Space like any button where ImGui keyboard navigation is on.
-    private static void DrawBodyModsHelpMarker()
-    {
-        ImGui.SameLine();
-        if (ImGui.SmallButton("(?)##body-mods-help"))
-            ImGui.OpenPopup(BodyModsHelpPopup);
-        Help.Tooltip(HelpTopics.SortSplitBodyMods);
-
-        if (ImGui.BeginPopup(BodyModsHelpPopup))
-        {
-            ImGui.PushTextWrapPos(400f);
-            ImGui.TextUnformatted(Help.Short(HelpTopics.SortSplitBodyMods) ?? string.Empty);
-            ImGui.PopTextWrapPos();
-            ImGui.EndPopup(); // BeginPopup closes on click-away and on Escape by itself
-        }
     }
 
     // Always present, collapsed by default. Set once and forget: most people use one body, so the
