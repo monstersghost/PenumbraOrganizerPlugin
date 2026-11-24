@@ -167,6 +167,39 @@ public static class ModTypeClassifier
     }
 
     /// <summary>
+    /// The opt-in weapon pass (the Weapon "Job" split): a Gear row whose readable files replace a weapon model
+    /// (<c>chara/weapon/...</c>) and no equipment or accessory becomes <see cref="ModCategory.Weapon"/>. The caller
+    /// runs it only while the split is on, so with it off classification is exactly what it always was.
+    /// </summary>
+    /// <remarks>
+    /// Penumbra names a weapon's changed item by its bare item name, which parses as the Gear shape, so Rule 1 files
+    /// every weapon mod as Gear; only the files tell a weapon apart. A mixed mod (a weapon plus a bracelet, a set plus
+    /// its weapon) has equipment or accessory evidence and stays Gear. Other files (VFX, sounds, animations a weapon
+    /// pack often carries) do not count against it: they never outranked Gear either. A walk that could not be
+    /// trusted (null content) is no evidence, so the row stays Gear.
+    /// </remarks>
+    public static ClassificationResult EnrichWeapon(ClassificationResult baseResult, ModContent? content)
+    {
+        if (baseResult.Category != ModCategory.Gear || content is null || content.Slots.Count != 0)
+            return baseResult;
+
+        var weapon = false;
+        foreach (var path in content.GamePaths ?? [])
+        {
+            if (path.StartsWith(EquipmentPrefix, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith(AccessoryPrefix, StringComparison.OrdinalIgnoreCase))
+                return baseResult;
+            weapon |= path.StartsWith(WeaponPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return weapon ? new(ModCategory.Weapon, null, baseResult.Source) : baseResult;
+    }
+
+    private const string WeaponPrefix = "chara/weapon/";
+    private const string EquipmentPrefix = "chara/equipment/";
+    private const string AccessoryPrefix = "chara/accessory/";
+
+    /// <summary>
     /// The equipment slots a body actually shapes: the four halves a body replacer authors
     /// (<c>_top</c>, <c>_glv</c>, <c>_dwn</c>, <c>_sho</c>), and nothing else.
     /// </summary>

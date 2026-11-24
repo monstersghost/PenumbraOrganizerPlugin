@@ -36,15 +36,25 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
     /// update looks like - is not silently unprotected and then moved by the next Apply. Defaults to
     /// empty so existing tests construct this unchanged.
     /// </param>
+    /// <param name="classifyWeapons">
+    /// The Weapon category's "Job" split, read from the layouts on the framework thread. On: a weapon-only Gear mod
+    /// is classified Weapon (<see cref="ModTypeClassifier.EnrichWeapon"/>). Off (the default): classification is
+    /// exactly what it was before the split existed.
+    /// </param>
     public ScanProcessor(
         string configDirectory,
         bool useScrapedNpcNameList,
-        IReadOnlySet<string>? knownHeliosphereIdentifiers = null)
+        IReadOnlySet<string>? knownHeliosphereIdentifiers = null,
+        bool classifyWeapons = false)
     {
         _configDirectory = configDirectory;
         _useScrapedNpcNameList = useScrapedNpcNameList;
         _knownHeliosphereIdentifiers = knownHeliosphereIdentifiers ?? new HashSet<string>(StringComparer.Ordinal);
+        ClassifiesWeapons = classifyWeapons;
     }
+
+    /// <summary>Whether this scan classifies weapon-only mods as Weapon. Published with the rows.</summary>
+    public bool ClassifiesWeapons { get; }
 
     /// <summary> Framework thread reads this after the run completes. </summary>
     public IReadOnlyList<string> Warnings => _warnings;
@@ -87,6 +97,11 @@ public sealed class ScanProcessor : ILibraryWorkProcessor<ScanSeed, OrganizerMod
         var walked = classification.Category is ModCategory.Gear or ModCategory.Hair or ModCategory.Body;
         if (walked)
             content = ModContentReader.Read(modPath);
+
+        // Opt-in, before the gear pass: a Weapon row gets no slot, no slot diagnostic and no body (BodyTypeApplies
+        // already refused a weapon its body while it was Gear).
+        if (ClassifiesWeapons)
+            classification = ModTypeClassifier.EnrichWeapon(classification, content);
 
         var gearSlotDiagnostic = GearSlotDiagnostic.NotApplicable;
         IReadOnlySet<EquipmentSlot>? equipmentSlots = null;
