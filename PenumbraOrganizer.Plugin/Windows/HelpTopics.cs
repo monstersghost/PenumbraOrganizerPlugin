@@ -118,6 +118,7 @@ public static class HelpTopics
     public static readonly HelpTopic ReviewShowConfigFile = new("review.show-config-file");
     public static readonly HelpTopic ReviewDiagnosticDump = new("review.diagnostic-dump");
     public static readonly HelpTopic ReviewDiagnostics = new("review.diagnostics");
+    public static readonly HelpTopic ReviewFailedMods = new("review.failed-mods");
     public static readonly HelpTopic ReviewWorkbookDestinations = new("review.workbook-destinations");
     public static readonly HelpTopic ReviewExportWorkbook = new("review.export-workbook");
     public static readonly HelpTopic ReviewProtectAndSkip = new("review.protect-and-skip");

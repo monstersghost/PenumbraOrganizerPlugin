@@ -13,7 +13,7 @@
     {
       "id": "firstrun.protect",
       "title": "Step 2: Protect anything that must not move",
-      "step": "On the Protect tab, tick any mod or folder that should keep exactly where it is. Protected items are skipped by every sort and by Apply. Protect all protects everything.\n\nMods from Heliosphere and Proteus are left alone by default. If you use them, a dropdown per tool lets you sort them inside their own folder or treat them like any other mod."
+      "step": "On the Protect tab, tick any mod that should keep exactly where it is, or click a folder's box to protect everything inside it. Protected items are skipped by every sort and by Apply. Protect all protects everything.\n\nMods from Heliosphere and Proteus are left alone by default. If you use them, a dropdown per tool lets you sort them inside their own folder or treat them like any other mod."
     },
     {
       "id": "firstrun.sort",
@@ -48,37 +48,37 @@
     {
       "id": "help.what-this-does",
       "title": "What this plugin does",
-      "body": "It proposes a tidy folder layout for your Penumbra mod list, shows you the whole plan, and only changes anything when you press Apply.\n\nIt organises the folder tree Penumbra shows you. It never edits, renames, moves or deletes the mod files themselves on disk, and it never changes what a mod does in game.\n\nThe usual order is: Scan to read your library, Protect anything that must not move, Sort to propose a layout, Review Changes to check it, then Apply."
+      "body": "It proposes a tidy folder layout for your Penumbra mod list, shows you the whole plan, and only changes anything when you press Apply - or, if you choose Sort automatically under Auto sort on the Sort tab, when new mods are installed.\n\nIt organises the folder tree Penumbra shows you. It never edits, renames, moves or deletes the mod files themselves on disk, and it never changes what a mod does in game.\n\nThe usual order is: Scan to read your library, Protect anything that must not move, Sort to propose a layout, Review Changes to check it, then Apply."
     },
     {
       "id": "help.safety-rules",
       "title": "What is safe, and what is not",
-      "body": "Everything that can change your library is on this list: Apply, Restore, Clean Up Selected Folders, Rollback Folder Cleanup, and the recovery panel's Continue and Restore Previous State. Everything else - scanning, sorting, searching, exporting - is read-only, no matter how it looks.\n\nSorting never moves anything. It fills in a proposed path for each mod, which you can look over on Review Changes and discard by simply sorting differently.\n\nA backup snapshot is taken automatically before every Apply and every Restore, so there is always a way back. The History tab lists them.\n\nProtected mods are excluded from every sort and from Apply. Restore is the one exception, and it says so: it reproduces a snapshot exactly, including for mods that are currently protected."
+      "body": "Everything that can change your library is on this list: Apply (on Review Changes, and in the Confirm sort window the new-mods popup opens), Restore, Clean Up Selected Folders, Rollback Folder Cleanup, the recovery panel's Continue and Restore Previous State, and Sort automatically under Auto sort on the Sort tab, which applies new mods without asking. Everything else - scanning, sorting, searching, exporting - is read-only, no matter how it looks.\n\nPressing Sort never moves anything. It fills in a proposed path for each mod, which you can look over on Review Changes and discard by simply sorting differently.\n\nA backup snapshot is taken automatically before every Apply and every Restore, so there is always a way back. The History tab lists them.\n\nProtected mods are excluded from every sort and from Apply. Restore is the one exception, and it says so: it reproduces a snapshot exactly, including for mods that are currently protected."
     },
     {
       "id": "help.tab-scan",
       "title": "Scan",
-      "body": "Unused mods, a collapsed section at the bottom, lists mods that no collection enables, with their size on disk, and can stage them for a move to an Unused folder.\n\nReads every mod from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so run this first, and again whenever you install, remove or move mods outside the plugin.\n\nThe scan runs in the background and the game stays responsive. If your mod list changes while it is running, the results are discarded rather than shown, because they no longer describe your library."
+      "body": "Reads every mod from Penumbra and works out what kind of mod each one is. Nothing else in the plugin updates on its own, so run this first, and again whenever you install, remove or move mods outside the plugin.\n\nThe scan runs in the background and the game stays responsive. If your mod list changes while it is running, the results are discarded rather than shown, because they no longer describe your library.\n\nUnused mods, a collapsed section at the bottom, lists mods that no collection enables (or that your active collection does not, with Only my active collection ticked), with their size on disk, and can stage them for a move to an Unused folder. Nothing moves until you Apply on Review Changes."
     },
     {
       "id": "help.tab-protect",
       "title": "Protect",
-      "body": "Marks mods that must keep their current folder. A protected mod is skipped by every sort and by Apply.\n\nProtection comes from three places: the mod's own checkbox, any protected folder above it, and Heliosphere. The note beside a mod says which one applies. Only the first is a per-mod choice you make here."
+      "body": "Marks mods that must keep their current folder. A protected mod is skipped by every sort and by Apply.\n\nProtection comes from four places: the mod's own checkbox (or Protect all), any protected folder above it, and the Heliosphere and Proteus modes. The note beside a mod says which one applies: (via folder: ...), (Heliosphere) or (Proteus). Unticking a Heliosphere or Proteus mod frees it until the next Scan; a mod protected by a folder follows the folder, so change the folder's box instead.\n\nThe Heliosphere mods and Proteus mods dropdowns appear only when your library has such mods, and set what every sort does with them. The Sort tab's bar repeats the current modes, with a button back here. Sort inside folders keeps chosen folders as the top level and sorts their mods beneath them."
     },
     {
       "id": "help.tab-sort",
       "title": "Sort",
-      "body": "Proposes a folder layout for your mods. The bar at the top stays in view while the rest scrolls: switch between Recommended and Advanced, press Sort, and see how many mods the sort covers.\n\nRecommended is one tidy layout for every kind of mod. Choose what to sort and how to group, and the example paths show where mods will go. Customise per category opens Advanced.\n\nAdvanced lists the 16 kinds of mod. Pick one to set its folder (nest with /, as Equipment/Gear), where its creator folder goes, and which splits it uses. Custom marks a category that differs from Recommended, and Reset to Recommended puts it back. The race, body priority and hair settings sit under the categories they affect.\n\nRules (in Advanced) file particular mods yourself and win over everything above. They still apply when you sort from Recommended, which says how many are active. Auto sort says what happens when new mods are installed.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand. The ? beside the Sort button brings you back here."
+      "body": "Proposes a folder layout for your mods. The bar at the top stays in view while the rest scrolls: switch between Recommended and Advanced, press Sort, and see how many mods the sort covers. When your library has Heliosphere or Proteus mods, a line in the bar says how they are handled, with an Open Protect tab button to change it.\n\nRecommended is one tidy layout for every kind of mod. Choose how to group and what to sort, and the example paths show where mods will go. Customise per category (or Show in Advanced, when a category is customised) opens Advanced.\n\nAdvanced lists the 16 kinds of mod. Pick one to set its folder (nest with /, as Equipment/Gear), where its creator folder goes, and which splits it uses. Splits are numbered by folder depth in a fixed order: you can switch them on and off, not reorder them. Custom marks a category that differs from Recommended; Reset to Recommended puts that one back, and Reset all to Recommended puts back every one. Select all splits turns on every split at once, after asking. Some settings sit under the categories they affect: Priority race and Midlander fallback under Hair, the Race card under Hair, Face, Skin and Body, and the Body types card (Body priority and Check my collection) under Gear and Body.\n\nRules file particular mods yourself and win over everything above. They are edited only in Advanced, but they still apply when you sort from Recommended, which says how many are active and has a Show rules button that opens them. The Auto sort card, on both screens, says what happens when new mods are installed.\n\nNothing moves. Sort only fills in proposed paths, which you then check on Review Changes before Apply.\n\nThe bottom of the tab is manual assignment, for putting specific mods somewhere by hand. The ? beside the Sort button brings you back here."
     },
     {
       "id": "help.tab-review",
       "title": "Review Changes",
-      "body": "Shows every mod's current folder beside its proposed one, along with anything that would block Apply.\n\nErrors are listed at the top and must be cleared before Apply is available. A collision means two mods would end up at the same path; a protected-mod error means something tried to move a mod you protected.\n\nThis tab also holds folder cleanup, which removes empty folder entries left behind in Penumbra's own folder file. That is separate from moving mods and has its own backup."
+      "body": "Shows every mod's current folder beside its proposed one, along with anything that would block Apply.\n\nErrors are listed at the top and must be cleared before Apply is available. A collision means two mods would end up at the same path; a protected-mod error means something tried to move a mod you protected.\n\nBelow the plan, the Workbook group exports it to a spreadsheet (Export mode picks As is or As suggested by Sort) and reads your edits back with Import Workbook. Diagnostics, collapsed below Apply, holds the troubleshooting tools.\n\nThis tab also holds folder cleanup, which removes empty folder entries left behind in Penumbra's own folder file. That is separate from moving mods and has its own backup."
     },
     {
       "id": "help.tab-history",
       "title": "History",
-      "body": "Every backup snapshot, newest first. A snapshot records where each mod was at that moment.\n\nBackups are taken automatically before each Apply and Restore, and you can take one yourself at any time with an optional label.\n\nRestore is exact: it reproduces the snapshot's paths even for mods that are currently protected or Heliosphere-managed. That is deliberate, and it is the one place protection does not apply."
+      "body": "Every backup snapshot, newest first. A snapshot records where each mod was at that moment.\n\nBackups are taken automatically before each Apply and Restore, and you can take one yourself at any time with an optional label.\n\nRestore is exact: it reproduces the snapshot's paths even for mods that are currently protected or Heliosphere- or Proteus-managed. That is deliberate, and it is the one place protection does not apply."
     },
     {
       "id": "help.tab-search",
@@ -88,12 +88,12 @@
     {
       "id": "help.when-things-go-wrong",
       "title": "If something went wrong",
-      "body": "If an Apply or Restore is interrupted - a crash, a force-quit, the game closing mid-operation - the plugin notices on the next start and shows a recovery panel above the tabs. Nothing else can run until you resolve it.\n\nYou get three choices: accept the current state and move on, finish what was interrupted, or roll back to how things were before it started. The panel says which are available; a greyed-out option means the plugin no longer has the file it would need.\n\nIf several operations were interrupted, they are resolved one at a time, and the per-operation buttons permanently abandon that one operation rather than repairing it.\n\nFor anything else, Create Diagnostic Dump on Review Changes writes a file describing the plugin's state, which is the most useful thing to attach to a bug report."
+      "body": "If an Apply or Restore is interrupted - a crash, a force-quit, the game closing mid-operation - the plugin notices on the next start and shows a recovery panel above the tabs. Nothing else can run until you resolve it.\n\nYou get three choices: accept the current state and move on, finish what was interrupted, or roll back to how things were before it started. The panel says which are available; a greyed-out option means the plugin no longer has the file it would need.\n\nIf several operations were interrupted, they are resolved one at a time, and the per-operation buttons permanently abandon that one operation rather than repairing it.\n\nFor anything else, Create Diagnostic Dump, under Diagnostics on Review Changes, writes a file describing the plugin's state, which is the most useful thing to attach to a bug report."
     },
     {
       "id": "help.where-your-files-are",
       "title": "Where your files are",
-      "body": "This plugin keeps its own settings, backups and exports in its Dalamud config folder. Show Config File on Review Changes opens it.\n\nThe folder tree you see in Penumbra lives in Penumbra's own organization.json, not here. Folder cleanup is the only feature that writes to it, and it takes a backup first.\n\nYour actual mod files are never touched by this plugin, wherever Penumbra keeps them."
+      "body": "This plugin keeps its own settings, backups and exports in its Dalamud config folder. Show Config File, under Diagnostics on Review Changes, opens it.\n\nThe folder tree you see in Penumbra lives in Penumbra's own organization.json, not here. Folder cleanup is the only feature that writes to it, and it takes a backup first.\n\nYour actual mod files are never touched by this plugin, wherever Penumbra keeps them."
     },
     {
       "id": "scan.refresh-mod-list",
@@ -143,7 +143,7 @@
     {
       "id": "protect.folder-unprotect-contents",
       "title": "Unprotect everything inside a folder",
-      "short": "Clears protection from every mod in this folder - the mod's own tick, Protect all, this folder or Heliosphere alike. Use it to sort one folder and leave the rest protected."
+      "short": "Clears protection from every mod in this folder - the mod's own tick, Protect all, this folder, Heliosphere or Proteus alike. Use it to sort one folder and leave the rest protected."
     },
     {
       "id": "protect.folder-rule-cycle",
@@ -153,12 +153,12 @@
     {
       "id": "protect.mods",
       "title": "Protected mods",
-      "short": "Protects one mod wherever it sits. A mod can also be protected by its folder or by Heliosphere - the note beside it says which, and those have no checkbox here."
+      "short": "Protects one mod wherever it sits. A folder, Heliosphere or Proteus can also protect it; the note beside it says which. Unticking frees a tool's mod until the next Scan, not a folder's."
     },
     {
       "id": "protect.heliosphere-note",
       "title": "Protected by Heliosphere",
-      "short": "Protected because Heliosphere manages it, not by its own checkbox. Heliosphere owns where it lives, so the plugin never proposes moving it during Sort or Apply."
+      "short": "Protected because Heliosphere manages it and Heliosphere mods are set to Protected. Untick it to free it until the next Scan, or change that in the Heliosphere mods dropdown above."
     },
     {
       "id": "sort.grouping",
@@ -183,7 +183,7 @@
     {
       "id": "sort.mode",
       "title": "Recommended or Advanced",
-      "short": "Recommended is one tidy layout for every kind of mod. Advanced lets you change each category: its folder, creator folder and splits. Both sort the same library."
+      "short": "Recommended is one tidy layout for every kind of mod. Advanced lets you change each category (folder, creator folder, splits) and holds the Rules. Rules and Advanced changes apply on both screens."
     },
     {
       "id": "sort.category-list",
@@ -193,7 +193,7 @@
     {
       "id": "sort.category-folder",
       "title": "Folder",
-      "short": "The category's top folder. Nest with /, as Equipment/Gear. Relative, no empty part, . or .., at most 260 characters. Nothing moves until you Sort and Apply."
+      "short": "The category's top folder. Nest with /, as Equipment/Gear. Relative, no empty part, . or .., no { or }, at most 260 characters. Nothing moves until you Sort and Apply."
     },
     {
       "id": "sort.creator-folder",
@@ -213,7 +213,7 @@
     {
       "id": "sort.select-all",
       "title": "Select all splits",
-      "short": "Turns on every split in every category and Split by race, and turns off the shared hands and feet folder. Folders, creator levels and priorities stay. Nothing moves until Apply."
+      "short": "Asks first, then turns on every split in every category (Weapon Job too: scan again) and Split by race, and turns off shared hands and feet. Folders, creator levels, Group by and priorities stay."
     },
     {
       "id": "sort.reset-layout",
@@ -238,13 +238,13 @@
     {
       "id": "sort.split-hair-by-race",
       "title": "Hair: Race",
-      "short": "Files a hair mod under its race, as Hair/Viera/115, while Split by race is on. Several races or none go under Hair/Multi-race."
+      "short": "Files a hair mod under its race, as Hair/Viera/115, while Split by race is on. No race goes under Hair/Multi-race; several races too, unless the Multi-race box is off (then the top-ranked race)."
     },
     {
       "id": "sort.rules",
       "title": "Sort rules",
-      "short": "Rules file mods with a small SQL-like condition: name contains 'x' -> Folder. The first match wins, unmatched mods sort as usual, protected mods never move. Open this topic for the language.",
-      "body": "A rule says: if a mod matches this condition, file it in this folder.\n\nname contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}\n\nThe part before the arrow is the condition. The part after it is the folder; the mod's own name is added at the end.\n\nRules are edited on the Advanced screen of the Sort tab. They still apply when you sort from Recommended, which shows how many rules are active.\n\nHOW RULES ARE APPLIED\nRules are checked from the top of the list and the first enabled rule that matches files the mod, so the order is the priority (use Up and Down). The rule's folder replaces the whole path the Sort would have chosen, so the mod is not split by body, race or number underneath it. A mod no rule matches sorts as usual. Protected mods are never touched. Untick a rule to turn it off without deleting it. You can have up to 100 rules of up to 300 characters.\n\nSQL-LIKE, BUT NOT SQL\nThe condition follows the WHERE part of a SQL query, so SQL experience carries over, but you cannot paste a query in. It is deliberately small.\n\nFields (all text):\nname - the mod's name\nauthor - the creator, as the Sort tab names it\nfolder - the folder the mod is in now (empty in the root)\ntype - the category folder: Gear, Weapon, Face, Hair, Body, Skin, NPC, Minion, Mount, Pet, Ornament, Furniture, Sound, Animation and VFX, or Review\nsubtype - the slot or kind inside a category, such as Feet\nrace - what {race} gives, including Multi-race\nbody - the body type, such as Bibo+\n\nOperators: =, !=, contains, starts with, ends with, in ('a', 'b'), and not before an operator (name not contains 'x', type not in ('Gear')). Combine with and, or, not and brackets. not binds tightest, then and, then or.\n\nSame as SQL: text goes in single quotes and '' means a quote inside the text (author = 'O''Brien'); keywords and field names are not case sensitive; text comparison ignores case, so 'hrothgar' matches Hrothgar.\n\nDifferent from SQL: use contains, starts with and ends with instead of LIKE (there are no % or _ wildcards). There is no NULL: a missing author or race is empty text, so write race = '', not IS NULL. There is no <>, BETWEEN, LIKE, numbers, functions or ORDER BY; write != for not equal. contains '', starts with '' and ends with '' are rejected because they would match every mod; = '' and in ('') are fine.\n\nTHE FOLDER\nThe folder can use {type}, {creator} and {race}. A token that comes out empty drops that folder level, so {race}/{creator} on a mod with no race gives just the creator. If the whole folder comes out empty the mod stays where it is and the Sort summary says why. An unknown token is an error.\n\nEXAMPLES\nauthor = 'Ann' -> Ann's mods\ntype = 'Gear' and subtype in ('Top', 'Legs') -> Gear/Outfits\nrace = 'Viera' and type = 'Hair' -> Hair/Viera/{creator}\nname contains 'recolor' or name contains 'retexture' -> Recolors/{type}\nnot type in ('Gear', 'Hair') and name starts with 'a' -> A/{type}\n\nWHAT THE RULES LIST TELLS YOU\nA rule with a mistake shows a red message with the position, for example: Unknown field 'nmae'. Did you mean 'name'? A good rule shows how many mods it wins for. That count leaves out protected mods and mods an earlier rule already wins, so the numbers add up. An amber warning appears if the folder would no longer match the rule's own folder condition (the next Sort may then file the mod somewhere else), or if the folder is inside a protected folder.\n\nRules apply to every Sort, including the automatic sort of new mods, but not to a template used as a fallback. In Review, As suggested by Sort includes the rules; editing, reordering or switching a rule greys that export until you Sort again. Rules are saved when you leave the text box."
+      "short": "Rules file mods with a small SQL-like condition: name contains 'x' -> Folder. The first match wins, unmatched mods sort as usual, protected mods never move. The Help tab explains the language.",
+      "body": "A rule says: if a mod matches this condition, file it in this folder.\n\nname contains 'hrothgar' and type = 'Body' -> Body/Hrothgar/{creator}\n\nThe part before the arrow is the condition. The part after it is the folder; the mod's own name is added at the end.\n\nRules are edited in the Rules card on the Advanced screen of the Sort tab. They still apply when you sort from Recommended, which shows how many rules are active and a Show rules button that opens them.\n\nHOW RULES ARE APPLIED\nRules are checked from the top of the list and the first enabled rule that matches files the mod, so the order is the priority (move a rule with Up and Dn; X deletes it). The rule's folder replaces the whole path the Sort would have chosen, so the mod is not split by body, race or number underneath it. A mod no rule matches sorts as usual. Protected mods are never touched. Untick a rule to turn it off without deleting it. You can have up to 100 rules of up to 300 characters each, folder included.\n\nSQL-LIKE, BUT NOT SQL\nThe condition follows the WHERE part of a SQL query, so SQL experience carries over, but you cannot paste a query in. It is deliberately small.\n\nFields (all text):\nname - the mod's name\nauthor - the creator, as the Sort tab names it (empty when unknown)\nfolder - the folder the mod is in now (empty in the root)\ntype - the category's built-in folder name: Gear, Weapon, Face, Hair, Body, Skin, NPC, Minion, Mount, Pet, Ornament, Furniture, Sound, Animation and VFX (for animation and VFX mods alike), or Review (for Others and unclassified mods). It stays the built-in name even if you renamed the category's folder in Advanced. Weapon only appears after a scan with the Weapon Job split on.\nsubtype - the slot or kind inside a category, such as Feet\nrace - what {race} gives, including Multi-race; empty for mods race does not apply to, such as gear. It works even while Split by race is off.\nbody - the body type, such as Bibo+\n\nOperators: =, !=, contains, starts with, ends with, in ('a', 'b'), and not before an operator (name not contains 'x', type not in ('Gear')). Combine with and, or, not and brackets.\n\nSame as SQL: text goes in single quotes and '' means a quote inside the text (author = 'O''Brien'); keywords and field names are not case sensitive; not binds tightest, then and, then or, and brackets change that; text comparison ignores case, as in most databases, so 'hrothgar' matches Hrothgar.\n\nDifferent from SQL: use contains, starts with and ends with instead of LIKE (there are no % or _ wildcards). Only straight single quotes work; double quotes and curly quotes are rejected. There is no NULL: a missing author or race is empty text, so write race = '', not IS NULL. There is no <>, <, >, BETWEEN, LIKE, IS, numbers, functions, comments or ORDER BY; write != for not equal, and compare numbers as text ('115'). contains '', starts with '' and ends with '' are rejected because they would match every mod; = '' and in ('') are fine.\n\nTHE FOLDER\nThe folder can use {type}, {creator} and {race}. In the folder, {type} is the category's folder as set in Advanced (a renamed category gives its new folder), unlike the type field. A folder level that comes out empty is dropped, so {race}/{creator} on a mod with no race gives just the creator. If the whole folder comes out empty, or uses an unknown token or a stray { or }, the mod stays where it is and the Sort summary says why; the rules list does not flag these.\n\nEXAMPLES\nauthor = 'Ann' -> Ann's mods\ntype = 'Gear' and subtype in ('Top', 'Legs') -> Gear/Outfits\nrace = 'Viera' and type = 'Hair' -> Hair/Viera/{creator}\nname contains 'recolor' or name contains 'retexture' -> Recolors/{type}\nnot type in ('Gear', 'Hair') and name starts with 'a' -> A/{type}\n\nWHAT THE RULES LIST TELLS YOU\nA rule with a mistake shows a red message with the position, for example: Unknown field 'nmae'. Did you mean 'name'? A good rule shows how many mods it wins for (Off when it is unticked). That count leaves out protected mods and mods an earlier rule already wins, so the numbers add up. An amber warning appears if the folder would no longer match the rule's own folder condition (the next Sort may then file the mod somewhere else), or if the folder is inside a protected folder. Neither check looks at a folder that uses tokens.\n\nRules apply to every Sort, including the automatic sort of new mods, but not to a template used as a fallback or to a workbook import. In Review, As suggested by Sort includes the rules; editing, reordering or switching a rule greys that export until you Sort again. Typed text is saved when you leave the text box; adding, removing, moving or ticking a rule is saved at once."
     },
     {
       "id": "sort.race-split",
@@ -285,8 +285,8 @@
     {
       "id": "sort.split-body-mods",
       "title": "Body: Part and body type",
-      "short": "Body mods are body replacers (Rue+, YAB...) and SFW variants filed under Body. This groups them under Body/<body>/. Leave it off if you keep one mod per body.",
-      "body": "With it on, the Body folder is numbered: 00 Skeleton, 01 Physics, 02 Tails, Ears and Horns, then your bodies from 10 by priority, each with Replacer, SFW and Hands and Feet. A mod that is not clearly a part stays in Replacer."
+      "short": "Body mods are body replacers (Rue+, YAB...) and SFW variants filed under Body. This groups them under Body/<body>/. On in Recommended; turn it off if you keep one mod per body.",
+      "body": "With it on, the Body folder is numbered: 00. Skeleton, 01. Physics, 02. Tails, Ears and Horns, 03. Racial Scaling, then your bodies from 10. by priority, each with 00. Replacer, 01. SFW and 02. Hands and Feet. A mod that is not clearly a part stays in Replacer."
     },
     {
       "id": "sort.first-choice-body",
@@ -302,7 +302,7 @@
     {
       "id": "sort.body-priority",
       "title": "Body priority",
-      "short": "When a mod supports more than one body, it is filed under whichever of them ranks highest here. Mods that name only one body are not affected. Move a body with the arrows; your order is saved."
+      "short": "When a mod supports more than one body, it is filed under whichever of them ranks highest here. Mods that name only one body are not affected. Reorder under Full priority order; it is saved."
     },
     {
       "id": "sort.priority-race",
@@ -312,12 +312,12 @@
     {
       "id": "sort.midlander-fallback",
       "title": "Midlander fallback",
-      "short": "When a mod uses different hair numbers across races, uses the Midlander number if male and female Midlanders agree. Otherwise the mod stays flat."
+      "short": "When a mod uses different hair numbers across races, uses the Midlander number if male and female Midlanders agree. Otherwise the mod stays in Hair."
     },
     {
       "id": "sort.button",
       "title": "Sort",
-      "short": "Works out a new folder for every unprotected mod and shows it on the Review Changes tab. Your library is not touched until you apply it."
+      "short": "Works out a new folder for every unprotected mod that What to sort covers and shows it on the Review Changes tab. Your library is not touched until you apply it."
     },
     {
       "id": "sort.what-to-sort",
@@ -327,12 +327,12 @@
     {
       "id": "sort.scope-line",
       "title": "Sort scope",
-      "short": "How many mods the last sort covers, out of the whole library, and how many protected root mods were left where they are."
+      "short": "How many mods the last sort covers, out of the whole library, how many protected root mods were left where they are, and how many mods rules filed, skipped or left in place."
     },
     {
       "id": "newmods.banner",
       "title": "New mods popup",
-      "short": "Shown when mods are installed. Sort now rescans and lists where each new root mod would go, for you to Apply. Review first opens the Review tab. Not now keeps them pending."
+      "short": "Shown when mods are installed. Sort now rescans and lists where each new root mod would go, for you to Apply. Review first stages it on Review Changes. Not now keeps them pending."
     },
     {
       "id": "newmods.popup-dont-show",
@@ -347,7 +347,7 @@
     {
       "id": "sort.new-mod-action",
       "title": "When new mods are installed",
-      "short": "Ask shows a popup. Sort automatically sorts and applies new root mods without asking (more than 20 at once falls back to the popup). Do nothing ignores them."
+      "short": "Ask shows a popup. Sort automatically sorts and applies new root mods without asking, but shows the popup for more than 20 at once or while an unapplied sort is waiting. Do nothing ignores them."
     },
     {
       "id": "sort.show-new-mod-popup",
@@ -357,7 +357,7 @@
     {
       "id": "unused.check",
       "title": "Unused mods",
-      "short": "Lists mods that no collection enables, using each collection's own settings, with their size on disk. Reads only; nothing changes."
+      "short": "Lists mods that no collection enables, using each collection's own settings (or only your active collection, if ticked), with their size on disk. Reads only; nothing changes."
     },
     {
       "id": "unused.move",
@@ -372,7 +372,7 @@
     {
       "id": "sort.scraped-npc-list",
       "title": "Also use the NPC list scraped from the wiki",
-      "short": "Recognises far more character names, at the cost of matching some very common words. Turned off in this version while we confirm it is safe."
+      "short": "Not shown in this version: switched off while we confirm it is safe. When it returns, under NPC in Advanced, it recognises far more character names, at the cost of matching some common words."
     },
     {
       "id": "sort.import-workbook",
@@ -387,7 +387,7 @@
     {
       "id": "sort.refresh-npc-list",
       "title": "Refresh NPC list from wiki",
-      "short": "Rebuilds the opt-in scraped NPC list from the wiki. The curated list bundled with the plugin is separate and never needs refreshing."
+      "short": "Not shown in this version, like the scraped NPC list. It rebuilds that opt-in list from the wiki. The curated list bundled with the plugin is separate and never needs refreshing."
     },
     {
       "id": "review.apply",
@@ -412,17 +412,22 @@
     {
       "id": "review.workbook-destinations",
       "title": "Export mode",
-      "short": "As is writes each mod's current folder. As suggested by Sort writes the folders the last Sort staged; it is greyed until you Sort, and again whenever the settings or staged paths change."
+      "short": "As is writes each mod's current folder. As suggested by Sort writes what the last whole-library Sort staged; Export greys until you Sort, and again when a setting, protection or staged path changes."
     },
     {
       "id": "review.diagnostics",
       "title": "Diagnostics",
-      "short": "Troubleshooting tools: export the review as text, open the config file, list the mods the last Apply could not move, or create a diagnostic dump to share."
+      "short": "Troubleshooting tools: export the review as text, open the config file, list the mods the last Apply or Restore could not move, or create a diagnostic dump to share."
     },
     {
       "id": "review.export-workbook",
       "title": "Export Workbook",
-      "short": "Writes every mod and its destination to a spreadsheet you can edit outside the game. Add your own categories (code 17 and up) on the Category Mapping sheet, then bring it back with Import Workbook."
+      "short": "Writes every mod and its destination (per Export mode) to a spreadsheet to edit outside the game. Add your own categories (code 17 and up) on the Category Mapping sheet; Import Workbook reads it back."
+    },
+    {
+      "id": "review.failed-mods",
+      "title": "Failed mods",
+      "short": "Lists the mods the most recent Apply or Restore could not move, with the reason Penumbra gave and the path each was being moved to. Reads only; nothing changes."
     },
     {
       "id": "review.protect-and-skip",
@@ -452,7 +457,7 @@
     {
       "id": "history.restore",
       "title": "Restore",
-      "short": "Moves every mod back to the folder it had in this snapshot. Exact: it moves protected and Heliosphere mods too, which Sort and Apply never do."
+      "short": "Moves every mod back to the folder it had in this snapshot. Exact: it moves protected mods too, Heliosphere and Proteus ones included, which Sort and Apply never do."
     },
     {
       "id": "history.delete-snapshot",
@@ -522,7 +527,7 @@
     {
       "id": "templates.export-fallback",
       "title": "Fallback grouping",
-      "short": "Where an importer's mods go when your template does not mention them. Same groupings and splits as the Sort tab; hair and body use the importer's own settings."
+      "short": "Where an importer's mods go when your template does not mention them: a Group by choice plus the gear, NPC, hair and body splits below it. Hair and body use the importer's own settings."
     },
     {
       "id": "templates.export-folders",
@@ -577,7 +582,7 @@
     {
       "id": "protect.stranded-at-root",
       "title": "Protected mods at the top level",
-      "short": "Protected mods outside any folder. Sorting never moves a protected mod, so these stay at the top level until you untick one. Heliosphere installs new mods here and they are protected on sight."
+      "short": "Protected mods outside any folder. Sorting never moves a protected mod, so these stay at the top level until you untick one. New Heliosphere mods land here, protected while their mode is Protected."
     }
   ]
 }

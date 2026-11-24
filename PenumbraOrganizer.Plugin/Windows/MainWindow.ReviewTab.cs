@@ -249,8 +249,7 @@ public sealed partial class MainWindow
         ImGui.SameLine();
         if (ImGui.Button("Failed mods"))
             OpenFailureWindow();
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Lists the mods the most recent Apply or Restore could not move, with the reason Penumbra gave.");
+        Help.Tooltip(HelpTopics.ReviewFailedMods);
 
         ImGui.SameLine();
         if (ImGui.Button("Create Diagnostic Dump"))

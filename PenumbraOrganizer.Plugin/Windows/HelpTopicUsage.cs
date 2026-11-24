@@ -17,6 +17,11 @@ public static class HelpTopicUsage
         HelpTopics.ScanRefreshModList,
         HelpTopics.ScanEventLog,
 
+        // Scan's Unused mods section - UnusedModsSection.cs
+        HelpTopics.UnusedCheck,
+        HelpTopics.UnusedMove,
+        HelpTopics.UnusedProtectFolder,
+
         // Protect - MainWindow.ProtectTab.cs
         HelpTopics.ProtectToggleAll,
         HelpTopics.ProtectHeliosphereMode,
@@ -68,9 +73,6 @@ public static class HelpTopicUsage
         HelpTopics.NewModsConfirm,
         HelpTopics.SortNewModAction,
         HelpTopics.SortShowNewModPopup,
-        HelpTopics.UnusedCheck,
-        HelpTopics.UnusedMove,
-        HelpTopics.UnusedProtectFolder,
         HelpTopics.SortHelpButton,
         HelpTopics.SortScrapedNpcList,
         HelpTopics.SortImportWorkbook,
@@ -99,6 +101,7 @@ public static class HelpTopicUsage
         HelpTopics.ReviewShowConfigFile,
         HelpTopics.ReviewDiagnosticDump,
         HelpTopics.ReviewDiagnostics,
+        HelpTopics.ReviewFailedMods,
         HelpTopics.ReviewWorkbookDestinations,
         HelpTopics.ReviewExportWorkbook,
         HelpTopics.ReviewProtectAndSkip,
