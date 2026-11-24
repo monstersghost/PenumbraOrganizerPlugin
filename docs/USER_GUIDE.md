@@ -402,6 +402,16 @@ to `Emotes/Expressions`, and a mod with no emote name goes to `Emotes/Undetermin
 ignored when the mod also has another emote. Templates and the workbook export do not follow this
 option yet.
 
+**Weapons by job** (the Weapon category's Job split; off in the Recommended layout, on in Select all splits;
+there was never a checkbox for it) does two things, so scan again after changing it. A scan made with it on
+files a weapon-only mod (its files replace a weapon model and no gear or accessory) under Weapon instead of
+Gear; a weapon that comes with a bracelet or a set stays in Gear. Sort then puts each weapon in
+`Weapon/<job>`, such as `Weapon/SAM`. The job comes from the game's item data for the items the mod changes;
+a class files with its job (a Gladiator sword is `PLD`), and an Arcanist book, an item several jobs share, or
+items that disagree go in `Weapon/Multiclass`. A weapon whose items match no job stays directly in `Weapon`.
+Turn it off and scan again to put weapons back in Gear. It is kept only in the category layouts, so an older
+plugin version that you go back to forgets it.
+
 What moves and what stops matching after you update:
 
 - a) The first sort after updating moves gear and hair folders once. History restores the old layout.

@@ -20,7 +20,7 @@ Advanced
 - [ ] Toggles: click on the switch or the label flips it; Space flips it with keyboard focus; greyed toggles do not react and their tooltip gives the reason.
 - [ ] Depth numbers show 1, 2 for the enabled folder splits only; Hands and feet is a checkbox with no number.
 - [ ] Hands and feet greys with "Needs Equipment slot." when Equipment slot is off (tick kept); Body's race rows grey with the Part and body type reason when that split is off.
-- [ ] Body shows "Part and body type", "Tails, ears and horns by race", "Racial scaling by race"; Face shows "Race" and "Eyes by race"; Weapon shows the no-splits text.
+- [ ] Body shows "Part and body type", "Tails, ears and horns by race", "Racial scaling by race"; Face shows "Race" and "Eyes by race"; Minion shows the no-splits text (Weapon has the Job split since feat/weapon-split).
 - [ ] Rename Gear to `Equipment/Gear`: typing `..`, an empty box, `C:/x`, `a//b` and `{x}` each show the error under the field and the badge does not change; a valid name is saved when you leave the box (reload keeps it); Sort proposes `Equipment/Gear/...` for gear only; Apply moves them.
 - [ ] Type a folder and click Sort straight away without leaving the box: the plan uses the new folder (B12). Same when switching category or mode instead of clicking Sort.
 - [ ] Warnings (saved anyway): Gear folder `Hair` says Hair also uses it; a folder inside a protected folder and one inside a sort-inside folder each say so.

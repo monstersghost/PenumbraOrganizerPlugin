@@ -1,6 +1,8 @@
 # Weapons by job: feasibility and design (2026-11-25)
 
-Status: NOT BUILT. Feasibility checked against real data first, as agreed; the evidence below says the split cannot be built reliably from what the plugin has today. No engine, layout, UI or help change was made. This note records why and what would make it possible.
+Status update: BUILT opt-in on feat/weapon-split, as the three steps below (the Job split also switches on the weapon classification at scan time; off, nothing changes). In-game checks: docs/testing/2026-11-25-weapon-split-checklist.md.
+
+Original status: NOT BUILT. Feasibility checked against real data first, as agreed; the evidence below says the split cannot be built reliably from what the plugin has today. No engine, layout, UI or help change was made. This note records why and what would make it possible.
 
 ## The request
 
