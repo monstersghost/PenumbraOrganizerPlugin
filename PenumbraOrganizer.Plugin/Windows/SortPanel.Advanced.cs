@@ -79,6 +79,7 @@ public sealed partial class SortPanel
 
         ImGui.TextUnformatted("This turns on every split for the most detailed layout:");
         ImGui.BulletText("every gear, NPC, hair, body and emote split");
+        ImGui.BulletText("weapons by job (scan again to take weapon-only mods out of Gear)");
         ImGui.BulletText("the race split on every category that has one, and Split by race");
         ImGui.BulletText("hands and feet get their own folders (not shared)");
         ImGui.TextUnformatted("Folder names, creator levels, Group by and priorities stay as they are.");
@@ -240,8 +241,16 @@ public sealed partial class SortPanel
     {
         if (category == ModCategory.Hair)
             DrawHairPanel(states, splitReason);
-        if (LayoutCatalog.SplitsFor(category).Any(s => s.NeedsScanEvidence))
+        if (CategoryLayoutEditor.HasRaceSplit(category))
             DrawRacePanel(state, states.RaceSplit, splitReason);
+        // The Job split decides at scan time whether a weapon-only mod is Weapon at all, like the race evidence.
+        if (category == ModCategory.Weapon
+            && CategoryLayoutEditor.WeaponRescanNote(
+                SortSelectionFactory.WeaponJobSplitFor(config), state.HasScanned, state.WeaponsClassifiedByScan) is { } rescan)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled(rescan);
+        }
         if (category is ModCategory.Gear or ModCategory.Body)
         {
             ImGui.Spacing();

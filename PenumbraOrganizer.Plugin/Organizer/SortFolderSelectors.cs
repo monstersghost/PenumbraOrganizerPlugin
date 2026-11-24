@@ -87,6 +87,13 @@ public static class SortFolderSelectors
                 var emoteRoot = TypeFolder(row.Category, row.SubCategory, renameFolder);
                 return emoteRoot is null ? null : $"{emoteRoot}/{EmoteFolders.Tail(row.EmoteNames)}";
             }
+            // Weapons split by job. A weapon with no known job stays directly under Weapon (never an Unknown folder).
+            // The template rename applies to "Weapon" only; the job is appended after it.
+            if (opts.SplitWeaponByJob && row.Category == ModCategory.Weapon && KnownSegment(row.WeaponJob) is { } job)
+            {
+                var weaponRoot = TypeFolder(row.Category, null, renameFolder);
+                return weaponRoot is null ? null : $"{weaponRoot}/{job}";
+            }
             // Hair split by race: the template rename applies to "Hair" only; the race tail is appended.
             // The priority race only matters for the number, so it is ignored while splitHair is off.
             if (opts.SplitHairByRace && row.Category == ModCategory.Hair)

@@ -534,7 +534,9 @@ public sealed class Plugin : IDalamudPlugin
         ScanWork.Start(new ScanJob(
             this, PluginInterface.ConfigDirectory.FullName, UseScrapedNpcNameList,
             Config.KnownHeliosphereIdentifiers,
-            classifyWeapons: false, // Not switchable yet: the Weapon Job split arrives in the next change.
+            // The Weapon Job split, read here on the framework thread: on, the scan classifies weapon-only mods as
+            // Weapon and looks up their job; off, classification is what it always was.
+            classifyWeapons: SortSelectionFactory.WeaponJobSplitFor(Config),
             itemJobLookup: ItemJobLookup));
     }
 

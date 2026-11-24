@@ -269,7 +269,7 @@ public class CategoryLayoutEditorTests
     public void ACategoryWithoutSplits_HasNoRows()
     {
         var editor = Editor();
-        editor.Select(ModCategory.Weapon);
+        editor.Select(ModCategory.Minion); // Weapon has the Job split now
         Assert.Empty(editor.Splits(SortStrategy.TypeOnly, false, true));
     }
 
@@ -383,7 +383,9 @@ public class CategoryLayoutEditorTests
 
         var editor = Editor();
         Assert.Equal(detailed.RaceEnabled, editor.SelectAll());
-        Assert.Equal(LayoutProfile.FromLegacy(LegacyLayout.ReadFields(config)), editor.Profile);
+        // Plus the Weapon Job split, which has no legacy field to carry it.
+        var legacy = LayoutProfile.FromLegacy(LegacyLayout.ReadFields(config));
+        Assert.Equal(legacy.With(ModCategory.Weapon, legacy[ModCategory.Weapon] with { Splits = LayoutSplits.Job }), editor.Profile);
     }
 
     // ---- example and Recommended copy

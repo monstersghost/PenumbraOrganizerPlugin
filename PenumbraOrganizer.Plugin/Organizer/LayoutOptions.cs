@@ -15,7 +15,10 @@ namespace PenumbraOrganizer.Plugin.Organizer;
 /// <see cref="Placement"/> carries the category folders and creator levels that differ from the defaults; null
 /// means none (the layout before category layouts existed). The record struct compares <see cref="Race"/> by value (it is a record whose priority has
 /// sequence equality), which the "selection changed since the last sort" check relies on.
+/// <see cref="SplitWeaponByJob"/> is the Weapon category's Job split: a Weapon row with a scanned job is filed under
+/// <c>Weapon/&lt;job&gt;</c>. It has no legacy field, so the factory reads it from the category layouts.
 /// </remarks>
 public readonly record struct LayoutOptions(
     bool SharedHandsAndFeet = false, bool SplitHairByRace = false, bool SplitEmotes = false,
-    RaceSplitOptions? Race = null, RuleSet? Rules = null, CategoryPlacement? Placement = null);
+    RaceSplitOptions? Race = null, RuleSet? Rules = null, CategoryPlacement? Placement = null,
+    bool SplitWeaponByJob = false);

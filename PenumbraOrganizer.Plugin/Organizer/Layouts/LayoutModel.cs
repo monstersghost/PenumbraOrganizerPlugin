@@ -54,6 +54,13 @@ public enum LayoutSplits
 
     /// <summary>Animation: emotes split by the emote they replace.</summary>
     Emote = 512,
+
+    /// <summary>
+    /// Weapon: a folder per job (<c>Weapon/SAM</c>, <c>Weapon/Multiclass</c>), and the switch that makes a scan
+    /// classify weapon-only mods as Weapon at all. Stored only in the category layouts: there is no legacy field for
+    /// it, so an older build that reads the layouts drops it (and files weapons as Gear again after a scan).
+    /// </summary>
+    Job = 1024,
 }
 
 /// <summary>

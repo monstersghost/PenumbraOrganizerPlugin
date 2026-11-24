@@ -24,7 +24,8 @@ public class LayoutModelTests
         Assert.Equal([LayoutSplits.Emote], LayoutCatalog.SplitsFor(ModCategory.Animation).Select(s => s.Split));
         Assert.Equal([LayoutSplits.Race, LayoutSplits.EyesRace], LayoutCatalog.SplitsFor(ModCategory.Face).Select(s => s.Split));
         Assert.Equal([LayoutSplits.Race], LayoutCatalog.SplitsFor(ModCategory.Skin).Select(s => s.Split));
-        foreach (var category in new[] { ModCategory.Weapon, ModCategory.Minion, ModCategory.VFX, ModCategory.Others })
+        Assert.Equal([LayoutSplits.Job], LayoutCatalog.SplitsFor(ModCategory.Weapon).Select(s => s.Split));
+        foreach (var category in new[] { ModCategory.Minion, ModCategory.VFX, ModCategory.Others })
             Assert.Empty(LayoutCatalog.SplitsFor(category));
     }
 
@@ -32,8 +33,10 @@ public class LayoutModelTests
     public void Catalog_OnlyRaceSplitsNeedScanEvidence_AndOnlySharedHandsFeetIsNotAFolder()
     {
         var all = LayoutCatalog.Categories.SelectMany(LayoutCatalog.SplitsFor).ToList();
+        // The Weapon Job split also needs scan evidence: the Weapon category and the job both come from a scan.
         Assert.All(all, s => Assert.Equal(
-            s.Split is LayoutSplits.Race or LayoutSplits.EyesRace or LayoutSplits.RacialScalingRace, s.NeedsScanEvidence));
+            s.Split is LayoutSplits.Race or LayoutSplits.EyesRace or LayoutSplits.RacialScalingRace or LayoutSplits.Job,
+            s.NeedsScanEvidence));
         Assert.All(all, s => Assert.Equal(s.Split != LayoutSplits.SharedHandsFeet, s.IsFolder));
     }
 

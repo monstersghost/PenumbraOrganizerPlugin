@@ -253,8 +253,9 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// Rewrites the legacy Sort fields from the effective layout (the rollback mirror, as for
     /// <see cref="ProtectedFolderPaths"/>), so a build without layouts sorts with the same splits, and ends with
-    /// <see cref="SyncLegacyRaceFields"/>. Folders and creator levels have no legacy field and are lost on such a
-    /// downgrade. Does nothing before migration.
+    /// <see cref="SyncLegacyRaceFields"/>. Folders, creator levels and the Weapon Job split have no legacy field and
+    /// are lost on such a downgrade (an older build also drops "Job" from a saved Weapon layout, as an unknown split).
+    /// Does nothing before migration.
     /// </summary>
     public void SyncLegacyLayoutFields()
     {

@@ -28,6 +28,14 @@ public static class SortSelectionFactory
     public static CategoryPlacement? PlacementFor(Configuration config) => LayoutProfileCache.For(config).Placement;
 
     /// <summary>
+    /// Whether the Weapon category's Job split is on. It is read from the category layouts only (it has no legacy
+    /// field), and it means two things: the Sort files Weapon rows under their job, and a scan classifies weapon-only
+    /// mods as Weapon at all (Plugin.RunScan passes it to the scan).
+    /// </summary>
+    public static bool WeaponJobSplitFor(Configuration config) =>
+        LayoutProfileCache.For(config)[Core.Classification.ModCategory.Weapon].Has(LayoutSplits.Job);
+
+    /// <summary>
     /// Never writes the configuration: a body priority that needed repair against the label list is
     /// repaired in the returned selection only (the panel saves its own repair). An empty label list
     /// leaves the priority at its default rather than dropping every saved entry.
@@ -51,7 +59,8 @@ public static class SortSelectionFactory
                 layout.SharedHandsFeet, race.InEffect(RaceRows.Hair, layout.SplitBodyMods),
                 layout.SplitEmotes, race.NullIfNoEffect(),
                 Rules: RulesFor(config),
-                Placement: PlacementFor(config)),
+                Placement: PlacementFor(config),
+                SplitWeaponByJob: WeaponJobSplitFor(config)),
             RootOnly: false);
     }
 }

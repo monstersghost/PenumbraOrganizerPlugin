@@ -55,6 +55,10 @@ public readonly record struct SortSelection(
             SplitGearBody, SplitBodyMods, string.Join(',', bodyLabels),
             Layout.SharedHandsAndFeet, Layout.SplitHairByRace, Layout.SplitEmotes, raceText);
 
+        // Appended only while the Weapon Job split is on, so every fingerprint without it is unchanged.
+        if (Layout.SplitWeaponByJob)
+            core = $"{core}|wj=1";
+
         // Appended only when a category has its own folder or creator level, so every layout the split flags
         // alone describe keeps its exact string from before category layouts. Before the rules, which go last.
         if (Layout.Placement is { } placement)
@@ -137,7 +141,8 @@ public sealed partial class SortPanel
                 splitEmotes,
                 race.NullIfNoEffect(),
                 Rules: SortSelectionFactory.RulesFor(config),
-                Placement: SortSelectionFactory.PlacementFor(config)),
+                Placement: SortSelectionFactory.PlacementFor(config),
+                SplitWeaponByJob: SortSelectionFactory.WeaponJobSplitFor(config)),
             rootOnly);
 
     /// <summary>

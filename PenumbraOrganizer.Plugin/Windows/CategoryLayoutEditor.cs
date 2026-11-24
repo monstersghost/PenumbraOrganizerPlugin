@@ -34,8 +34,17 @@ public sealed class CategoryLayoutEditor
     public const string NeedsSlotReason = "Needs Equipment slot.";
     public const string NeedsBodySplitReason = "This row's folder only exists while Part and body type is on.";
     public const string RaceOffNote = "Takes effect when Split by race is on.";
-    public const string NoSplitsText =
-        "This category has no splits yet. New splits, such as weapons by job, will appear here.";
+    public const string NoSplitsText = "This category has no splits yet. New splits will appear here.";
+
+    /// <summary>Shown under the Weapon editor when the current rows were scanned with the Job split the other way.</summary>
+    public const string WeaponRescanHint = "Scan again so weapon-only mods move between Gear and Weapon.";
+
+    /// <summary>
+    /// The Weapon rescan hint, or null. The Job split decides at SCAN time whether weapon-only mods are Weapon at all,
+    /// so the rows only match the switch after a scan made with it. Rows from no known scan count as scanned with it off.
+    /// </summary>
+    public static string? WeaponRescanNote(bool splitOn, bool hasRows, bool? scannedWithIt) =>
+        hasRows && (scannedWithIt ?? false) != splitOn ? WeaponRescanHint : null;
 
     private readonly Action<LayoutProfile> _persist;
     private LayoutProfile _persisted;
@@ -193,7 +202,7 @@ public sealed class CategoryLayoutEditor
                     : NeedsBodySplit(Selected, info.Split) && !layout.Has(LayoutSplits.PartAndBodyType) ? NeedsBodySplitReason
                     : null);
             var hint = HintFor(Selected, info.Split);
-            if (info.NeedsScanEvidence && !raceEnabled)
+            if (info.NeedsScanEvidence && IsRaceSplit(info.Split) && !raceEnabled)
                 hint = $"{hint} {RaceOffNote}";
             rows.Add(new SplitRow(info, LabelFor(Selected, info), hint, on, number, reason is null, reason));
         }
@@ -239,8 +248,12 @@ public sealed class CategoryLayoutEditor
         var wanted = LayoutProfile.FromLegacy(new LegacyLayout(
             detailed.SplitGear, detailed.SplitNpc, detailed.SplitHair, detailed.SplitGearBody, detailed.SplitBodyMods,
             detailed.SharedHandsFeet, detailed.SplitEmotes, detailed.RaceRows));
+        // The Weapon Job split has no legacy field, so it is added here: Select all means every split.
         Profile = LayoutCatalog.Categories.Aggregate(Profile,
-            (profile, category) => profile.With(category, profile[category] with { Splits = wanted[category].Splits }));
+            (profile, category) => profile.With(category, profile[category] with
+            {
+                Splits = wanted[category].Splits | (category == ModCategory.Weapon ? LayoutSplits.Job : LayoutSplits.None),
+            }));
         Commit();
         return detailed.RaceEnabled;
     }
@@ -261,6 +274,14 @@ public sealed class CategoryLayoutEditor
             ? "One folder per type. Split by race is on (see Advanced)."
             : "One folder per type. Race split is off."),
     ];
+
+    /// <summary>Whether the category has a split the race master switch governs (and so shows the Race panel).</summary>
+    public static bool HasRaceSplit(ModCategory category) =>
+        LayoutCatalog.SplitsFor(category).Any(s => IsRaceSplit(s.Split));
+
+    // The splits the race master switch governs. Job also needs scan evidence, but not the race switch.
+    private static bool IsRaceSplit(LayoutSplits split) =>
+        split is LayoutSplits.Race or LayoutSplits.EyesRace or LayoutSplits.RacialScalingRace;
 
     private static bool NeedsBodySplit(ModCategory category, LayoutSplits split) =>
         category == ModCategory.Body && split is LayoutSplits.Race or LayoutSplits.RacialScalingRace;
@@ -283,6 +304,7 @@ public sealed class CategoryLayoutEditor
         (ModCategory.Face, LayoutSplits.EyesRace) => "Iris-only mods under Face/Eyes/<race>.",
         (ModCategory.Skin, LayoutSplits.Race) => "Skin mods by race.",
         (ModCategory.Animation, LayoutSplits.Emote) => "The emote the mod replaces.",
+        (ModCategory.Weapon, LayoutSplits.Job) => "Weapon/SAM, Weapon/Multiclass. Takes weapon-only mods out of Gear. Scan again after changing it.",
         _ => string.Empty,
     };
 }

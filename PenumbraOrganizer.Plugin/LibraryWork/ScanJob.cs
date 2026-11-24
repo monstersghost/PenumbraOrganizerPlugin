@@ -75,7 +75,7 @@ public sealed class ScanJob : ILibraryWorkJob<ScanSeed, OrganizerModRow>
         // Anything above this line that throws leaves the previous scan completely intact.
         _plugin.OrganizerState.ReplaceScanAtomically(
             results, _plugin.Config.ProtectedModIdentifiers, _plugin.Config.FolderProtectionRules,
-            _processor?.BodyLabels);
+            _processor?.BodyLabels, _processor?.ClassifiesWeapons);
 
         // POST-COMMIT. The new data is already live, so a failure here is a warning, never a failed
         // run - reporting Failed would tell the UI to say nothing was published when it was.

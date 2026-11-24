@@ -138,6 +138,7 @@ public static class HelpTab
             HelpTopics.SortRacePriority,
             HelpTopics.SortRules,
             HelpTopics.SortSplitEmotes,
+            HelpTopics.SortSplitWeaponJob,
             HelpTopics.SortSplitGearBody,
             HelpTopics.SortSplitBodyMods,
             HelpTopics.SortFirstChoiceBody,

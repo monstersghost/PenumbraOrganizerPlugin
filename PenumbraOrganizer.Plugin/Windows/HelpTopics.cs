@@ -72,6 +72,7 @@ public static class HelpTopics
     public static readonly HelpTopic SortMultiRace = new("sort.multi-race");
     public static readonly HelpTopic SortRacePriority = new("sort.race-priority");
     public static readonly HelpTopic SortSplitEmotes = new("sort.split-emotes");
+    public static readonly HelpTopic SortSplitWeaponJob = new("sort.split-weapon-job");
     public static readonly HelpTopic SortSplitGearBody = new("sort.split-gear-body");
     public static readonly HelpTopic SortSplitBodyMods = new("sort.split-body-mods");
     public static readonly HelpTopic SortFirstChoiceBody = new("sort.first-choice-body");

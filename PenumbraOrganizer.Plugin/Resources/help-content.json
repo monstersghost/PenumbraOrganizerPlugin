@@ -272,6 +272,12 @@
       "short": "Emote mods go in Animation and VFX/Emotes/<emote name>. Mods with several emotes go in Multiple, face-only ones in Expressions, and ones with no emote name in Undetermined."
     },
     {
+      "id": "sort.split-weapon-job",
+      "title": "Weapon: Job",
+      "short": "Off by default. On: weapon-only mods leave Gear for Weapon/<job>, such as Weapon/SAM. Several jobs go in Multiclass; no known job stays in Weapon. Scan again after changing it.",
+      "body": "A mod is a weapon when its files replace a weapon model and no gear or accessory; a weapon with a bracelet or a set stays in Gear. The job comes from the game's item data for the items the mod changes, in your client language. A class files with its job (a Gladiator sword is PLD); an Arcanist book, an item several jobs share, or items that disagree go in Multiclass. A weapon whose items match no job stays directly in Weapon. Turning it off and scanning again puts weapons back in Gear."
+    },
+    {
       "id": "sort.split-gear-body",
       "title": "Gear: Body type",
       "short": "Files gear under the body it was made for, as Gear/Bibo+/... With Equipment slot also on: 00. Sets, 01.-09. slots, then numbered bodies from 10, in Body priority order."

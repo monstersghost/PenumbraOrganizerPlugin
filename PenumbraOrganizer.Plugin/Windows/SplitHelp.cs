@@ -19,6 +19,8 @@ public static class SplitHelp
         (_, LayoutSplits.HairNumber) => HelpTopics.SortSplitHair,
         (_, LayoutSplits.PartAndBodyType) => HelpTopics.SortSplitBodyMods,
         (_, LayoutSplits.Emote) => HelpTopics.SortSplitEmotes,
+        // New with the split itself: there was never a checkbox for it.
+        (_, LayoutSplits.Job) => HelpTopics.SortSplitWeaponJob,
         // Face, Skin and Body race, Eyes by race, Racial scaling by race: the race rows.
         _ => HelpTopics.SortRaceRows,
     };

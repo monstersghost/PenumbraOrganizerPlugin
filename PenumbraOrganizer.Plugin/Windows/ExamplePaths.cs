@@ -118,6 +118,9 @@ public static class ExamplePaths
                 return race ? [Split("Viera")] : [];
             case ModCategory.Skin:
                 return race ? [Split("Miqo'te")] : [];
+            case ModCategory.Weapon:
+                // A gunblade only a Gunbreaker can equip.
+                return layout.Has(LayoutSplits.Job) ? [Split("GNB")] : [];
             case ModCategory.Animation:
                 // The Emotes folder is the mod's subcategory, there with or without the split.
                 return layout.Has(LayoutSplits.Emote)

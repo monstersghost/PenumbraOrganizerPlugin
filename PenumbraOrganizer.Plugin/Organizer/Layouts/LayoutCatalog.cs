@@ -36,6 +36,8 @@ public static class LayoutCatalog
         [ModCategory.Animation] = [new(LayoutSplits.Emote, "Emote", true, false)],
         [ModCategory.Face] = [Race, new(LayoutSplits.EyesRace, "Eyes by race", true, true)],
         [ModCategory.Skin] = [Race],
+        // Needs scan evidence twice over: the Weapon category itself and the job both come from a scan made with it on.
+        [ModCategory.Weapon] = [new(LayoutSplits.Job, "Job", true, true)],
     };
 
     /// <summary>True for the sixteen categories (1 to 16); false for any other value cast to the enum.</summary>
@@ -98,6 +100,8 @@ public static class LayoutCatalog
             ModCategory.Animation => LayoutSplits.Emote,
             ModCategory.Face => LayoutSplits.Race | LayoutSplits.EyesRace,
             ModCategory.Skin => LayoutSplits.Race,
+            // Opt-in: Job also turns on weapon classification at scan time, which moves weapon mods out of Gear.
+            ModCategory.Weapon => LayoutSplits.None,
             _ => LayoutSplits.None,
         });
 

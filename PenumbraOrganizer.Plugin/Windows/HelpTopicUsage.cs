@@ -52,6 +52,7 @@ public static class HelpTopicUsage
         HelpTopics.SortMultiRace,
         HelpTopics.SortRacePriority,
         HelpTopics.SortSplitEmotes,
+        HelpTopics.SortSplitWeaponJob,
         HelpTopics.SortSplitGearBody,
         HelpTopics.SortSplitBodyMods,
         HelpTopics.SortFirstChoiceBody,

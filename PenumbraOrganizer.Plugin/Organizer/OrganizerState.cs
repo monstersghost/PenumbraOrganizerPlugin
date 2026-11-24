@@ -172,6 +172,13 @@ public sealed class OrganizerState
     public IReadOnlyList<string>? BodyLabels { get; private set; }
 
     /// <summary>
+    /// Whether the scan that produced the current rows classified weapon-only mods as Weapon (the Weapon Job split
+    /// was on when it ran). Null when the rows did not come from a scan that said (a test, an older caller). The Sort
+    /// tab compares it with the split to say "Scan again".
+    /// </summary>
+    public bool? WeaponsClassifiedByScan { get; private set; }
+
+    /// <summary>
     /// Whole-state replacement that either fully happens or does not happen at all. Every
     /// replacement collection is built first; the field references are swapped only once all
     /// derivation has succeeded. A background scan publishes through this, so a throw here must
@@ -181,7 +188,8 @@ public sealed class OrganizerState
         IEnumerable<OrganizerModRow> scanned,
         IReadOnlySet<string> previouslyProtectedIdentifiers,
         IReadOnlyDictionary<string, bool>? previouslyProtectedFolderRules = null,
-        IReadOnlyList<string>? bodyLabels = null)
+        IReadOnlyList<string>? bodyLabels = null,
+        bool? weaponsClassified = null)
     {
         var replacementProtectedIdentifiers = new HashSet<string>(previouslyProtectedIdentifiers, StringComparer.Ordinal);
         var replacementFolderRules = previouslyProtectedFolderRules is null
@@ -219,6 +227,7 @@ public sealed class OrganizerState
         _mods = replacementMods;
         _knownFolders = replacementKnownFolders;
         BodyLabels = bodyLabels;
+        WeaponsClassifiedByScan = weaponsClassified;
         StagedBodyPriority = null;
         LastSortSummary = null;
         SortFingerprint = null;
