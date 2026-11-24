@@ -353,8 +353,6 @@ public sealed partial class SortPanel
     public static string? FirstChoice(BodyPriority priority) =>
         priority.Labels.Count > 0 ? priority.Labels[0] : null;
 
-    private const string SelectAllPopupTitle = "Select all splits?";
-
     private SplitToggles CurrentToggles() => new(
         _splitGear, _splitNpc, _splitHair, _splitGearBody, _splitBodyMods, _sharedHandsFeet, _splitEmotes,
         _raceEnabled, _raceRows);
@@ -370,43 +368,6 @@ public sealed partial class SortPanel
         _splitEmotes = t.SplitEmotes;
         _raceEnabled = t.RaceEnabled;
         _raceRows = t.RaceRows;
-    }
-
-    // One button above the split sections, with a confirmation: it changes many choices at once. It only
-    // ticks boxes; nothing is sorted until Sort is pressed. Greyed when the splits are, with the same reason.
-    private void DrawSelectAll(bool enabled, string? disabledReason)
-    {
-        ImGui.BeginDisabled(!enabled);
-        if (ImGui.Button("Select all splits##select-all-splits"))
-            ImGui.OpenPopup(SelectAllPopupTitle);
-        ImGui.EndDisabled();
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(enabled
-                ? "Ticks every split and race row for the most detailed layout."
-                : disabledReason ?? "Not available right now.");
-
-        if (!ImGui.BeginPopupModal(SelectAllPopupTitle))
-            return;
-
-        ImGui.TextUnformatted("This turns on every split for the most detailed layout:");
-        ImGui.BulletText("every gear, NPC, hair, body and emote split");
-        ImGui.BulletText("the race split with every race row");
-        ImGui.BulletText("hands and feet get their own folders (not shared)");
-        ImGui.TextUnformatted("Your Group by, race priority and body priority stay as they are.");
-        ImGui.TextUnformatted("Nothing moves until you press Sort, review the plan and Apply.");
-        ImGui.Spacing();
-
-        if (ImGui.Button("Select all##confirm-select-all"))
-        {
-            // Through the layout editor, so the change is saved once; the race master switch is global.
-            _raceEnabled = _editor!.SelectAll();
-            ImGui.CloseCurrentPopup();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Cancel##cancel-select-all"))
-            ImGui.CloseCurrentPopup();
-        ImGui.EndPopup();
     }
 
     // A rule and a coloured heading above each mod-type group. The rule is ImGui's own separator,

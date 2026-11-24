@@ -46,7 +46,7 @@ public sealed partial class SortPanel
 
         ImGui.TextUnformatted("Advanced layout");
         ImGui.TextDisabled($"{editor.AdvancedSummary}. Everything else follows Recommended.");
-        DrawSelectAll(states.SplitGear.Enabled, splitReason);
+        DrawSelectAll(editor, states.SplitGear.Enabled, splitReason);
         ImGui.SameLine();
         DrawAdvancedHeaderButtons(editor, gateOpen, gateReason);
         ImGui.Spacing();
@@ -62,6 +62,43 @@ public sealed partial class SortPanel
         DrawCategoryEditor(state, editor, strategy, gateOpen, gateReason);
         DrawCategoryPanels(state, config, saveConfig, editor.Selected, states, splitReason, bodyLabels, readEnabledMods);
         ImGui.EndGroup();
+    }
+
+    private const string SelectAllPopupTitle = "Select all splits?";
+
+    // Select all splits, in the Advanced header (spec 2, section 4), with a confirmation: it changes many choices
+    // at once. It only changes the layouts and the race switch; nothing is sorted until Sort is pressed. Greyed
+    // when the splits are, with the same reason. Cancel and Escape close it.
+    private void DrawSelectAll(CategoryLayoutEditor editor, bool enabled, string? disabledReason)
+    {
+        ImGui.BeginDisabled(!enabled);
+        if (ImGui.Button("Select all splits##select-all-splits"))
+            ImGui.OpenPopup(SelectAllPopupTitle);
+        ImGui.EndDisabled();
+        Help.Tooltip(HelpTopics.SortSelectAll, enabled ? null : disabledReason);
+
+        if (!ImGui.BeginPopupModal(SelectAllPopupTitle))
+            return;
+
+        ImGui.TextUnformatted("This turns on every split for the most detailed layout:");
+        ImGui.BulletText("every gear, NPC, hair, body and emote split");
+        ImGui.BulletText("the race split on every category that has one, and Split by race");
+        ImGui.BulletText("hands and feet get their own folders (not shared)");
+        ImGui.TextUnformatted("Folder names, creator levels, Group by and priorities stay as they are.");
+        ImGui.TextUnformatted("Nothing moves until you press Sort, review the plan and Apply.");
+        ImGui.Spacing();
+
+        if (ImGui.Button("Select all##confirm-select-all"))
+        {
+            // Through the layout editor, so the change is saved once; the race master switch is global.
+            _raceEnabled = editor.SelectAll();
+            ImGui.CloseCurrentPopup();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Cancel##cancel-select-all") || ImGui.IsKeyPressed(ImGuiKey.Escape))
+            ImGui.CloseCurrentPopup();
+        ImGui.EndPopup();
     }
 
     private static void DrawAdvancedHeaderButtons(CategoryLayoutEditor editor, bool gateOpen, string? gateReason)
