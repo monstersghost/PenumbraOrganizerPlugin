@@ -18,6 +18,23 @@ public static class PluginTheme
     public static readonly Vector4 ChangedGood = Rgb(0x6E, 0xE7, 0xA8); // #6EE7A8
     public static readonly Vector4 CollisionBad = Rgb(0xF9, 0x80, 0x80); // #F98080
 
+    // The widget kit's colours and shapes (spec 2, section 11). Screens never use a literal colour: a new value
+    // goes here. The values follow the constants above, so the kit matches the rest of the window.
+    public static readonly Vector4 AccentColor = Rgb(0x63, 0x66, 0xF1);                 // Accent
+    public static readonly Vector4 AccentText = Rgb(0xA5, 0xA8, 0xFF);                  // the accent, readable on Surface
+    public static readonly Vector4 AccentSoft = new(0x63 / 255f, 0x66 / 255f, 0xF1 / 255f, 0.22f);
+    public static readonly Vector4 CardBackground = Rgb(0x2A, 0x2E, 0x3A);              // SurfaceAlt
+    public static readonly Vector4 CardBorder = Rgb(0x38, 0x3C, 0x4A);                  // Border
+    public static readonly Vector4 RowHover = Rgb(0x33, 0x37, 0x46);
+    public static readonly Vector4 PathBackground = Rgb(0x23, 0x26, 0x2F);              // Surface
+    public static readonly Vector4 TextNormal = Rgb(0xE7, 0xE9, 0xF3);                  // Text
+    public static readonly Vector4 TextMuted = Rgb(0x9C, 0xA3, 0xB8);                   // TextDim
+    public static readonly Vector4 ToggleOff = Rgb(0x4A, 0x50, 0x63);
+    public static readonly Vector4 Warning = Protected;
+    public const float CardRounding = 6f;
+    public const float RowRounding = 4f;
+    public static readonly Vector2 CardPadding = new(12f, 10f);
+
     private static Vector4 Rgb(byte r, byte g, byte b) => new(r / 255f, g / 255f, b / 255f, 1f);
 
     public static IDisposable Push()
